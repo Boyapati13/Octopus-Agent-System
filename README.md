@@ -1,7 +1,7 @@
 # Octopus Agent System
 
 Memory-first software agent harness with a 5-layer memory architecture,
-10 specialist agents, a dynamic skills registry, a shared memory service, REST API, and dashboard UI.
+10 specialist agents, a dynamic skills registry, a shared memory service, REST API, an MCP Server, and a dashboard UI.
 
 ## Architecture
 
@@ -27,14 +27,25 @@ python services/memory_service.py
 python python/indexer/index_repo.py --root . --db ./data/octopus.db
 ```
 
-### 3 — Node API server (port 3001)
+### 3 — Setup Environment
 ```bash
 cd node
+cp .env.example .env
 npm install
+```
+
+### 4 — Node API server (port 3001)
+```bash
 npm run serve
 ```
 
-### 4 — Open the dashboard
+### 5 — Model Context Protocol (MCP) Server
+Octopus acts as an MCP server, allowing any compatible LLM (Claude Desktop, Cursor, etc.) to use it as a memory and planning backend. 
+```bash
+npm run mcp
+```
+
+### 6 — Open the dashboard
 Open `frontend/index.html` in a browser (or serve with any static server).
 
 ---

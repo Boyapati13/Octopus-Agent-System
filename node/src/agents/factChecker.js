@@ -35,10 +35,14 @@ async function run(input, memory) {
       });
       unsupportedCount++;
     } else {
+      const fileContext = memResult[0];
+      const hasContent = fileContext.symbols && fileContext.symbols.length > 0;
       findings.push({ 
         claim: `File ${f} context`, 
-        verdict: 'supported',
-        evidence: `Found in index with relevance ${memResult[0].relevance_score || 'N/A'}`
+        verdict: hasContent ? 'supported' : 'partial',
+        evidence: hasContent 
+            ? `Indexed with ${fileContext.symbols.length} symbols.` 
+            : `File indexed but lacks symbol context.`
       });
     }
   }

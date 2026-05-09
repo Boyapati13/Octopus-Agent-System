@@ -15,7 +15,19 @@ const REQUIRED_SKILLS = ['get_run_state', 'writeback'];
 function determineAgents(taskStr) {
   const t = taskStr.toLowerCase();
   
-  if (t.includes('doc') || t.includes('readme')) {
+  const isDoc = t.includes('doc') || t.includes('readme') || t.includes('comment');
+  const isRelease = t.includes('release') || t.includes('deploy') || t.includes('publish');
+  const isAudit = t.includes('audit') || t.includes('security') || t.includes('vulnerability');
+
+  if (isAudit) {
+    return [
+      { agent: 'Atlas', reason: 'Query memory for architecture' },
+      { agent: 'SecurityReviewer', reason: 'Run security scan' },
+      { agent: 'Scribe', reason: 'Document audit findings' }
+    ];
+  }
+
+  if (isDoc) {
     return [
       { agent: 'Atlas', reason: 'Query memory for current docs' },
       { agent: 'Forge', reason: 'Draft documentation edits' },
@@ -24,7 +36,7 @@ function determineAgents(taskStr) {
     ];
   }
   
-  if (t.includes('release') || t.includes('deploy')) {
+  if (isRelease) {
     return [
       { agent: 'ReleaseKeeper', reason: 'Verify all gates before release' }
     ];

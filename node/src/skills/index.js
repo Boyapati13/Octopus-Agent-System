@@ -8,7 +8,7 @@
 const SKILL_REGISTRY = {
   // Structural queries
   structural_search:  (memory, q) => memory.searchStructural(q),
-  boundary_impact:    (memory, paths) => memory.svcPost('/structural/impact', { paths }),
+  boundary_impact:    (memory, paths) => memory.structuralImpact(paths),
   
   // Decision memory
   get_decisions:      (memory, tags) => memory.getDecisions(tags),

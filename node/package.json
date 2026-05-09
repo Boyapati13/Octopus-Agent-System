@@ -6,11 +6,14 @@
   "scripts": {
     "start": "node src/index.js",
     "serve": "node src/server.js",
+    "mcp": "node src/mcp.js",
     "test": "jest --runInBand --forceExit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "axios": "^1.7.2",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express": "^4.19.2"
   },
   "devDependencies": {
@@ -19,6 +22,8 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": ["**/tests/**/*.test.js"]
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ]
   }
 }

@@ -100,8 +100,12 @@ function findRelevantFiles(structural, query) {
   return scored.slice(0, 10);
 }
 
+async function structuralImpact(paths) {
+  return svcPost('/structural/impact', { paths });
+}
+
 module.exports = {
   getContext, searchStructural, getDecisions, saveDecision,
   getRun, saveRun, compactSession, writeback, getCacheStats,
-  findRelevantFiles, loadLocalStructural,
+  findRelevantFiles, loadLocalStructural, structuralImpact,
 };
