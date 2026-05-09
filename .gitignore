@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Data / DB (exclude live DB, keep structure)
+data/octopus.db
+data/graph_index.json
+data/structural_memory.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

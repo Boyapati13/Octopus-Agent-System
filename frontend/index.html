@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Octopus Agent System</title>
+  <meta name="description" content="Memory-first software agent harness — layered memory, shared context, 9 specialist agents."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-brand">
+    <div class="logo-ring">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <circle cx="14" cy="14" r="12" stroke="var(--accent)" stroke-width="2"/>
+        <circle cx="14" cy="14" r="5"  fill="var(--accent)" opacity="0.8"/>
+        <line x1="14" y1="2"  x2="14" y2="8"  stroke="var(--accent)" stroke-width="1.5"/>
+        <line x1="14" y1="20" x2="14" y2="26" stroke="var(--accent)" stroke-width="1.5"/>
+        <line x1="2"  y1="14" x2="8"  y2="14" stroke="var(--accent)" stroke-width="1.5"/>
+        <line x1="20" y1="14" x2="26" y2="14" stroke="var(--accent)" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <span class="brand-name">Octopus</span>
+    <span class="brand-tag">Agent System</span>
+  </div>
+  <div class="header-status">
+    <div class="status-pill" id="svc-python">
+      <span class="status-dot"></span>Memory SVC
+    </div>
+    <div class="status-pill" id="svc-node">
+      <span class="status-dot"></span>API
+    </div>
+    <div class="status-pill" id="svc-cache">
+      <span class="status-dot"></span>Cache
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── Sidebar: Agent Roster ────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <h2 class="sidebar-title">Agents</h2>
+    <div class="agent-list" id="agent-list">
+      <div class="agent-skeleton"></div>
+      <div class="agent-skeleton"></div>
+      <div class="agent-skeleton"></div>
+    </div>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Tabs -->
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="memory"   role="tab">Memory Layers</button>
+      <button class="tab"        data-tab="console"  role="tab">Command Console</button>
+      <button class="tab"        data-tab="explorer" role="tab">Memory Explorer</button>
+      <button class="tab"        data-tab="feed"     role="tab">Activity Feed</button>
+    </nav>
+
+    <!-- Memory Layers -->
+    <section class="tab-panel active" id="tab-memory">
+      <div class="layers-grid">
+        <div class="layer-card" data-layer="5">
+          <div class="layer-badge">L5</div>
+          <div class="layer-body">
+            <h3>Task Context Profile</h3>
+            <p>Built on demand per agent. Never stored. Agent-specific includes/excludes.</p>
+            <div class="layer-stat"><span class="stat-label">Backend</span><span class="stat-val mono">ephemeral</span></div>
+          </div>
+        </div>
+        <div class="layer-card" data-layer="4">
+          <div class="layer-badge">L4</div>
+          <div class="layer-body">
+            <h3>Prompt Cache</h3>
+            <p>Redis/Valkey optional. In-memory fallback. Agent contracts, hot queries.</p>
+            <div class="layer-stat"><span class="stat-label">Backend</span><span class="stat-val mono" id="l4-backend">—</span></div>
+            <div class="layer-stat"><span class="stat-label">Hit rate</span><span class="stat-val mono" id="l4-hitrate">—</span></div>
+          </div>
+        </div>
+        <div class="layer-card" data-layer="3">
+          <div class="layer-badge">L3</div>
+          <div class="layer-body">
+            <h3>Run State</h3>
+            <p>Current task, changed files, blockers, approvals. Compacted at session end.</p>
+            <div class="layer-stat"><span class="stat-label">Status</span><span class="stat-val mono" id="l3-status">—</span></div>
+            <div class="layer-stat"><span class="stat-label">Changed files</span><span class="stat-val mono" id="l3-files">—</span></div>
+          </div>
+        </div>
+        <div class="layer-card" data-layer="2">
+          <div class="layer-badge">L2</div>
+          <div class="layer-body">
+            <h3>Decision Memory</h3>
+            <p>ADRs, rationale, rejected options. Append-only, versioned, timestamped.</p>
+            <div class="layer-stat"><span class="stat-label">Decisions</span><span class="stat-val mono" id="l2-count">—</span></div>
+          </div>
+        </div>
+        <div class="layer-card" data-layer="1">
+          <div class="layer-badge">L1</div>
+          <div class="layer-body">
+            <h3>Structural Memory</h3>
+            <p>SQLite graph facts. NetworkX loaded on-demand for traversal and reasoning.</p>
+            <div class="layer-stat"><span class="stat-label">Indexed files</span><span class="stat-val mono" id="l1-count">—</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Command Console -->
+    <section class="tab-panel" id="tab-console">
+      <div class="console-wrap">
+        <div class="console-controls">
+          <select class="ctrl-select" id="cmd-select">
+            <option value="/api/onboard" data-method="POST">🚀 /onboard</option>
+            <option value="/api/plan-feature" data-method="POST">🗺️ /plan-feature</option>
+            <option value="/api/release-check" data-method="POST">🔒 /release-check</option>
+            <option value="/api/agent/atlas/run"            data-method="POST">🧠 Atlas</option>
+            <option value="/api/agent/cortex/run"           data-method="POST">🎯 Cortex</option>
+            <option value="/api/agent/architect/run"        data-method="POST">🏗️ Architect</option>
+            <option value="/api/agent/forge/run"            data-method="POST">🔨 Forge</option>
+            <option value="/api/agent/reviewer/run"         data-method="POST">👁️ Reviewer</option>
+            <option value="/api/agent/securityReviewer/run" data-method="POST">🔐 SecurityReviewer</option>
+            <option value="/api/agent/probe/run"            data-method="POST">🧪 Probe</option>
+            <option value="/api/agent/scribe/run"           data-method="POST">📝 Scribe</option>
+            <option value="/api/agent/releaseKeeper/run"    data-method="POST">🚢 ReleaseKeeper</option>
+          </select>
+          <input class="ctrl-input" id="cmd-query" type="text" placeholder='task / query (e.g. "add auth layer")'/>
+          <button class="btn-fire" id="cmd-run">Run ▶</button>
+        </div>
+        <div class="console-output" id="console-output">
+          <span class="output-placeholder">Output appears here…</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Memory Explorer -->
+    <section class="tab-panel" id="tab-explorer">
+      <div class="explorer-tabs">
+        <button class="etab active" data-etab="structural">Structural</button>
+        <button class="etab" data-etab="decisions">Decisions</button>
+        <button class="etab" data-etab="run">Run State</button>
+        <button class="etab" data-etab="cache">Cache Stats</button>
+      </div>
+      <div class="explorer-body" id="explorer-body">
+        <span class="output-placeholder">Select a tab to load data…</span>
+      </div>
+    </section>
+
+    <!-- Activity Feed -->
+    <section class="tab-panel" id="tab-feed">
+      <div class="feed-header">
+        <h3>Activity Feed</h3>
+        <button class="btn-sm" id="feed-clear">Clear</button>
+      </div>
+      <div class="feed-list" id="feed-list">
+        <div class="feed-empty">No activity yet. Run a command to see events.</div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

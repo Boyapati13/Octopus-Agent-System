@@ -1,0 +1,13 @@
+{
+  "agents": [
+    {"name": "Cortex", "role": "planner", "canApprove": true},
+    {"name": "Atlas", "role": "memory", "canApprove": false},
+    {"name": "Architect", "role": "architecture", "canApprove": false},
+    {"name": "Forge", "role": "implementation", "canApprove": false},
+    {"name": "Reviewer", "role": "review", "canApprove": true},
+    {"name": "SecurityReviewer", "role": "security", "canApprove": true},
+    {"name": "Probe", "role": "testing", "canApprove": true},
+    {"name": "Scribe", "role": "documentation", "canApprove": false},
+    {"name": "ReleaseKeeper", "role": "release", "canApprove": true}
+  ]
+}
