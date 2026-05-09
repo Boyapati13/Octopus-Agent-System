@@ -1,7 +1,7 @@
 # Octopus Agent System
 
 Memory-first software agent harness with a 5-layer memory architecture,
-9 specialist agents, a shared memory service, REST API, and dashboard UI.
+10 specialist agents, a dynamic skills registry, a shared memory service, REST API, and dashboard UI.
 
 ## Architecture
 
@@ -43,10 +43,11 @@ Open `frontend/index.html` in a browser (or serve with any static server).
 
 | Agent | Role | Approves |
 |---|---|---|
-| Cortex | Planner — decomposes tasks, assigns agents | ✓ |
+| Cortex | Planner — decomposes tasks, assigns agents dynamically | ✓ |
 | Atlas | Memory — ranked structural search | — |
 | Architect | Architecture — boundary impact analysis | — |
 | Forge | Implementation — scoped edit plans | — |
+| FactChecker | Verification — validates claims against memory | ✓ |
 | Reviewer | Review — quality gate, test coverage | ✓ |
 | SecurityReviewer | Security — pattern scan for risks | ✓ |
 | Probe | Testing — coverage map, untested symbols | ✓ |
@@ -68,5 +69,7 @@ cd node && npm test
 - **Memory first**: agents query the graph before opening any files
 - **Incremental indexing**: only changed files are re-indexed (mtime hash)
 - **Static prefix caching**: agent contracts cached at startup (L4)
-- **Session compaction**: `POST /run/compact` promotes durable facts, clears run state
-- **Narrow context**: each agent gets only what its role requires
+- **Session compaction**: `POST /api/memory/compact` promotes durable facts, clears run state
+- **Narrow context**: each agent gets only what its role requires via the skills registry
+- **Dynamic runner**: `Cortex` plans the chain, spawning only needed agents per task
+- **Grounded Verification**: `FactChecker` ensures all proposed actions trace back to L1-L3 indexed memory
