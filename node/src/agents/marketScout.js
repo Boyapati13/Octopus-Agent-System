@@ -49,9 +49,11 @@ const SOURCES = {
           headers: { Accept: 'application/json' },
         });
         // PyPI search returns HTML; extract package names via simple pattern
+        // Fix: use capture group to avoid leaving a trailing "<" on each name
         const matches = (res.data.toString().match(/class="package-snippet__name">([^<]+)</g) || [])
           .slice(0, 3)
-          .map(m => m.replace(/.*>/, '').trim());
+          .map(m => { const hit = m.match(/>([^<]+)</); return hit ? hit[1].trim() : null; })
+          .filter(Boolean);
         for (const pkgName of matches) {
           proposals.push({
             type: 'innovation',
@@ -73,12 +75,15 @@ const SOURCES = {
 
   github: async (topics) => {
     const proposals = [];
+    const headers = { Accept: 'application/vnd.github+json' };
+    // Supplying a token raises the search rate limit from 10 → 30 req/min
+    if (process.env.GITHUB_TOKEN) headers['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`;
     for (const topic of topics.slice(0, 2)) {
       try {
         const res = await axios.get(`https://api.github.com/search/repositories`, {
           params: { q: `topic:${topic}`, sort: 'stars', order: 'desc', per_page: 3 },
           timeout: 8000,
-          headers: { Accept: 'application/vnd.github+json' },
+          headers,
         });
         for (const repo of (res.data.items || [])) {
           proposals.push({

@@ -7,12 +7,14 @@ const { TOOLS } = require('../tools');
 const { toOpenAI }    = require('./openai');
 const { toAnthropic } = require('./anthropic');
 const { toGemini }    = require('./gemini');
+const { toOllama }    = require('./ollama');
 
 const FORMATS = {
   openai:    () => toOpenAI(TOOLS),
   anthropic: () => toAnthropic(TOOLS),
   gemini:    () => toGemini(TOOLS),
-  mcp:       () => TOOLS,   // raw MCP inputSchema format
+  ollama:    () => toOllama(TOOLS),   // OpenAI-compatible; model must support tool use
+  mcp:       () => TOOLS,             // raw MCP inputSchema format
 };
 
 function getTools(format = 'mcp') {

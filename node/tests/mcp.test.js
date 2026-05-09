@@ -26,22 +26,39 @@ afterAll(async () => {
   await client.close();
 });
 
-test('listTools returns exactly 10 tools', async () => {
+test('listTools returns exactly 20 tools', async () => {
   const response = await client.listTools();
   expect(response.tools).toBeDefined();
-  expect(response.tools.length).toBe(10);
-  
+  expect(response.tools.length).toBe(20);
+
   const toolNames = response.tools.map(t => t.name);
+  // Core task orchestration
   expect(toolNames).toContain('octopus_plan_task');
   expect(toolNames).toContain('octopus_run_task_chain');
+  // Memory
   expect(toolNames).toContain('octopus_search_memory');
   expect(toolNames).toContain('octopus_get_decisions');
   expect(toolNames).toContain('octopus_compact_session');
+  // File & command execution
   expect(toolNames).toContain('octopus_execute_command');
   expect(toolNames).toContain('octopus_write_file');
   expect(toolNames).toContain('octopus_read_file');
+  // Agent / security
   expect(toolNames).toContain('octopus_create_agent');
   expect(toolNames).toContain('octopus_scan_security');
+  // LLM gateway
+  expect(toolNames).toContain('octopus_llm_complete');
+  // Browser
+  expect(toolNames).toContain('octopus_browser_navigate');
+  expect(toolNames).toContain('octopus_browser_snapshot');
+  expect(toolNames).toContain('octopus_browser_interact');
+  // Skill marketplace
+  expect(toolNames).toContain('octopus_skill_scout');
+  expect(toolNames).toContain('octopus_skill_synthesize');
+  expect(toolNames).toContain('octopus_skill_validate');
+  expect(toolNames).toContain('octopus_skill_deploy');
+  expect(toolNames).toContain('octopus_skill_retire');
+  expect(toolNames).toContain('octopus_skill_list');
 });
 
 test('octopus_search_memory (read-only) succeeds in SAFE_MODE', async () => {

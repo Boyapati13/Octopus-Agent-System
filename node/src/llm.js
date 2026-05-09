@@ -1,17 +1,20 @@
 'use strict';
 /**
- * Multi-LLM gateway — routes completion requests to Anthropic, OpenAI, or Google.
+ * Multi-LLM gateway — routes completion requests to Anthropic, OpenAI, Google, or Ollama.
  * Uses axios (already installed) — no provider SDKs needed.
  * Controlled by LLM_PROVIDER and LLM_MODEL env vars.
+ *
+ * Supported providers: anthropic | openai | google | ollama
  */
 const axios = require('axios');
 
 const PROVIDER = (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
 
 const DEFAULTS = {
-  anthropic: 'claude-opus-4-7',
+  anthropic: 'claude-sonnet-4-6',
   openai:    'gpt-4o',
   google:    'gemini-2.0-flash',
+  ollama:    'llama3.2',
 };
 
 const MODEL = process.env.LLM_MODEL || DEFAULTS[PROVIDER] || DEFAULTS.anthropic;
@@ -68,11 +71,26 @@ async function completeGoogle(prompt, opts) {
   return res.data.candidates[0].content.parts[0].text;
 }
 
-const COMPLETERS = { anthropic: completeAnthropic, openai: completeOpenAI, google: completeGoogle };
+async function completeOllama(prompt, opts) {
+  const base = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const res = await axios.post(
+    `${base}/api/generate`,
+    {
+      model: MODEL,
+      prompt,
+      stream: false,
+      options: { num_predict: opts.maxTokens || 1024 },
+    },
+    { timeout: opts.timeout || 60000 }
+  );
+  return res.data.response;
+}
+
+const COMPLETERS = { anthropic: completeAnthropic, openai: completeOpenAI, google: completeGoogle, ollama: completeOllama };
 
 async function complete(prompt, opts = {}) {
   const fn = COMPLETERS[PROVIDER];
-  if (!fn) throw new Error(`Unknown LLM_PROVIDER "${PROVIDER}". Valid: anthropic, openai, google`);
+  if (!fn) throw new Error(`Unknown LLM_PROVIDER "${PROVIDER}". Valid: anthropic, openai, google, ollama`);
   return fn(prompt, opts);
 }
 

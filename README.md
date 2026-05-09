@@ -2,12 +2,12 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-A **self-evolving** AI agent harness — 14 specialist agents, 5-layer memory architecture,
-self-synthesizing skill marketplace, multi-LLM gateway, browser control, caveman token
-compression, and a one-command universal installer for every major LLM client.
+A **self-evolving** AI agent harness — 14 specialist agents, 20 MCP tools, 5-layer memory,
+self-synthesizing skill marketplace, **4-provider LLM gateway** (Claude · GPT-4o · Gemini · Ollama),
+browser control, caveman token compression, and a one-command universal installer.
 
 > Octopus discovers new tools, reads their documentation, writes the integration code,
-> tests it in isolation, and deploys it — while you sleep.
+> tests it in an isolated Worker thread, and deploys it — while you sleep.
 
 ---
 
@@ -21,7 +21,7 @@ compression, and a one-command universal installer for every major LLM client.
 .\install.ps1
 ```
 
-Auto-detects and configures: **Claude Desktop · Cursor · Windsurf · Cline · Continue.dev**
+Auto-detects and configures: **Claude Desktop · Cursor · Windsurf · Cline · Continue.dev**  
 Restart your LLM client — all 20 Octopus tools appear automatically.
 
 ---
@@ -46,12 +46,28 @@ MarketScout ──► Toolsmith ──► SandboxQA ──► Cortex (CEO) ─�
 ```
 
 Octopus is a **living system** — it detects when APIs deprecate or new libraries emerge,
-reads the docs, writes a working MCP tool, tests it with self-correction, and promotes it to
-production. No manual wrapper rewrites.
+reads the docs, writes a working MCP tool, runs it in an isolated Worker thread with memory
+limits, self-corrects up to 3 times on failure, and promotes to production automatically.
+
+### Multi-LLM Gateway
+
+| Provider | Default Model | Tool Use | Notes |
+|---|---|---|---|
+| `anthropic` | `claude-sonnet-4-6` | ✅ Full | Recommended default |
+| `openai` | `gpt-4o` | ✅ Full | Set `OPENAI_API_KEY` |
+| `google` | `gemini-2.0-flash` | ✅ Full | Set `GOOGLE_API_KEY` |
+| `ollama` | `llama3.2` | ✅ Compatible models | Local, no API key needed |
+
+Switch provider in `.env`:
+```bash
+LLM_PROVIDER=ollama
+LLM_MODEL=llama3.1      # or qwen2.5, mistral-nemo, any tool-capable model
+OLLAMA_BASE_URL=http://localhost:11434
+```
 
 ---
 
-## Manual Quick Start
+## Quick Start
 
 ### 1 — Python memory service (port 5000)
 ```bash
@@ -68,296 +84,193 @@ python python/indexer/index_repo.py --root . --db ./data/octopus.db
 ### 3 — Node environment
 ```bash
 cd node
-cp .env.example .env          # fill in API keys
-npm install                   # installs all deps including agent-browser
+cp .env.example .env          # fill in API keys / choose provider
+npm install
 agent-browser install         # downloads Chrome for Testing (first run only)
 ```
 
-### 4 — Start everything
+### 4 — Choose your provider
+
+**Claude (Anthropic)**
 ```bash
-# Windows
-.\start_mcp.ps1
-
-# Mac / Linux
-./start_mcp.sh
-```
-
-Launches Python memory service (port 5000) and Node MCP server together.
-
-### 5 — Node API server only (port 3001)
-```bash
-cd node && npm run serve
-```
-
-### 6 — Dashboard
-Open `frontend/index.html` in any browser.
-
----
-
-## Agents (14)
-
-| Agent | Role | Gate |
-|---|---|---|
-| **Cortex** | CEO / Planner — dynamic task decomposition and agent routing | ✓ |
-| **Atlas** | Memory — ranked structural graph search | |
-| **Architect** | Architecture — boundary impact analysis | |
-| **Forge** | Implementation — scoped edit plans | |
-| **FactChecker** | Verification — grounding gate vs. L1-L3 memory | ✓ |
-| **Reviewer** | Quality gate — test coverage + code review | ✓ |
-| **SecurityReviewer** | Security gate — OWASP Top 10 pattern scan | ✓ |
-| **Probe** | Test coverage gate — symbol-level mapping | ✓ |
-| **Scribe** | Documentation — changelog + doc stubs | |
-| **ReleaseKeeper** | Final release gate — all prior gates must pass | ✓ |
-| **Navigator** | Browser — web navigation, accessibility snapshots | |
-| **MarketScout** | Market intelligence — scans GitHub, npm, PyPI for opportunities | |
-| **Toolsmith** | Skill synthesis — reads docs via browser, writes MCP tools via LLM | |
-| **SandboxQA** | Proving ground — validates skills, self-corrects with Toolsmith | ✓ |
-
-Cortex selects only the agents a task requires. Gate agents (✓) halt the chain on failure.
-
----
-
-## Self-Evolving Skill Marketplace
-
-### 4-Phase Pipeline
-
-**Phase 1 — MarketScout (Market Intelligence)**
-- Hits GitHub Search API, npm registry, and PyPI for trending packages
-- Detects innovations and deprecations across configurable topics
-- Deduplicates against active registry, generates Skill Proposals in `data/skill_registry.json`
-
-**Phase 2 — Toolsmith (Dynamic Skill Synthesis)**
-- Navigates to the documentation URL via Navigator (browser)
-- Distills up to 4,000 chars of docs and sends to the LLM gateway
-- LLM writes a Node.js `run(args)` module + MCP JSON schema
-- Output written to `node/skills/auto_generated/<name>.js`, registered as `sandbox`
-
-**Phase 3 — SandboxQA (The Proving Ground)**
-- Loads the synthesized skill in an isolated `require()` context
-- Executes `run({})` with a 10-second timeout
-- On failure: sends error logs back to Toolsmith for rewrite (up to 3 attempts)
-- Only a passing skill proceeds to deployment
-
-**Phase 4 — CEO Deployment (Cortex)**
-- `skillRegistry.retire()` deprecates the outdated skill
-- `skillRegistry.deploy()` promotes sandbox → active
-- Tool instantly available via MCP and REST — no server restart needed
-
-### Skill Registry format (`data/skill_registry.json`)
-
-```json
-{
-  "skill_id": "skill_a1b2c3d4",
-  "status": "active",
-  "name": "github_graphql_v4",
-  "doc_url": "https://docs.github.com/en/graphql",
-  "market_alignment": "GitHub REST v3 deprecated — migrated to GraphQL v4",
-  "mcp_schema": {
-    "name": "github_graphql_v4",
-    "description": "Execute a GraphQL query against the GitHub v4 API.",
-    "inputSchema": {
-      "type": "object",
-      "properties": { "query_string": { "type": "string" } },
-      "required": ["query_string"]
-    }
-  },
-  "execution_binary": "./skills/auto_generated/github_graphql_v4.js",
-  "qa_result": { "passed": true, "attempts": 2 },
-  "synthesis_attempts": 2
-}
-```
-
-**Trigger the full pipeline** — just tell any connected LLM:
-> *"Evolve the skill marketplace for vector-search and LLM tooling"*
-Cortex routes it automatically: `MarketScout → Toolsmith → SandboxQA → Scribe`.
-
----
-
-## Tools (20)
-
-| Tool | Safe mode | Description |
-|---|---|---|
-| `octopus_plan_task` | any | Cortex decomposes task into agent plan |
-| `octopus_run_task_chain` | off | Full chain: plan → agents → gates → compact |
-| `octopus_search_memory` | any | L1 graph search — files, symbols, summaries |
-| `octopus_get_decisions` | any | L2 architectural decision log |
-| `octopus_compact_session` | off | Promote run state to long-term memory |
-| `octopus_read_file` | any | Read workspace file |
-| `octopus_write_file` | off | Write workspace file |
-| `octopus_execute_command` | off | Run shell commands in workspace |
-| `octopus_create_agent` | off | Hot-reload a new specialist agent |
-| `octopus_scan_security` | any | OWASP Top 10 file scan |
-| `octopus_llm_complete` | any | Send prompt to active LLM provider |
-| `octopus_browser_navigate` | off | Open URL + accessibility snapshot |
-| `octopus_browser_snapshot` | any | Snapshot active browser page with element refs |
-| `octopus_browser_interact` | off | Click / fill / type / eval on active page |
-| `octopus_skill_scout` | any | MarketScout: scan GitHub, npm, PyPI |
-| `octopus_skill_synthesize` | off | Toolsmith: synthesize skill from doc URL |
-| `octopus_skill_validate` | off | SandboxQA: validate with self-correction |
-| `octopus_skill_deploy` | off | CEO: deploy sandbox skill to active |
-| `octopus_skill_retire` | off | Retire an active skill |
-| `octopus_skill_list` | any | List skill registry by status |
-
-`SAFE_MODE=true` (default) — set to `false` to enable all write/execute tools.
-
----
-
-## Multi-LLM Gateway
-
-Single gateway (`node/src/llm.js`) — swap providers with one env var, no code changes.
-
-| Provider | `LLM_PROVIDER` | Default model |
-|---|---|---|
-| Anthropic (default) | `anthropic` | `claude-opus-4-7` |
-| OpenAI | `openai` | `gpt-4o` |
-| Google | `google` | `gemini-2.0-flash` |
-
-```bash
-# node/.env
 LLM_PROVIDER=anthropic
-LLM_MODEL=claude-opus-4-7   # optional override
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `POST /api/llm/complete` | — | `{ prompt, maxTokens? }` → `{ text, provider, model }` |
-| `GET /api/llm/provider` | — | Active provider + model |
-| MCP `octopus_llm_complete` | — | Same, via MCP |
-
----
-
-## Universal Tool Adapters
-
-All 20 tool definitions live in `node/src/tools.js` and are served in every provider format.
-
-```js
-const { getTools } = require('./node/src/adapters');
-
-// OpenAI
-openai.chat.completions.create({ model: 'gpt-4o', tools: getTools('openai'), messages });
-
-// Anthropic
-anthropic.messages.create({ model: 'claude-opus-4-7', tools: getTools('anthropic'), messages });
-
-// Gemini
-genai.getGenerativeModel({ model: 'gemini-2.0-flash', tools: [getTools('gemini')] });
+**GPT-4o (OpenAI)**
+```bash
+LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...
 ```
 
-Fetch over HTTP:
-```
-GET http://localhost:3001/api/tools/openai
-GET http://localhost:3001/api/tools/anthropic
-GET http://localhost:3001/api/tools/gemini
-GET http://localhost:3001/api/tools/mcp
+**Gemini (Google)**
+```bash
+LLM_PROVIDER=google
+GOOGLE_API_KEY=AIza...
 ```
 
----
+**Ollama (local)**
+```bash
+# Install Ollama: https://ollama.ai
+ollama pull llama3.2          # or llama3.1, qwen2.5, mistral-nemo
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+LLM_MODEL=llama3.2
+```
 
-## Browser Integration
-
-Powered by [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) — native Rust CLI for AI browser control.
-
-- Cortex spawns **Navigator** automatically for URL/web/scrape tasks
-- Toolsmith uses Navigator to read documentation during skill synthesis
-- Element refs (`@e1`, `@e2` …) from snapshots are deterministic handles for interactions
-
----
-
-## Token Compression — Caveman
-
-Powered by [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) — ~65-75% fewer tokens on prose fields, zero accuracy loss.
-
-| Touch-point | What is compressed |
-|---|---|
-| MCP `ListTools` response | All tool descriptions on every LLM tool-list read |
-| `runAgent()` return | `advice`, `summary`, `rationale`, `notes` on every agent response |
-| `memory.writeback()` | Same fields before SQLite storage |
-
-Code, URLs, file paths, and identifiers are always preserved.
-
----
-
-## Token-Saving Design
-
-- **Memory first** — agents query L1 graph before touching any files
-- **Incremental indexing** — only changed files re-indexed (mtime hash)
-- **Prompt cache** — agent contracts cached at startup (L4)
-- **Session compaction** — `POST /api/memory/compact` promotes facts, clears run state
-- **Narrow context** — each agent receives only what its role requires
-- **Dynamic runner** — Cortex spawns only the agents a task needs
-- **Grounded verification** — FactChecker validates all claims against L1-L3 memory
-- **Caveman compression** — prose stripped at MCP, agent response, and storage layers
-
----
-
-## REST API Reference
-
-### Core
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/health` | GET | Server health + cache stats |
-| `/api/agents` | GET | List all registered agents |
-| `/api/agent/:name/run` | POST | Run a single agent |
-| `/api/task/run` | POST | Full dynamic task chain |
-| `/api/plan-feature` | POST | Cortex plan only |
-| `/api/onboard` | POST | Load memory, return indexed file count |
-| `/api/release-check` | POST | ReleaseKeeper gate check |
-
-### Memory
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/memory/structural` | GET | Search structural graph (`?q=&limit=`) |
-| `/api/memory/decisions` | GET | Load decision log (`?tags=&limit=`) |
-| `/api/memory/run` | GET / POST | Load / save run state |
-| `/api/memory/compact` | POST | Session compaction |
-| `/api/memory/cache-stats` | GET | L4 cache stats |
-| `/api/context/:agentName` | GET | Build L5 context for agent |
-| `/api/writeback` | POST | Agent writeback |
-| `/api/structural/impact` | POST | Boundary impact analysis |
-
-### Skill Marketplace
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/skills` | GET | List registry (`?status=active\|sandbox\|proposed\|deprecated`) |
-| `/api/skills/scout` | POST | Trigger MarketScout (`{ topics: [...] }`) |
-| `/api/skills/synthesize` | POST | Toolsmith (`{ name, doc_url, description }`) |
-| `/api/skills/validate/:id` | POST | SandboxQA with self-correction |
-| `/api/skills/deploy/:id` | POST | CEO deploy (`{ retires?: skill_id }`) |
-| `/api/skills/retire/:id` | POST | Retire skill (`{ reason }`) |
-
-### LLM & Adapters
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/llm/complete` | POST | LLM completion (`{ prompt, maxTokens? }`) |
-| `/api/llm/provider` | GET | Active provider + model |
-| `/api/tools/:format` | GET | Tool definitions (openai / anthropic / gemini / mcp) |
-
----
-
-## Tests
+### 5 — Start
 
 ```bash
-# Python
-cd python && pytest tests/ -v
+# MCP server (connects to Claude Desktop / Cursor / etc.)
+npm run mcp
 
-# Node
-cd node && npm test
+# REST API server
+npm run serve
+
+# Run tests
+npm test
 ```
 
 ---
 
-## Environment Variables
+## 14 Agents
 
-| Variable | Default | Description |
+| Agent | Role | Gate |
 |---|---|---|
-| `MEMORY_SERVICE_URL` | `http://localhost:5000` | Python memory service URL |
-| `DATA_DIR` | `../data` | SQLite + JSON data directory |
-| `PORT` | `3001` | Node API server port |
-| `REDIS_URL` | _(empty)_ | Redis for L4 cache — falls back to in-memory |
-| `SAFE_MODE` | `true` | Set `false` to enable write/execute tools |
-| `LLM_PROVIDER` | `anthropic` | `anthropic` · `openai` · `google` |
-| `LLM_MODEL` | _(per provider)_ | Override default model |
-| `ANTHROPIC_API_KEY` | | Required when `LLM_PROVIDER=anthropic` |
-| `OPENAI_API_KEY` | | Required when `LLM_PROVIDER=openai` |
-| `GOOGLE_API_KEY` | | Required when `LLM_PROVIDER=google` |
+| **Cortex** | Planner — picks the exact agents each task needs | ✅ |
+| **Atlas** | Memory search — queries L1 graph before opening files | |
+| **Architect** | Boundary impact — assesses what changes touch | |
+| **Forge** | Implementation — scopes and drafts edits | |
+| **FactChecker** | Grounding gate — verifies claims against indexed memory | ✅ |
+| **Reviewer** | Quality gate — approves or blocks | ✅ |
+| **SecurityReviewer** | OWASP Top 10 scan — critical findings block release | ✅ |
+| **Probe** | Test coverage gate | ✅ |
+| **Scribe** | Docs and changelog writer | |
+| **ReleaseKeeper** | Final release gate — all approvals must be present | ✅ |
+| **Navigator** | Browser agent — navigate, snapshot, click, fill | |
+| **MarketScout** | Scans GitHub, npm, PyPI for new skill opportunities | |
+| **Toolsmith** | Synthesizes MCP skills from documentation via LLM | |
+| **SandboxQA** | Validates skills in isolated Worker threads, self-corrects | ✅ |
+
+---
+
+## 20 MCP Tools
+
+### Task Orchestration
+| Tool | Description |
+|---|---|
+| `octopus_plan_task` | Ask Cortex to plan a task into an agent execution chain |
+| `octopus_run_task_chain` | Run the full Cortex → agents → gates → compact pipeline |
+
+### Memory
+| Tool | Description |
+|---|---|
+| `octopus_search_memory` | Query L1 structural graph (files, symbols, architecture) |
+| `octopus_get_decisions` | Retrieve past ADRs and risk flags from L2 |
+| `octopus_compact_session` | Compress session into long-term memory |
+
+### File & Execution
+| Tool | Description |
+|---|---|
+| `octopus_read_file` | Read a file from the workspace |
+| `octopus_write_file` | Write a file to the workspace |
+| `octopus_execute_command` | Run a shell command in the workspace |
+
+### Agents & Security
+| Tool | Description |
+|---|---|
+| `octopus_create_agent` | Dynamically synthesize and hot-reload a new agent |
+| `octopus_scan_security` | OWASP Top 10 static scan on file paths |
+
+### LLM
+| Tool | Description |
+|---|---|
+| `octopus_llm_complete` | Send a prompt to the active provider and return the completion |
+
+### Browser
+| Tool | Description |
+|---|---|
+| `octopus_browser_navigate` | Navigate to a URL and return a page snapshot |
+| `octopus_browser_snapshot` | Capture the current accessibility tree |
+| `octopus_browser_interact` | Click, fill, type, or eval on the active page |
+
+### Skill Marketplace
+| Tool | Description |
+|---|---|
+| `octopus_skill_scout` | Scan GitHub/npm/PyPI for skill opportunities |
+| `octopus_skill_synthesize` | Read docs + synthesize a working MCP skill |
+| `octopus_skill_validate` | Run SandboxQA (with self-correction) on a skill |
+| `octopus_skill_deploy` | Deploy a QA-passed skill to the active registry |
+| `octopus_skill_retire` | Retire a deprecated skill |
+| `octopus_skill_list` | List all skills with status and QA results |
+
+---
+
+## SAFE_MODE
+
+All mutating tools are disabled by default (`SAFE_MODE=true`). Read-only tools
+(`octopus_search_memory`, `octopus_scan_security`, `octopus_read_file`, `octopus_plan_task`,
+`octopus_skill_list`, `octopus_llm_complete`, `octopus_browser_snapshot`) always work.
+
+Set `SAFE_MODE=false` in `.env` to enable the full tool set.
+
+---
+
+## LLM Adapter Formats
+
+```js
+const { getTools } = require('./src/adapters');
+
+getTools('anthropic')  // → [{ name, description, input_schema }]
+getTools('openai')     // → [{ type:'function', function:{name, description, parameters} }]
+getTools('gemini')     // → { function_declarations: [...] }
+getTools('ollama')     // → [{ type:'function', function:{...} }]  (OpenAI-compatible)
+getTools('mcp')        // → raw tool definitions (default)
+```
+
+---
+
+## REST API
+
+```
+GET  /api/agents          List all registered agents
+GET  /api/memory/search   Query structural memory
+GET  /api/tools/:format   Get tools in provider format (anthropic|openai|gemini|ollama|mcp)
+POST /api/run             Run the full agent chain
+```
+
+---
+
+## Project Structure
+
+```
+Octopus-Agent-System/
+├── node/
+│   ├── src/
+│   │   ├── agents/          14 specialist agents
+│   │   ├── adapters/        LLM format converters (Anthropic, OpenAI, Gemini, Ollama)
+│   │   ├── skills/          Shared atomic capabilities
+│   │   ├── llm.js           Multi-provider gateway
+│   │   ├── mcp.js           MCP stdio server (20 tools)
+│   │   ├── tools.js         Single source of truth for all tool definitions
+│   │   ├── memory.js        Node ↔ Python memory bridge
+│   │   ├── compress.js      Caveman prose compression (~70% token savings on prose)
+│   │   ├── runner.js        Dynamic task orchestrator
+│   │   ├── server.js        REST API server
+│   │   └── skill_registry.js  Skill lifecycle (proposed→sandbox→active→deprecated)
+│   ├── skills/auto_generated/  LLM-synthesized skills (hot-deployed)
+│   └── tests/
+├── python/
+│   ├── memory/              5-layer memory implementation (SQLite + NetworkX)
+│   ├── indexer/             Incremental repo indexer
+│   └── services/            Flask memory service
+├── frontend/                Web dashboard
+├── install.sh / install.ps1 Universal one-command installer
+└── SKILL.md                 Guide for writing new skills
+```
+
+---
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE).

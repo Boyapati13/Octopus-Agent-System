@@ -46,12 +46,19 @@ async function runAgent(name, input, memory) {
 }
 
 function injectAgent(name) {
+  const agentPath = path.join(__dirname, `${name}.js`);
+
+  // Always flush module cache first — otherwise Node serves the old version
+  try {
+    delete require.cache[require.resolve(agentPath)];
+  } catch { /* file may not have been required before — safe to ignore */ }
+
   if (!AGENT_FILES.includes(name)) {
     AGENT_FILES.push(name);
   }
-  const mod = require(`./${name}`);
+  const mod = require(agentPath);
   _registry[mod.name.toLowerCase()] = mod;
-  
+
   // Persist to disk
   const filePath = __filename;
   let content = fs.readFileSync(filePath, 'utf8');

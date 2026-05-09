@@ -1,12 +1,14 @@
 'use strict';
 /**
  * SandboxQA — The Proving Ground (Phase 3 of Skill Evolution Pipeline)
- * Validates auto-synthesized skills in isolation.
+ * Validates auto-synthesized skills in true isolation using worker_threads.
+ * Each skill runs in a separate thread with memory limits and a 10 s hard timeout.
  * Self-correcting: on failure, loops back to Toolsmith (up to MAX_RETRIES).
  * Only approved skills proceed to CEO deployment.
  */
 const fs       = require('fs');
 const path     = require('path');
+const { Worker } = require('worker_threads');
 const registry = require('../skill_registry');
 
 const name = 'SandboxQA';
@@ -14,39 +16,57 @@ const role = 'sandbox-validation';
 const canApprove = true;
 
 const MAX_RETRIES = 3;
+const TIMEOUT_MS  = 10_000;
 
-async function executeSkillSafely(execPath) {
-  // Validate the file exists and is readable
-  if (!fs.existsSync(execPath)) {
-    return { passed: false, error: `Execution file not found: ${execPath}` };
-  }
-
-  // Syntax check: try to require in a fresh module context
+// Inline worker script — runs the synthesized skill in a sandboxed thread
+const WORKER_SCRIPT = `
+const { workerData, parentPort } = require('worker_threads');
+async function main() {
   try {
-    // Purge module cache so we always load the latest version
-    delete require.cache[require.resolve(execPath)];
-    const mod = require(execPath);
-
+    // Purge any cached version so we always load the freshly written file
+    delete require.cache[require.resolve(workerData.execPath)];
+    const mod = require(workerData.execPath);
     if (typeof mod.run !== 'function') {
-      return { passed: false, error: 'Module does not export a run() function' };
+      parentPort.postMessage({ passed: false, error: 'Module does not export a run() function' });
+      return;
     }
-
-    // Call with an empty args object — a well-formed skill should not throw on empty args,
-    // it should return an error field instead
-    const result = await Promise.race([
-      mod.run({}),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Execution timeout (10s)')), 10000)),
-    ]);
-
-    // A result with an 'error' field is a handled failure — still a pass (graceful error handling)
+    // Call with empty args — a well-formed skill returns { error } instead of throwing
+    const result = await mod.run({});
     if (result && typeof result === 'object') {
-      return { passed: true, result };
+      parentPort.postMessage({ passed: true, result });
+    } else {
+      parentPort.postMessage({ passed: false, error: 'run() returned null or non-object' });
     }
-
-    return { passed: false, error: 'run() returned null or non-object' };
   } catch (e) {
-    return { passed: false, error: e.message };
+    parentPort.postMessage({ passed: false, error: e.message });
   }
+}
+main();
+`;
+
+function executeSkillSafely(execPath) {
+  if (!fs.existsSync(execPath)) {
+    return Promise.resolve({ passed: false, error: `Execution file not found: ${execPath}` });
+  }
+
+  return new Promise((resolve) => {
+    const worker = new Worker(WORKER_SCRIPT, {
+      eval: true,
+      workerData: { execPath: path.resolve(execPath) },
+      resourceLimits: {
+        maxOldGenerationSizeMb: 64,
+        maxYoungGenerationSizeMb: 16,
+      },
+    });
+
+    const timer = setTimeout(() => {
+      worker.terminate();
+      resolve({ passed: false, error: `Execution timeout (${TIMEOUT_MS / 1000}s)` });
+    }, TIMEOUT_MS);
+
+    worker.once('message', (msg) => { clearTimeout(timer); worker.terminate(); resolve(msg); });
+    worker.once('error',   (e)   => { clearTimeout(timer); worker.terminate(); resolve({ passed: false, error: e.message }); });
+  });
 }
 
 async function run(input, memory) {
