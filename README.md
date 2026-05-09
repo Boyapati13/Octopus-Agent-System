@@ -1,8 +1,9 @@
 # Octopus Agent System
 
-Memory-first software agent harness with a 5-layer memory architecture,
-11 specialist agents, a dynamic skills registry, multi-LLM gateway, browser control,
-universal tool adapters (OpenAI / Anthropic / Gemini), and a one-command installer.
+Memory-first software agent harness — 11 specialist agents, 5-layer memory, multi-LLM gateway,
+browser control, caveman token compression, and a universal one-command installer for every major LLM client.
+
+---
 
 ## Install on any LLM in 30 seconds
 
@@ -14,42 +15,24 @@ universal tool adapters (OpenAI / Anthropic / Gemini), and a one-command install
 .\install.ps1
 ```
 
-Auto-detects and configures: **Claude Desktop**, **Cursor**, **Windsurf**, **Cline**, **Continue.dev**.
+Auto-detects and configures: **Claude Desktop · Cursor · Windsurf · Cline · Continue.dev**
 Restart your LLM client — all 14 Octopus tools appear automatically.
 
-### Use as tools in any LLM API
-
-```js
-const { getTools } = require('./node/src/adapters');
-
-// OpenAI
-openai.chat.completions.create({ tools: getTools('openai'), ... });
-
-// Anthropic
-anthropic.messages.create({ tools: getTools('anthropic'), ... });
-
-// Gemini
-genai.getGenerativeModel({ tools: [getTools('gemini')], ... });
-```
-
-Or fetch over HTTP once the Node server is running:
-```
-GET http://localhost:3001/api/tools/openai
-GET http://localhost:3001/api/tools/anthropic
-GET http://localhost:3001/api/tools/gemini
-```
+---
 
 ## Architecture
 
 ```
-L5 Task Context Profile  — ephemeral, per-agent, built on demand
-L4 Prompt Cache          — Redis/Valkey optional, in-memory fallback
-L3 Run State             — SQLite session tables + session compaction
-L2 Decision Memory       — SQLite append-only, versioned ADRs
-L1 Structural Memory     — SQLite graph facts + NetworkX runtime reasoning
+L5  Task Context Profile  — ephemeral, per-agent, built on demand
+L4  Prompt Cache          — Redis/Valkey optional, in-memory fallback
+L3  Run State             — SQLite session tables + session compaction
+L2  Decision Memory       — SQLite append-only, versioned ADRs
+L1  Structural Memory     — SQLite graph facts + NetworkX runtime reasoning
 ```
 
-## Quick Start
+---
+
+## Manual Quick Start
 
 ### 1 — Python memory service (port 5000)
 ```bash
@@ -63,56 +46,202 @@ python services/memory_service.py
 python python/indexer/index_repo.py --root . --db ./data/octopus.db
 ```
 
-### 3 — Setup Environment
+### 3 — Node environment
 ```bash
 cd node
-cp .env.example .env
-npm install               # installs all deps including agent-browser
-agent-browser install     # downloads Chrome for Testing (first run only)
+cp .env.example .env          # fill in API keys
+npm install                   # installs all deps including agent-browser
+agent-browser install         # downloads Chrome for Testing (first run only)
 ```
 
-### 4 — Node API server (port 3001)
+### 4 — Start everything
 ```bash
-npm run serve
-```
-
-### 5 — Model Context Protocol (MCP) Server
-Octopus acts as an MCP server, allowing any compatible LLM (Claude Desktop, Cursor, etc.) to use it as a memory and planning backend. 
-
-The Python memory service must be running alongside the Node MCP server. Use the unified startup scripts to launch both simultaneously:
-
-**For Windows (PowerShell):**
-```powershell
+# Windows
 .\start_mcp.ps1
-```
 
-**For macOS/Linux:**
-```bash
+# Mac / Linux
 ./start_mcp.sh
 ```
 
-*(Note: In Claude Desktop's `claude_desktop_config.json`, configure the command to execute this unified script rather than just `node`)*
+Starts the Python memory service (port 5000) and Node MCP server together.
 
-### 6 — Open the dashboard
-Open `frontend/index.html` in a browser (or serve with any static server).
+### 5 — Node API server only (port 3001)
+```bash
+cd node && npm run serve
+```
+
+### 6 — Dashboard
+Open `frontend/index.html` in any browser.
 
 ---
 
 ## Agents
 
-| Agent | Role | Approves |
+| Agent | Role | Gate |
 |---|---|---|
-| Cortex | Planner — decomposes tasks, assigns agents dynamically | ✓ |
-| Atlas | Memory — ranked structural search | — |
-| Architect | Architecture — boundary impact analysis | — |
-| Forge | Implementation — scoped edit plans | — |
-| FactChecker | Verification — validates claims against memory | ✓ |
-| Reviewer | Review — quality gate, test coverage | ✓ |
-| SecurityReviewer | Security — pattern scan for risks | ✓ |
-| Probe | Testing — coverage map, untested symbols | ✓ |
-| Scribe | Documentation — changelog + doc stubs | — |
-| ReleaseKeeper | Release — validates all gates | ✓ |
-| Navigator | Browser — web navigation and page capture via agent-browser | — |
+| Cortex | Planner — dynamic task decomposition | ✓ |
+| Atlas | Memory — ranked structural graph search | |
+| Architect | Architecture — boundary impact analysis | |
+| Forge | Implementation — scoped edit plans | |
+| FactChecker | Verification — grounding gate vs. L1-L3 memory | ✓ |
+| Reviewer | Quality gate — test coverage + code review | ✓ |
+| SecurityReviewer | Security gate — OWASP pattern scan | ✓ |
+| Probe | Test coverage gate — symbol-level mapping | ✓ |
+| Scribe | Documentation — changelog + doc stubs | |
+| ReleaseKeeper | Final release gate — all gates must pass | ✓ |
+| Navigator | Browser — web navigation + page capture | |
+
+Cortex selects only the agents a task needs. Gate agents halt the chain on failure.
+
+---
+
+## Tools (14 total)
+
+| Tool | Safe mode | Description |
+|---|---|---|
+| `octopus_plan_task` | any | Cortex decomposes task into agent plan |
+| `octopus_run_task_chain` | off | Full chain: plan → agents → gates → compact |
+| `octopus_search_memory` | any | L1 graph search — files, symbols, summaries |
+| `octopus_get_decisions` | any | L2 architectural decision log |
+| `octopus_compact_session` | off | Promote run state to long-term memory |
+| `octopus_read_file` | any | Read workspace file |
+| `octopus_write_file` | off | Write workspace file |
+| `octopus_execute_command` | off | Run shell commands in workspace |
+| `octopus_create_agent` | off | Hot-reload a new specialist agent |
+| `octopus_scan_security` | any | OWASP Top 10 file scan |
+| `octopus_llm_complete` | any | Send prompt to active LLM provider |
+| `octopus_browser_navigate` | off | Open URL + accessibility snapshot |
+| `octopus_browser_snapshot` | any | Snapshot active browser page with element refs |
+| `octopus_browser_interact` | off | Click / fill / type / eval on active page |
+
+Set `SAFE_MODE=false` in `.env` to enable write/execute tools.
+
+---
+
+## Multi-LLM gateway
+
+Single gateway (`node/src/llm.js`) — swap providers with one env var, no code changes.
+
+| Provider | `LLM_PROVIDER` | Default model |
+|---|---|---|
+| Anthropic (default) | `anthropic` | `claude-opus-4-7` |
+| OpenAI | `openai` | `gpt-4o` |
+| Google | `google` | `gemini-2.0-flash` |
+
+```bash
+# node/.env
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-opus-4-7    # optional model override
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/llm/complete` | POST | `{ prompt, maxTokens? }` → `{ text, provider, model }` |
+| `/api/llm/provider` | GET | Active provider + model info |
+| MCP: `octopus_llm_complete` | — | Same, via MCP tool |
+
+---
+
+## Use Octopus tools in any LLM API
+
+All tool definitions live in `node/src/tools.js` and are served in every provider's format.
+
+```js
+const { getTools } = require('./node/src/adapters');
+
+// OpenAI
+openai.chat.completions.create({
+  model: 'gpt-4o',
+  tools: getTools('openai'),
+  messages: [{ role: 'user', content: 'Plan this feature...' }],
+});
+
+// Anthropic
+anthropic.messages.create({
+  model: 'claude-opus-4-7',
+  tools: getTools('anthropic'),
+  messages: [{ role: 'user', content: 'Plan this feature...' }],
+});
+
+// Gemini
+genai.getGenerativeModel({
+  model: 'gemini-2.0-flash',
+  tools: [getTools('gemini')],
+});
+```
+
+Or fetch over HTTP:
+```
+GET http://localhost:3001/api/tools/openai
+GET http://localhost:3001/api/tools/anthropic
+GET http://localhost:3001/api/tools/gemini
+GET http://localhost:3001/api/tools/mcp
+```
+
+---
+
+## Browser integration — agent-browser
+
+Powered by [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) — native Rust CLI for AI browser control.
+
+Cortex automatically spawns **Navigator** when a task mentions URLs, web research, scraping, or navigation.
+
+Element refs (`@e1`, `@e2` …) returned by snapshots are deterministic handles for follow-up interactions.
+
+---
+
+## Token compression — caveman
+
+Powered by [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) — ~65-75% fewer tokens on prose, zero accuracy loss.
+
+| Touch-point | What is compressed |
+|---|---|
+| MCP `ListTools` response | All tool descriptions — every LLM tool-list read |
+| `runAgent()` return value | `advice`, `summary`, `rationale`, `notes` fields |
+| `memory.writeback()` | Same fields before SQLite storage |
+
+Code, URLs, file paths, and identifiers are always preserved.
+
+---
+
+## Token-saving design
+
+- **Memory first** — agents query L1 graph before opening any files
+- **Incremental indexing** — only changed files re-indexed (mtime hash)
+- **Prompt cache** — agent system prompts cached at startup (L4)
+- **Session compaction** — `POST /api/memory/compact` promotes facts, clears run state
+- **Narrow context** — each agent receives only what its role requires
+- **Dynamic runner** — Cortex spawns only needed agents per task
+- **Grounded verification** — FactChecker validates all claims against L1-L3 memory
+- **Caveman compression** — prose stripped at MCP, agent, and storage layers
+
+---
+
+## REST API reference
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/health` | GET | Server health + cache stats |
+| `/api/agents` | GET | List all registered agents |
+| `/api/agent/:name/run` | POST | Run a single agent |
+| `/api/task/run` | POST | Run full dynamic task chain |
+| `/api/plan-feature` | POST | Cortex plan only |
+| `/api/onboard` | POST | Load memory, return indexed file count |
+| `/api/release-check` | POST | ReleaseKeeper gate check |
+| `/api/memory/structural` | GET | Search structural graph |
+| `/api/memory/decisions` | GET | Load decision log |
+| `/api/memory/run` | GET/POST | Load/save run state |
+| `/api/memory/compact` | POST | Session compaction |
+| `/api/memory/cache-stats` | GET | L4 cache stats |
+| `/api/context/:agentName` | GET | Build L5 context for agent |
+| `/api/writeback` | POST | Agent writeback |
+| `/api/structural/impact` | POST | Boundary impact analysis |
+| `/api/tools/:format` | GET | Tool definitions (openai/anthropic/gemini/mcp) |
+| `/api/llm/complete` | POST | LLM completion via gateway |
+| `/api/llm/provider` | GET | Active provider + model |
+
+---
 
 ## Tests
 
@@ -124,82 +253,19 @@ cd python && pytest tests/ -v
 cd node && npm test
 ```
 
-## Multi-LLM gateway
+---
 
-Octopus routes all LLM completions through a single gateway (`node/src/llm.js`) — swap providers with one env var, no code changes.
+## Environment variables
 
-| Provider | Env var | Default model |
+| Variable | Default | Description |
 |---|---|---|
-| Anthropic (default) | `LLM_PROVIDER=anthropic` | `claude-opus-4-7` |
-| OpenAI | `LLM_PROVIDER=openai` | `gpt-4o` |
-| Google | `LLM_PROVIDER=google` | `gemini-2.0-flash` |
-
-```bash
-# .env
-LLM_PROVIDER=anthropic
-LLM_MODEL=claude-opus-4-7   # optional override
-ANTHROPIC_API_KEY=sk-...
-```
-
-**REST:** `POST /api/llm/complete` `{ prompt, maxTokens? }` → `{ text, provider, model }`
-**MCP:** `octopus_llm_complete` tool (always available, no SAFE_MODE gate)
-**Info:** `GET /api/llm/provider` → `{ provider, model }`
-
----
-
-## Browser integration (agent-browser)
-
-Octopus integrates [agent-browser](https://github.com/vercel-labs/agent-browser) — a native Rust CLI for AI-driven browser control.
-
-### Setup
-```bash
-cd node
-npm install          # installs agent-browser
-agent-browser install  # downloads Chrome for Testing (first run only)
-```
-
-### Navigator agent
-Cortex automatically spawns **Navigator** when a task mentions URLs, web research, scraping, or navigation keywords.
-
-### MCP browser tools (require `SAFE_MODE=false`)
-| Tool | Description |
-|---|---|
-| `octopus_browser_navigate` | Open a URL and return a page snapshot |
-| `octopus_browser_snapshot` | Capture accessibility tree + element refs from active session |
-| `octopus_browser_interact` | Click, fill, type, or eval JS on the current page |
-
-Element refs (`@e1`, `@e2` …) from snapshots are deterministic handles for follow-up interactions.
-
----
-
-## Caveman compression (JuliusBrussee/caveman)
-
-Octopus integrates [caveman](https://github.com/JuliusBrussee/caveman) prose compression — ~65-75% fewer tokens on prose fields, zero accuracy loss.
-
-**Three touch-points:**
-
-| Where | What |
-|---|---|
-| MCP `ListTools` | Tool descriptions compressed before every LLM tool-list read |
-| `memory.writeback` | `advice`, `rationale`, `summary`, `notes` compressed before storage |
-| `node/src/compress.js` | Reusable utility for any future agent or skill |
-
-**Rules applied** (code, URLs, paths, identifiers always preserved):
-- Leaders stripped: `I'll`, `let me`, `you can`, …
-- Pleasantries stripped: `please`, `certainly`, `of course`, …
-- Hedges stripped: `perhaps`, `maybe`, `could potentially`, …
-- Fillers stripped: `just`, `really`, `basically`, `actually`, …
-- Articles stripped: `a`, `an`, `the`
-
----
-
-## Token-saving design
-
-- **Memory first**: agents query the graph before opening any files
-- **Incremental indexing**: only changed files are re-indexed (mtime hash)
-- **Static prefix caching**: agent contracts cached at startup (L4)
-- **Session compaction**: `POST /api/memory/compact` promotes durable facts, clears run state
-- **Narrow context**: each agent gets only what its role requires via the skills registry
-- **Dynamic runner**: `Cortex` plans the chain, spawning only needed agents per task
-- **Grounded Verification**: `FactChecker` ensures all proposed actions trace back to L1-L3 indexed memory
-- **Caveman compression**: prose fields in MCP tool list and memory writeback compressed at source
+| `MEMORY_SERVICE_URL` | `http://localhost:5000` | Python memory service URL |
+| `DATA_DIR` | `../data` | SQLite + JSON data directory |
+| `PORT` | `3001` | Node API server port |
+| `REDIS_URL` | _(empty)_ | Redis for L4 cache — falls back to in-memory |
+| `SAFE_MODE` | `true` | Disable write/execute MCP tools |
+| `LLM_PROVIDER` | `anthropic` | `anthropic` · `openai` · `google` |
+| `LLM_MODEL` | _(per provider)_ | Override default model |
+| `ANTHROPIC_API_KEY` | | Required when `LLM_PROVIDER=anthropic` |
+| `OPENAI_API_KEY` | | Required when `LLM_PROVIDER=openai` |
+| `GOOGLE_API_KEY` | | Required when `LLM_PROVIDER=google` |
