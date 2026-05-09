@@ -7,6 +7,7 @@
 const fs   = require('fs');
 const path = require('path');
 const axios = require('axios');
+const { compressProse } = require('./compress');
 
 const MEM_SVC = process.env.MEMORY_SERVICE_URL || 'http://localhost:5000';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
@@ -65,7 +66,14 @@ async function compactSession(summary, facts) {
 }
 
 async function writeback(agent, payload) {
-  return svcPost('/writeback', { agent, ...payload });
+  // Compress prose strings before storing to reduce memory token footprint
+  const compressed = JSON.parse(JSON.stringify(payload));
+  for (const key of ['advice', 'summary', 'rationale', 'notes']) {
+    if (typeof compressed[key] === 'string') compressed[key] = compressProse(compressed[key]);
+    if (compressed.decision && typeof compressed.decision[key] === 'string')
+      compressed.decision[key] = compressProse(compressed.decision[key]);
+  }
+  return svcPost('/writeback', { agent, ...compressed });
 }
 
 async function getCacheStats() {

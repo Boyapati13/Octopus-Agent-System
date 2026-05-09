@@ -14,6 +14,7 @@ const memory = require('./memory');
 const { runTask } = require('./runner');
 const { runAgent, injectAgent } = require('./agents');
 const { KINDS, OctopusError, formatError } = require('./errors');
+const { compressDescriptionsInPlace } = require('./compress');
 
 const SAFE_MODE = process.env.SAFE_MODE !== 'false'; // Default to true
 
@@ -29,10 +30,9 @@ const server = new Server(
   }
 );
 
-// Define tools available to LLMs
+// Define tools available to LLMs — descriptions compressed via caveman rules to save input tokens
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
+  const tools = compressDescriptionsInPlace([
       {
         name: 'octopus_plan_task',
         description: 'Ask Cortex to break down a complex task into an execution plan of specialized agents.',
@@ -184,8 +184,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['action'],
         },
       },
-    ],
-  };
+  ]);
+  return { tools };
 });
 
 // Handle tool execution

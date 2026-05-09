@@ -113,6 +113,27 @@ Element refs (`@e1`, `@e2` …) from snapshots are deterministic handles for fol
 
 ---
 
+## Caveman compression (JuliusBrussee/caveman)
+
+Octopus integrates [caveman](https://github.com/JuliusBrussee/caveman) prose compression — ~65-75% fewer tokens on prose fields, zero accuracy loss.
+
+**Three touch-points:**
+
+| Where | What |
+|---|---|
+| MCP `ListTools` | Tool descriptions compressed before every LLM tool-list read |
+| `memory.writeback` | `advice`, `rationale`, `summary`, `notes` compressed before storage |
+| `node/src/compress.js` | Reusable utility for any future agent or skill |
+
+**Rules applied** (code, URLs, paths, identifiers always preserved):
+- Leaders stripped: `I'll`, `let me`, `you can`, …
+- Pleasantries stripped: `please`, `certainly`, `of course`, …
+- Hedges stripped: `perhaps`, `maybe`, `could potentially`, …
+- Fillers stripped: `just`, `really`, `basically`, `actually`, …
+- Articles stripped: `a`, `an`, `the`
+
+---
+
 ## Token-saving design
 
 - **Memory first**: agents query the graph before opening any files
@@ -122,3 +143,4 @@ Element refs (`@e1`, `@e2` …) from snapshots are deterministic handles for fol
 - **Narrow context**: each agent gets only what its role requires via the skills registry
 - **Dynamic runner**: `Cortex` plans the chain, spawning only needed agents per task
 - **Grounded Verification**: `FactChecker` ensures all proposed actions trace back to L1-L3 indexed memory
+- **Caveman compression**: prose fields in MCP tool list and memory writeback compressed at source
