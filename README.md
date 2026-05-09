@@ -1,7 +1,7 @@
 # Octopus Agent System
 
 Memory-first software agent harness with a 5-layer memory architecture,
-10 specialist agents, a dynamic skills registry, a shared memory service, REST API, an MCP Server, and a dashboard UI.
+11 specialist agents, a dynamic skills registry, a shared memory service, REST API, an MCP Server, and a dashboard UI.
 
 ## Architecture
 
@@ -31,7 +31,8 @@ python python/indexer/index_repo.py --root . --db ./data/octopus.db
 ```bash
 cd node
 cp .env.example .env
-npm install
+npm install               # installs all deps including agent-browser
+agent-browser install     # downloads Chrome for Testing (first run only)
 ```
 
 ### 4 — Node API server (port 3001)
@@ -41,9 +42,20 @@ npm run serve
 
 ### 5 — Model Context Protocol (MCP) Server
 Octopus acts as an MCP server, allowing any compatible LLM (Claude Desktop, Cursor, etc.) to use it as a memory and planning backend. 
-```bash
-npm run mcp
+
+The Python memory service must be running alongside the Node MCP server. Use the unified startup scripts to launch both simultaneously:
+
+**For Windows (PowerShell):**
+```powershell
+.\start_mcp.ps1
 ```
+
+**For macOS/Linux:**
+```bash
+./start_mcp.sh
+```
+
+*(Note: In Claude Desktop's `claude_desktop_config.json`, configure the command to execute this unified script rather than just `node`)*
 
 ### 6 — Open the dashboard
 Open `frontend/index.html` in a browser (or serve with any static server).
@@ -64,6 +76,7 @@ Open `frontend/index.html` in a browser (or serve with any static server).
 | Probe | Testing — coverage map, untested symbols | ✓ |
 | Scribe | Documentation — changelog + doc stubs | — |
 | ReleaseKeeper | Release — validates all gates | ✓ |
+| Navigator | Browser — web navigation and page capture via agent-browser | — |
 
 ## Tests
 
@@ -74,6 +87,31 @@ cd python && pytest tests/ -v
 # Node
 cd node && npm test
 ```
+
+## Browser integration (agent-browser)
+
+Octopus integrates [agent-browser](https://github.com/vercel-labs/agent-browser) — a native Rust CLI for AI-driven browser control.
+
+### Setup
+```bash
+cd node
+npm install          # installs agent-browser
+agent-browser install  # downloads Chrome for Testing (first run only)
+```
+
+### Navigator agent
+Cortex automatically spawns **Navigator** when a task mentions URLs, web research, scraping, or navigation keywords.
+
+### MCP browser tools (require `SAFE_MODE=false`)
+| Tool | Description |
+|---|---|
+| `octopus_browser_navigate` | Open a URL and return a page snapshot |
+| `octopus_browser_snapshot` | Capture accessibility tree + element refs from active session |
+| `octopus_browser_interact` | Click, fill, type, or eval JS on the current page |
+
+Element refs (`@e1`, `@e2` …) from snapshots are deterministic handles for follow-up interactions.
+
+---
 
 ## Token-saving design
 

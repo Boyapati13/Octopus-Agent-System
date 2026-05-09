@@ -18,6 +18,18 @@ function determineAgents(taskStr) {
   const isDoc = t.includes('doc') || t.includes('readme') || t.includes('comment');
   const isRelease = t.includes('release') || t.includes('deploy') || t.includes('publish');
   const isAudit = t.includes('audit') || t.includes('security') || t.includes('vulnerability');
+  const isBrowse = t.includes('browse') || t.includes('navigate') || t.includes('scrape') ||
+                   t.includes('website') || t.includes('webpage') || t.includes('http') ||
+                   t.includes('url') || t.includes('visit') || t.includes('web research');
+
+  if (isBrowse) {
+    return [
+      { agent: 'Navigator',   reason: 'Navigate to URL and capture page content' },
+      { agent: 'Atlas',       reason: 'Cross-reference findings with indexed memory' },
+      { agent: 'FactChecker', reason: 'Grounding gate — verify captured claims' },
+      { agent: 'Scribe',      reason: 'Document findings in changelog' },
+    ];
+  }
 
   if (isAudit) {
     return [

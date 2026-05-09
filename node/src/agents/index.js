@@ -9,6 +9,7 @@ const path = require('path');
 const AGENT_FILES = [
   'cortex', 'atlas', 'architect', 'forge',
   'reviewer', 'securityReviewer', 'factChecker', 'probe', 'scribe', 'releaseKeeper',
+  'navigator',
 ];
 
 const _registry = {};

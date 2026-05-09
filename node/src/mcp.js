@@ -147,7 +147,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['paths'],
         },
-      }
+      },
+      {
+        name: 'octopus_browser_navigate',
+        description: 'Open a URL in the agent-browser and return a page snapshot (accessibility tree with element refs).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'Fully-qualified URL to navigate to (e.g. https://example.com)' },
+          },
+          required: ['url'],
+        },
+      },
+      {
+        name: 'octopus_browser_snapshot',
+        description: 'Capture the current accessibility tree snapshot from the active agent-browser session. Returns element refs (@e1, @e2 …) for interaction.',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'octopus_browser_interact',
+        description: 'Interact with the active browser page: click, fill a form field, type text, or evaluate JavaScript.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            action: {
+              type: 'string',
+              enum: ['click', 'fill', 'type', 'eval'],
+              description: 'Action to perform',
+            },
+            ref: { type: 'string', description: 'Element ref from snapshot (e.g. @e3) or CSS selector' },
+            value: { type: 'string', description: 'Text to fill/type, or JS expression to evaluate' },
+          },
+          required: ['action'],
+        },
+      },
     ],
   };
 });
@@ -231,6 +267,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         fs.writeFileSync(agentPath, args.javascriptLogic, 'utf8');
         injectAgent(args.agentName);
         return { content: [{ type: 'text', text: `Agent ${args.agentName} created and injected successfully.` }] };
+
+      case 'octopus_browser_navigate': {
+        if (SAFE_MODE) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        }
+        result = await runAgent('navigator', { url: args.url, task: `Navigate to ${args.url}` }, memory);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'octopus_browser_snapshot': {
+        const navigator = require('./agents/navigator');
+        const snap = await navigator.run({ task: 'snapshot' }, memory);
+        return { content: [{ type: 'text', text: JSON.stringify(snap.snapshot, null, 2) }] };
+      }
+
+      case 'octopus_browser_interact': {
+        if (SAFE_MODE) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        }
+        result = await runAgent('navigator', {
+          action: args.action,
+          ref: args.ref,
+          value: args.value,
+          task: `Browser ${args.action}${args.ref ? ` on ${args.ref}` : ''}`,
+        }, memory);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
 
       default:
         throw new OctopusError(KINDS.SYSTEM_ERROR, `Unknown tool: ${name}`);
