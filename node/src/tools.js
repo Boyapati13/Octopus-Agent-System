@@ -152,6 +152,75 @@ const TOOLS = [
       properties: {},
     },
   },
+  // ── Skill Evolution Pipeline ──────────────────────────────────────────────
+  {
+    name: 'octopus_skill_scout',
+    description: 'Trigger MarketScout to scan GitHub, npm, and PyPI for skill opportunities and deprecations.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topics: { type: 'array', items: { type: 'string' }, description: 'Technology topics to scan (e.g. ["vector-search", "llm", "mcp"])' },
+      },
+    },
+  },
+  {
+    name: 'octopus_skill_synthesize',
+    description: 'Toolsmith reads a documentation URL and synthesizes a new MCP skill (code + schema). Deploys to sandbox for QA.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name:        { type: 'string', description: 'Skill identifier (snake_case, e.g. github_graphql_v4)' },
+        doc_url:     { type: 'string', description: 'URL of the API or library documentation to read' },
+        description: { type: 'string', description: 'What this skill should do' },
+      },
+      required: ['name', 'doc_url', 'description'],
+    },
+  },
+  {
+    name: 'octopus_skill_validate',
+    description: 'Run SandboxQA on a synthesized skill. Self-corrects via Toolsmith on failure (up to 3 attempts).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skill_id: { type: 'string', description: 'Skill ID from the registry' },
+      },
+      required: ['skill_id'],
+    },
+  },
+  {
+    name: 'octopus_skill_deploy',
+    description: 'CEO deploys a sandbox-validated skill to the active registry. Retires any skill it supersedes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skill_id:    { type: 'string', description: 'Skill ID to deploy (must have passed QA)' },
+        retires:     { type: 'string', description: 'Optional skill_id to retire when this one activates' },
+      },
+      required: ['skill_id'],
+    },
+  },
+  {
+    name: 'octopus_skill_retire',
+    description: 'Retire an active skill from the marketplace registry.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skill_id: { type: 'string', description: 'Skill ID to retire' },
+        reason:   { type: 'string', description: 'Reason for retirement (e.g. "Deprecated by provider")' },
+      },
+      required: ['skill_id'],
+    },
+  },
+  {
+    name: 'octopus_skill_list',
+    description: 'List all skills in the marketplace registry with their status and QA results.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['proposed', 'sandbox', 'active', 'deprecated'], description: 'Filter by status' },
+      },
+    },
+  },
   {
     name: 'octopus_browser_interact',
     description: 'Interact with the active browser page: click, fill, type, or eval JavaScript.',

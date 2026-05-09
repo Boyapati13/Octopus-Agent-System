@@ -17,6 +17,7 @@ const { KINDS, OctopusError, formatError } = require('./errors');
 const { compressDescriptionsInPlace } = require('./compress');
 const { complete, activeProvider } = require('./llm');
 const { TOOLS } = require('./tools');
+const skillRegistry = require('./skill_registry');
 
 const SAFE_MODE = process.env.SAFE_MODE !== 'false'; // Default to true
 
@@ -117,6 +118,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         fs.writeFileSync(agentPath, args.javascriptLogic, 'utf8');
         injectAgent(args.agentName);
         return { content: [{ type: 'text', text: `Agent ${args.agentName} created and injected successfully.` }] };
+
+      // ── Skill Evolution Pipeline ────────────────────────────────────────────
+      case 'octopus_skill_scout': {
+        result = await runAgent('marketscout', { topics: args.topics }, memory);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'octopus_skill_synthesize': {
+        if (SAFE_MODE) throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        result = await runAgent('toolsmith', {
+          name: args.name, doc_url: args.doc_url, description: args.description,
+        }, memory);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'octopus_skill_validate': {
+        if (SAFE_MODE) throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        result = await runAgent('sandboxqa', { skill_id: args.skill_id }, memory);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'octopus_skill_deploy': {
+        if (SAFE_MODE) throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        if (args.retires) skillRegistry.retire(args.retires, `Superseded by ${args.skill_id}`);
+        result = skillRegistry.deploy(args.skill_id);
+        return { content: [{ type: 'text', text: JSON.stringify({ ok: true, skill: result }, null, 2) }] };
+      }
+
+      case 'octopus_skill_retire': {
+        if (SAFE_MODE) throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        result = skillRegistry.retire(args.skill_id, args.reason || '');
+        return { content: [{ type: 'text', text: JSON.stringify({ ok: true, skill: result }, null, 2) }] };
+      }
+
+      case 'octopus_skill_list': {
+        result = skillRegistry.listSkills(args.status || null);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
 
       case 'octopus_llm_complete': {
         const text = await complete(args.prompt, { maxTokens: args.maxTokens });

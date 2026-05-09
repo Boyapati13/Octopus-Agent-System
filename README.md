@@ -79,7 +79,7 @@ Open `frontend/index.html` in any browser.
 
 | Agent | Role | Gate |
 |---|---|---|
-| Cortex | Planner — dynamic task decomposition | ✓ |
+| Cortex | Planner / CEO — dynamic task decomposition | ✓ |
 | Atlas | Memory — ranked structural graph search | |
 | Architect | Architecture — boundary impact analysis | |
 | Forge | Implementation — scoped edit plans | |
@@ -90,12 +90,86 @@ Open `frontend/index.html` in any browser.
 | Scribe | Documentation — changelog + doc stubs | |
 | ReleaseKeeper | Final release gate — all gates must pass | ✓ |
 | Navigator | Browser — web navigation + page capture | |
+| MarketScout | Market intelligence — scans GitHub, npm, PyPI | |
+| Toolsmith | Skill synthesis — reads docs, writes MCP tools via LLM | |
+| SandboxQA | Proving ground — validates skills, self-corrects | ✓ |
 
 Cortex selects only the agents a task needs. Gate agents halt the chain on failure.
 
 ---
 
-## Tools (14 total)
+## Self-Evolving Skill Marketplace
+
+Octopus is a **living system** — it discovers, synthesizes, tests, and deploys its own tools while you sleep.
+
+```
+MarketScout → Toolsmith → SandboxQA → CEO (Cortex) → Active Registry
+```
+
+### 4-Phase Skill Evolution Pipeline
+
+**Phase 1 — MarketScout (Market Intelligence)**
+Scans GitHub Trending, npm registry, and PyPI for innovations and deprecations.
+Generates Skill Proposals and stores them in `data/skill_registry.json`.
+
+**Phase 2 — Toolsmith (Dynamic Skill Synthesis)**
+Takes a proposal, navigates to the documentation URL via browser, distills the docs,
+then uses the LLM gateway to write a working Node.js MCP tool + JSON schema.
+Output is written to `node/skills/auto_generated/<name>.js`.
+
+**Phase 3 — SandboxQA (The Proving Ground)**
+Loads the generated skill in isolation and executes it against a dummy task.
+On failure, sends error logs back to Toolsmith for self-correction (up to 3 attempts).
+Only a passing skill proceeds.
+
+**Phase 4 — CEO Deployment**
+Cortex retires the outdated skill from the registry, publishes the new one as `active`,
+and the tool is immediately available via MCP and REST.
+
+### Skill Evolution REST API
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/skills` | GET | List registry (`?status=active\|sandbox\|proposed\|deprecated`) |
+| `/api/skills/scout` | POST | Trigger MarketScout scan (`{ topics: [...] }`) |
+| `/api/skills/synthesize` | POST | Toolsmith: `{ name, doc_url, description }` |
+| `/api/skills/validate/:id` | POST | SandboxQA with self-correction loop |
+| `/api/skills/deploy/:id` | POST | CEO deploys to active (`{ retires?: skill_id }`) |
+| `/api/skills/retire/:id` | POST | Retire skill (`{ reason }`) |
+
+### Skill Evolution MCP Tools
+
+| Tool | Description |
+|---|---|
+| `octopus_skill_scout` | Trigger market scan with topics |
+| `octopus_skill_synthesize` | Synthesize skill from doc URL |
+| `octopus_skill_validate` | SandboxQA with self-correction |
+| `octopus_skill_deploy` | CEO deploy + optional retire |
+| `octopus_skill_retire` | Retire an active skill |
+| `octopus_skill_list` | List registry by status |
+
+### Synthesized skill format (`data/skill_registry.json`)
+
+```json
+{
+  "skill_id": "skill_a1b2c3d4",
+  "status": "active",
+  "name": "github_graphql_v4",
+  "doc_url": "https://docs.github.com/en/graphql",
+  "market_alignment": "Updated to GitHub GraphQL API v4 — REST v3 deprecated",
+  "mcp_schema": {
+    "name": "github_graphql_v4",
+    "description": "Execute GraphQL query against GitHub v4 API.",
+    "inputSchema": { "type": "object", "properties": { "query_string": { "type": "string" } }, "required": ["query_string"] }
+  },
+  "execution_binary": "./skills/auto_generated/github_graphql_v4.js",
+  "qa_result": { "passed": true, "attempts": 1 }
+}
+```
+
+---
+
+## Tools (20 total)
 
 | Tool | Safe mode | Description |
 |---|---|---|
@@ -113,6 +187,12 @@ Cortex selects only the agents a task needs. Gate agents halt the chain on failu
 | `octopus_browser_navigate` | off | Open URL + accessibility snapshot |
 | `octopus_browser_snapshot` | any | Snapshot active browser page with element refs |
 | `octopus_browser_interact` | off | Click / fill / type / eval on active page |
+| `octopus_skill_scout` | any | Trigger MarketScout market scan |
+| `octopus_skill_synthesize` | off | Toolsmith: synthesize skill from doc URL |
+| `octopus_skill_validate` | off | SandboxQA with self-correction loop |
+| `octopus_skill_deploy` | off | CEO deploys sandbox skill to active |
+| `octopus_skill_retire` | off | Retire an active skill |
+| `octopus_skill_list` | any | List skill registry by status |
 
 Set `SAFE_MODE=false` in `.env` to enable write/execute tools.
 

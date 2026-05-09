@@ -6,6 +6,7 @@ const { listAgents, runAgent } = require('./agents');
 const { runTask } = require('./runner');
 const { complete, activeProvider } = require('./llm');
 const { getTools, SUPPORTED_FORMATS } = require('./adapters');
+const skillRegistry = require('./skill_registry');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -119,6 +120,62 @@ app.post('/api/structural/impact', async (req, res) => {
   const { paths = [] } = req.body || {};
   const result = await memory.structuralImpact(paths);
   res.json(result || []);
+});
+
+// ── Skill Evolution Marketplace ───────────────────────────────────────────────
+app.get('/api/skills', (req, res) => {
+  const { status } = req.query;
+  res.json(skillRegistry.listSkills(status || null));
+});
+
+app.post('/api/skills/scout', async (req, res) => {
+  const { topics } = req.body || {};
+  try {
+    const result = await runAgent('marketscout', { topics }, memory);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/skills/synthesize', async (req, res) => {
+  const { name, doc_url, description } = req.body || {};
+  if (!name || !doc_url || !description) return res.status(400).json({ error: 'name, doc_url, description required' });
+  try {
+    const result = await runAgent('toolsmith', { name, doc_url, description }, memory);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/skills/validate/:skill_id', async (req, res) => {
+  try {
+    const result = await runAgent('sandboxqa', { skill_id: req.params.skill_id }, memory);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/skills/deploy/:skill_id', (req, res) => {
+  try {
+    const { retires } = req.body || {};
+    if (retires) skillRegistry.retire(retires, `Superseded by ${req.params.skill_id}`);
+    const skill = skillRegistry.deploy(req.params.skill_id);
+    res.json({ ok: true, skill });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/skills/retire/:skill_id', (req, res) => {
+  try {
+    const skill = skillRegistry.retire(req.params.skill_id, req.body?.reason || '');
+    res.json({ ok: true, skill });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // ── Tool adapters (install on any LLM) ───────────────────────────────────────

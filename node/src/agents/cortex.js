@@ -21,6 +21,18 @@ function determineAgents(taskStr) {
   const isBrowse = t.includes('browse') || t.includes('navigate') || t.includes('scrape') ||
                    t.includes('website') || t.includes('webpage') || t.includes('http') ||
                    t.includes('url') || t.includes('visit') || t.includes('web research');
+  const isEvolve = t.includes('skill') || t.includes('evolve') || t.includes('marketplace') ||
+                   t.includes('scout') || t.includes('toolsmith') || t.includes('deprecat') ||
+                   t.includes('synthesize') || t.includes('new tool') || t.includes('market');
+
+  if (isEvolve) {
+    return [
+      { agent: 'MarketScout',  reason: 'Scan GitHub, npm, PyPI for skill opportunities' },
+      { agent: 'Toolsmith',    reason: 'Synthesize new MCP skill from proposal + documentation' },
+      { agent: 'SandboxQA',   reason: 'Validate skill in isolation with self-correction loop' },
+      { agent: 'Scribe',      reason: 'Document new skill in changelog' },
+    ];
+  }
 
   if (isBrowse) {
     return [
