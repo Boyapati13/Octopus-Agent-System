@@ -88,6 +88,29 @@ cd python && pytest tests/ -v
 cd node && npm test
 ```
 
+## Multi-LLM gateway
+
+Octopus routes all LLM completions through a single gateway (`node/src/llm.js`) — swap providers with one env var, no code changes.
+
+| Provider | Env var | Default model |
+|---|---|---|
+| Anthropic (default) | `LLM_PROVIDER=anthropic` | `claude-opus-4-7` |
+| OpenAI | `LLM_PROVIDER=openai` | `gpt-4o` |
+| Google | `LLM_PROVIDER=google` | `gemini-2.0-flash` |
+
+```bash
+# .env
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-opus-4-7   # optional override
+ANTHROPIC_API_KEY=sk-...
+```
+
+**REST:** `POST /api/llm/complete` `{ prompt, maxTokens? }` → `{ text, provider, model }`
+**MCP:** `octopus_llm_complete` tool (always available, no SAFE_MODE gate)
+**Info:** `GET /api/llm/provider` → `{ provider, model }`
+
+---
+
 ## Browser integration (agent-browser)
 
 Octopus integrates [agent-browser](https://github.com/vercel-labs/agent-browser) — a native Rust CLI for AI-driven browser control.

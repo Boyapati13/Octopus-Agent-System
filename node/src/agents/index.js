@@ -5,6 +5,7 @@
  */
 const fs   = require('fs');
 const path = require('path');
+const { compressProse } = require('../compress');
 
 const AGENT_FILES = [
   'cortex', 'atlas', 'architect', 'forge',
@@ -34,7 +35,14 @@ function listAgents() {
 async function runAgent(name, input, memory) {
   const agent = getAgent(name);
   if (!agent) throw new Error(`Unknown agent: ${name}`);
-  return agent.run(input, memory);
+  const result = await agent.run(input, memory);
+  // Compress prose fields in every agent response to save output tokens
+  if (result && typeof result === 'object') {
+    for (const key of ['advice', 'summary', 'rationale', 'notes']) {
+      if (typeof result[key] === 'string') result[key] = compressProse(result[key]);
+    }
+  }
+  return result;
 }
 
 function injectAgent(name) {

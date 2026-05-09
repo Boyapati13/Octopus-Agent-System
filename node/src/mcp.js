@@ -15,6 +15,7 @@ const { runTask } = require('./runner');
 const { runAgent, injectAgent } = require('./agents');
 const { KINDS, OctopusError, formatError } = require('./errors');
 const { compressDescriptionsInPlace } = require('./compress');
+const { complete, activeProvider } = require('./llm');
 
 const SAFE_MODE = process.env.SAFE_MODE !== 'false'; // Default to true
 
@@ -149,6 +150,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: 'octopus_llm_complete',
+        description: 'Send a prompt to the active LLM provider (Anthropic, OpenAI, or Google) and return the completion.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            prompt:    { type: 'string',  description: 'Prompt to send to the LLM' },
+            maxTokens: { type: 'number',  description: 'Max tokens in response (default 1024)' },
+          },
+          required: ['prompt'],
+        },
+      },
+      {
         name: 'octopus_browser_navigate',
         description: 'Open a URL in the agent-browser and return a page snapshot (accessibility tree with element refs).',
         inputSchema: {
@@ -267,6 +280,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         fs.writeFileSync(agentPath, args.javascriptLogic, 'utf8');
         injectAgent(args.agentName);
         return { content: [{ type: 'text', text: `Agent ${args.agentName} created and injected successfully.` }] };
+
+      case 'octopus_llm_complete': {
+        const text = await complete(args.prompt, { maxTokens: args.maxTokens });
+        return { content: [{ type: 'text', text: JSON.stringify({ text, ...activeProvider() }, null, 2) }] };
+      }
 
       case 'octopus_browser_navigate': {
         if (SAFE_MODE) {

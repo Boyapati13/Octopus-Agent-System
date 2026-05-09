@@ -4,6 +4,7 @@ const cors    = require('cors');
 const memory  = require('./memory');
 const { listAgents, runAgent } = require('./agents');
 const { runTask } = require('./runner');
+const { complete, activeProvider } = require('./llm');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -97,6 +98,42 @@ app.post('/api/memory/compact', async (req, res) => {
 
 app.get('/api/memory/cache-stats', async (req, res) => {
   res.json(await memory.getCacheStats() || {});
+});
+
+// ── Missing proxy routes (audited) ────────────────────────────────────────────
+app.get('/api/context/:agentName', async (req, res) => {
+  const { agentName } = req.params;
+  const { task = '', q } = req.query;
+  const ctx = await memory.getContext(agentName, task, q || task);
+  res.json(ctx || {});
+});
+
+app.post('/api/writeback', async (req, res) => {
+  const { agent = 'unknown', ...payload } = req.body || {};
+  const result = await memory.writeback(agent, payload);
+  res.json(result || { ok: true });
+});
+
+app.post('/api/structural/impact', async (req, res) => {
+  const { paths = [] } = req.body || {};
+  const result = await memory.structuralImpact(paths);
+  res.json(result || []);
+});
+
+// ── Multi-LLM gateway ─────────────────────────────────────────────────────────
+app.get('/api/llm/provider', (_req, res) => {
+  res.json(activeProvider());
+});
+
+app.post('/api/llm/complete', async (req, res) => {
+  const { prompt, maxTokens, timeout } = req.body || {};
+  if (!prompt) return res.status(400).json({ error: 'prompt required' });
+  try {
+    const text = await complete(prompt, { maxTokens, timeout });
+    res.json({ text, ...activeProvider() });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────

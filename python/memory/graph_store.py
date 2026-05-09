@@ -145,7 +145,7 @@ class GraphStore:
             f"SELECT DISTINCT from_path FROM structural_edges WHERE to_path IN ({placeholders})",
             paths
         ).fetchall()
-        return [r['to_path'] for r in rows]
+        return [r['from_path'] for r in rows]
 
     def find_related(self, path: str, depth: int = 2) -> List[str]:
         """BFS neighbours of a node up to `depth` hops."""
