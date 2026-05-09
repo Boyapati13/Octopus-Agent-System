@@ -1,5 +1,6 @@
 'use strict';
 const { runAgent } = require('./agents');
+const { KINDS, OctopusError } = require('./errors');
 
 /**
  * Dynamic Task Runner
@@ -12,7 +13,12 @@ async function runTask(task, memory) {
   const planResult = await runAgent('cortex', { task, query: task }, memory);
   
   if (!planResult || !planResult.plan) {
-    return { task, error: 'Cortex failed to produce a plan.', agents_spawned: [] };
+    throw new OctopusError(
+      KINDS.PLAN_FAILURE, 
+      'Cortex failed to produce a valid execution plan.', 
+      'Cortex', 
+      { result: planResult }
+    );
   }
 
   // Cortex returns an array of needed agents in order
@@ -34,17 +40,28 @@ async function runTask(task, memory) {
       const gateAgents = ['reviewer', 'securityreviewer', 'probe', 'factchecker', 'releasekeeper'];
       if (gateAgents.includes(agentName) && result.approved === false) {
          console.warn(`[runner] Gate agent ${agentName} failed — stopping chain`);
-         break;
+         throw new OctopusError(
+           KINDS.GATE_FAILURE,
+           result.advice || 'Gate verification failed',
+           agentName,
+           { findings: result.findings || [], cautions: result.cautions || [] }
+         );
       }
     } catch (err) {
+      if (err instanceof OctopusError) throw err; // re-throw intentional errors
+      
       console.error(`[runner] Error in ${agentName}:`, err.message);
       errors.push({ agent: agentName, error: err.message });
       
-      // If a gate agent throws an error, stop the chain
+      // If a gate agent throws an unexpected error, fail
       const gateAgents = ['reviewer', 'securityreviewer', 'probe', 'factchecker', 'releasekeeper'];
       if (gateAgents.includes(agentName)) {
         console.warn(`[runner] Gate agent ${agentName} threw error — stopping chain`);
-        break;
+        throw new OctopusError(
+          KINDS.SYSTEM_ERROR,
+          `Gate agent ${agentName} encountered a system error: ${err.message}`,
+          agentName
+        );
       }
     }
   }

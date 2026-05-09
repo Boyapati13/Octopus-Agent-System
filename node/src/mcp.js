@@ -10,6 +10,9 @@ const {
 const memory = require('./memory');
 const { runTask } = require('./runner');
 const { runAgent } = require('./agents');
+const { KINDS, OctopusError, formatError } = require('./errors');
+
+const SAFE_MODE = process.env.SAFE_MODE !== 'false'; // Default to true
 
 const server = new Server(
   {
@@ -101,6 +104,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
       case 'octopus_run_task_chain':
+        if (SAFE_MODE) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        }
         result = await runTask(args.task, memory);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
@@ -119,17 +125,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
 
       case 'octopus_compact_session':
+        if (SAFE_MODE) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        }
         result = await memory.compactSession(args.summary, args.facts);
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
 
       default:
-        throw new Error(`Unknown tool: ${name}`);
+        throw new OctopusError(KINDS.SYSTEM_ERROR, `Unknown tool: ${name}`);
     }
   } catch (error) {
+    let errEnv;
+    if (error instanceof OctopusError) {
+      errEnv = error.envelope;
+    } else {
+      errEnv = formatError(KINDS.SYSTEM_ERROR, error.message || 'Unknown system error');
+    }
     return {
-      content: [{ type: 'text', text: `Error executing tool: ${error.message}` }],
+      content: [{ type: 'text', text: JSON.stringify(errEnv, null, 2) }],
       isError: true,
     };
   }
