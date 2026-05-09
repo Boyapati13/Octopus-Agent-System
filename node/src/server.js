@@ -3,6 +3,7 @@ const express = require('express');
 const cors    = require('cors');
 const memory  = require('./memory');
 const { listAgents, runAgent } = require('./agents');
+const { runTask } = require('./runner');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -48,6 +49,16 @@ app.post('/api/plan-feature', async (req, res) => {
   const { query = 'feature' } = req.body;
   const result = await runAgent('cortex', { task: query, query }, memory);
   res.json(result);
+});
+
+app.post('/api/task/run', async (req, res) => {
+  const { task = 'default task' } = req.body;
+  try {
+    const result = await runTask(task, memory);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/release-check', async (req, res) => {

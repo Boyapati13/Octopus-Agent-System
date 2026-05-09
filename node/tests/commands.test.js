@@ -29,10 +29,10 @@ test('GET /api/health returns ok', async () => {
   expect(res.body.status).toBe('ok');
 });
 
-test('GET /api/agents lists 9 agents', async () => {
+test('GET /api/agents lists 10 agents', async () => {
   const res = await request(app).get('/api/agents');
   expect(res.status).toBe(200);
-  expect(res.body.length).toBe(9);
+  expect(res.body.length).toBe(10);
 });
 
 test('POST /api/onboard returns indexed_files', async () => {
