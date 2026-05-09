@@ -136,6 +136,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['agentName', 'role', 'javascriptLogic'],
         },
+      },
+      {
+        name: 'octopus_scan_security',
+        description: 'Scan an array of file paths for comprehensive cyberthreats and vulnerabilities.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            paths: { type: 'array', items: { type: 'string' }, description: 'List of absolute or relative file paths to scan' },
+          },
+          required: ['paths'],
+        },
       }
     ],
   };
@@ -205,6 +216,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'octopus_read_file':
         const fileContent = fs.readFileSync(args.path, 'utf8');
         return { content: [{ type: 'text', text: fileContent }] };
+
+      case 'octopus_scan_security':
+        // SAFE_MODE check not required since this is a read-only analysis tool
+        const { scanSecurity } = require('./skills/security');
+        const findings = scanSecurity(args.paths);
+        return { content: [{ type: 'text', text: JSON.stringify(findings, null, 2) }] };
 
       case 'octopus_create_agent':
         if (SAFE_MODE) {

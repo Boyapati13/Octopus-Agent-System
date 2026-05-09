@@ -2,6 +2,7 @@
 jest.mock('../src/memory');
 const memory = require('../src/memory');
 
+const fs = require('fs');
 const AGENTS = ['cortex','atlas','architect','forge','reviewer','securityReviewer','probe','scribe','releaseKeeper'];
 
 const mockCtx = {
@@ -47,12 +48,14 @@ for (const agentFile of AGENTS) {
 }
 
 test('SecurityReviewer flags eval in symbols', async () => {
+  fs.writeFileSync('bad.py', 'eval(x)', 'utf8');
   memory.getContext.mockResolvedValue({
     ...mockCtx,
-    relevant_files: [{ path: 'src/bad.py', symbols: ['eval(x)'], imports: [], summary: 'Bad code', relevance_score: 3 }],
+    relevant_files: [{ path: 'bad.py', symbols: [], imports: [], summary: 'Bad code', relevance_score: 3 }],
   });
   const agent = require('../src/agents/securityReviewer');
   const result = await agent.run({ task: 'audit' }, memory);
+  fs.unlinkSync('bad.py');
   expect(result.findings.length).toBeGreaterThan(0);
 });
 

@@ -8,53 +8,24 @@ const name = 'SecurityReviewer';
 const role = 'security';
 const canApprove = true;
 
-const RISKY = {
-  js: [
-    { re: /\beval\s*\(/,                        sev: 'critical', label: 'eval() usage' },
-    { re: /child_process\.exec\s*\(/,            sev: 'critical', label: 'child_process.exec' },
-    { re: /require\s*\(\s*[^'"]/,               sev: 'high',     label: 'dynamic require()' },
-    { re: /\.innerHTML\s*=/,                     sev: 'high',     label: 'innerHTML XSS risk' },
-    { re: /new\s+Function\s*\(/,                 sev: 'high',     label: 'new Function() usage' },
-    { re: /process\.env\b/,                      sev: 'low',      label: 'env var access' },
-  ],
-  py: [
-    { re: /\beval\s*\(/,                         sev: 'critical', label: 'eval() usage' },
-    { re: /\bexec\s*\(/,                         sev: 'critical', label: 'exec() usage' },
-    { re: /os\.system\s*\(/,                     sev: 'critical', label: 'os.system() call' },
-    { re: /subprocess\.\w+\(.*shell\s*=\s*True/, sev: 'critical', label: 'subprocess shell=True' },
-    { re: /pickle\.loads?\s*\(/,                 sev: 'high',     label: 'pickle deserialization' },
-    { re: /\binput\s*\(/,                        sev: 'low',      label: 'unvalidated input()' },
-  ],
-};
+const REQUIRED_SKILLS = ['get_run_state', 'writeback', 'get_context', 'scan_security'];
 
 async function run(input, memory) {
+  const { loadSkills } = require('../skills');
+  const skills = await loadSkills(REQUIRED_SKILLS, memory);
   const { task } = input;
-  const ctx = await memory.getContext('security-reviewer', task);
+  const ctx = await skills.get_context(name.toLowerCase(), task);
   const files = ctx?.relevant_files || [];
-
-  const findings = [];
-  for (const f of files) {
-    const ext = f.path.endsWith('.py') ? 'py' : 'js';
-    const patterns = RISKY[ext] || [];
-    const text = [
-      f.path,
-      ...(f.symbols || []),
-      ...(f.imports || []),
-      f.summary || '',
-    ].join(' ');
-    for (const p of patterns) {
-      if (p.re.test(text)) {
-        findings.push({ file: f.path, severity: p.sev, issue: p.label });
-      }
-    }
-  }
+  const filePaths = files.map(f => f.path);
+  
+  const findings = await skills.scan_security(filePaths);
 
   const critical = findings.filter(f => f.severity === 'critical');
   const approved = critical.length === 0;
 
   if (approved) {
-    await memory.writeback(name, {
-      approval: { approved: true, note: `Security scan: ${findings.length} low/high findings, 0 critical`, ts: new Date().toISOString() },
+    await skills.writeback(name, {
+      approval: { approved: true, note: `Security scan: ${findings.length} findings, 0 critical`, ts: new Date().toISOString() },
     });
   }
 

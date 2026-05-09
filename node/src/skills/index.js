@@ -5,7 +5,12 @@
  * as agents but enforce narrow scopes of operation.
  */
 
+const { scanSecurity } = require('./security');
+
 const SKILL_REGISTRY = {
+  // Security
+  scan_security:      (memory, paths) => scanSecurity(paths),
+  
   // Structural queries
   structural_search:  (memory, q) => memory.searchStructural(q),
   boundary_impact:    (memory, paths) => memory.structuralImpact(paths),
