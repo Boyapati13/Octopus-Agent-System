@@ -5,6 +5,7 @@ const memory  = require('./memory');
 const { listAgents, runAgent } = require('./agents');
 const { runTask } = require('./runner');
 const { complete, activeProvider } = require('./llm');
+const { getTools, SUPPORTED_FORMATS } = require('./adapters');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -118,6 +119,19 @@ app.post('/api/structural/impact', async (req, res) => {
   const { paths = [] } = req.body || {};
   const result = await memory.structuralImpact(paths);
   res.json(result || []);
+});
+
+// ── Tool adapters (install on any LLM) ───────────────────────────────────────
+app.get('/api/tools', (_req, res) => {
+  res.json({ formats: SUPPORTED_FORMATS });
+});
+
+app.get('/api/tools/:format', (req, res) => {
+  try {
+    res.json(getTools(req.params.format));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // ── Multi-LLM gateway ─────────────────────────────────────────────────────────

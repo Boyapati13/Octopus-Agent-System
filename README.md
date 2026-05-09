@@ -1,7 +1,43 @@
 # Octopus Agent System
 
 Memory-first software agent harness with a 5-layer memory architecture,
-11 specialist agents, a dynamic skills registry, a shared memory service, REST API, an MCP Server, and a dashboard UI.
+11 specialist agents, a dynamic skills registry, multi-LLM gateway, browser control,
+universal tool adapters (OpenAI / Anthropic / Gemini), and a one-command installer.
+
+## Install on any LLM in 30 seconds
+
+```bash
+# Mac / Linux
+./install.sh
+
+# Windows
+.\install.ps1
+```
+
+Auto-detects and configures: **Claude Desktop**, **Cursor**, **Windsurf**, **Cline**, **Continue.dev**.
+Restart your LLM client — all 14 Octopus tools appear automatically.
+
+### Use as tools in any LLM API
+
+```js
+const { getTools } = require('./node/src/adapters');
+
+// OpenAI
+openai.chat.completions.create({ tools: getTools('openai'), ... });
+
+// Anthropic
+anthropic.messages.create({ tools: getTools('anthropic'), ... });
+
+// Gemini
+genai.getGenerativeModel({ tools: [getTools('gemini')], ... });
+```
+
+Or fetch over HTTP once the Node server is running:
+```
+GET http://localhost:3001/api/tools/openai
+GET http://localhost:3001/api/tools/anthropic
+GET http://localhost:3001/api/tools/gemini
+```
 
 ## Architecture
 
