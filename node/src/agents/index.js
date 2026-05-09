@@ -36,5 +36,24 @@ async function runAgent(name, input, memory) {
   return agent.run(input, memory);
 }
 
+function injectAgent(name) {
+  if (!AGENT_FILES.includes(name)) {
+    AGENT_FILES.push(name);
+  }
+  const mod = require(`./${name}`);
+  _registry[mod.name.toLowerCase()] = mod;
+  
+  // Persist to disk
+  const filePath = __filename;
+  let content = fs.readFileSync(filePath, 'utf8');
+  if (!content.includes(`'${name}'`)) {
+    content = content.replace(
+      /(const AGENT_FILES = \[\s*[\s\S]*?)(\s*\];)/,
+      `$1, '${name}'$2`
+    );
+    fs.writeFileSync(filePath, content, 'utf8');
+  }
+}
+
 loadAgents();
-module.exports = { getAgent, listAgents, runAgent };
+module.exports = { getAgent, listAgents, runAgent, injectAgent };

@@ -7,9 +7,12 @@ const {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
 const memory = require('./memory');
 const { runTask } = require('./runner');
-const { runAgent } = require('./agents');
+const { runAgent, injectAgent } = require('./agents');
 const { KINDS, OctopusError, formatError } = require('./errors');
 
 const SAFE_MODE = process.env.SAFE_MODE !== 'false'; // Default to true
@@ -85,6 +88,54 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['summary', 'facts'],
         },
+      },
+      {
+        name: 'octopus_execute_command',
+        description: 'Execute arbitrary OS commands in the workspace (e.g., npm run test, uipro init --ai).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            command: { type: 'string', description: 'The shell command to run' },
+            cwd: { type: 'string', description: 'Optional working directory' },
+          },
+          required: ['command'],
+        },
+      },
+      {
+        name: 'octopus_write_file',
+        description: 'Write raw content to a file in the workspace.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Absolute or relative path to the file' },
+            content: { type: 'string', description: 'The file contents to write' },
+          },
+          required: ['path', 'content'],
+        },
+      },
+      {
+        name: 'octopus_read_file',
+        description: 'Read the contents of a file in the workspace.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            path: { type: 'string', description: 'Absolute or relative path to the file' },
+          },
+          required: ['path'],
+        },
+      },
+      {
+        name: 'octopus_create_agent',
+        description: 'Dynamically create and hot-reload a new Octopus agent into the active registry.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            agentName: { type: 'string', description: 'Name of the new agent in camelCase (e.g. frontendDeveloper)' },
+            role: { type: 'string', description: 'Role of the new agent' },
+            javascriptLogic: { type: 'string', description: 'The full Node.js module implementation for the agent' },
+          },
+          required: ['agentName', 'role', 'javascriptLogic'],
+        },
       }
     ],
   };
@@ -132,6 +183,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
+
+      case 'octopus_execute_command':
+        if (SAFE_MODE) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        }
+        try {
+          const output = execSync(args.command, { cwd: args.cwd || process.cwd(), encoding: 'utf8', stdio: 'pipe' });
+          return { content: [{ type: 'text', text: output || 'Command executed successfully.' }] };
+        } catch (execErr) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, `Execution failed: ${execErr.message}`, null, { stderr: execErr.stderr });
+        }
+
+      case 'octopus_write_file':
+        if (SAFE_MODE) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        }
+        fs.writeFileSync(args.path, args.content, 'utf8');
+        return { content: [{ type: 'text', text: `File ${args.path} written successfully.` }] };
+
+      case 'octopus_read_file':
+        const fileContent = fs.readFileSync(args.path, 'utf8');
+        return { content: [{ type: 'text', text: fileContent }] };
+
+      case 'octopus_create_agent':
+        if (SAFE_MODE) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
+        }
+        const agentPath = path.join(__dirname, 'agents', `${args.agentName}.js`);
+        fs.writeFileSync(agentPath, args.javascriptLogic, 'utf8');
+        injectAgent(args.agentName);
+        return { content: [{ type: 'text', text: `Agent ${args.agentName} created and injected successfully.` }] };
 
       default:
         throw new OctopusError(KINDS.SYSTEM_ERROR, `Unknown tool: ${name}`);
