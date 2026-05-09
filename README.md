@@ -1,5 +1,7 @@
 # Octopus Agent System
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 A **self-evolving** AI agent harness — 14 specialist agents, 5-layer memory architecture,
 self-synthesizing skill marketplace, multi-LLM gateway, browser control, caveman token
 compression, and a one-command universal installer for every major LLM client.
