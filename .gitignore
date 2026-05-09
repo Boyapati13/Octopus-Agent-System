@@ -6,15 +6,20 @@ __pycache__/
 venv/
 .env
 *.egg-info/
+dist/
+build/
 
 # Node
 node_modules/
 npm-debug.log*
 
-# Data / DB (exclude live DB, keep structure)
+# Data — ignore live DB/index files, but keep the data/ folder itself
 data/octopus.db
 data/graph_index.json
 data/structural_memory.json
+data/decision_memory.json
+data/run_memory.json
+!data/.gitkeep
 
 # OS
 .DS_Store
