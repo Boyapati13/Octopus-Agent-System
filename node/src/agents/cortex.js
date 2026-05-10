@@ -1,115 +1,147 @@
 'use strict';
-const { loadSkills } = require('../skills');
-
 /**
  * Cortex — Planner
- * Dynamically determines which agents are needed based on the task,
- * instead of running a static list.
+ * Determines which agents to run for a given task.
+ *
+ * Planning order (highest to lowest priority):
+ *   1. LLM-backed: asks the active LLM to pick from the live agent registry
+ *      — works with dynamically created agents, adapts to any task type
+ *   2. Keyword fallback: regex-based routing when LLM is unavailable
  */
+const { loadSkills } = require('../skills');
+const { complete }   = require('../llm');
+
 const name = 'Cortex';
 const role = 'planner';
 const canApprove = true;
 
 const REQUIRED_SKILLS = ['get_run_state', 'writeback'];
 
-function determineAgents(taskStr) {
-  const t = taskStr.toLowerCase();
-  
-  const isDoc = t.includes('doc') || t.includes('readme') || t.includes('comment');
-  const isRelease = t.includes('release') || t.includes('deploy') || t.includes('publish');
-  const isAudit = t.includes('audit') || t.includes('security') || t.includes('vulnerability');
-  const isBrowse = t.includes('browse') || t.includes('navigate') || t.includes('scrape') ||
-                   t.includes('website') || t.includes('webpage') || t.includes('http') ||
-                   t.includes('url') || t.includes('visit') || t.includes('web research');
-  const isEvolve = t.includes('skill') || t.includes('evolve') || t.includes('marketplace') ||
-                   t.includes('scout') || t.includes('toolsmith') || t.includes('deprecat') ||
-                   t.includes('synthesize') || t.includes('new tool') || t.includes('market');
+// ── Keyword fallback (used when LLM call fails) ───────────────────────────────
 
-  if (isEvolve) {
-    return [
-      { agent: 'MarketScout',  reason: 'Scan GitHub, npm, PyPI for skill opportunities' },
-      { agent: 'Toolsmith',    reason: 'Synthesize new MCP skill from proposal + documentation' },
-      { agent: 'SandboxQA',   reason: 'Validate skill in isolation with self-correction loop' },
-      { agent: 'Scribe',      reason: 'Document new skill in changelog' },
-    ];
-  }
+const KEYWORD_ROUTES = [
+  { re: /skill|evolve|marketplace|scout|toolsmith|synthesize|new.?tool|market/i,
+    agents: ['MarketScout','Toolsmith','SandboxQA','Scribe'] },
+  { re: /browse|navigate|scrape|website|webpage|https?:|url|visit|web.?research/i,
+    agents: ['Navigator','Atlas','FactChecker','Scribe'] },
+  { re: /audit|security|vuln|owasp|cve|penetration/i,
+    agents: ['Atlas','SecurityReviewer','Scribe'] },
+  { re: /doc|readme|comment|jsdoc|changelog/i,
+    agents: ['Atlas','Forge','Reviewer','Scribe'] },
+  { re: /release|deploy|publish|version|tag/i,
+    agents: ['ReleaseKeeper'] },
+  { re: /test|spec|coverage|jest|pytest|unit/i,
+    agents: ['Atlas','Probe','Forge','Scribe'] },
+  { re: /perf|optim|speed|latency|benchmark/i,
+    agents: ['Atlas','Architect','Forge','Reviewer','Scribe'] },
+  { re: /refactor|clean|lint|format|style/i,
+    agents: ['Atlas','Forge','Reviewer','Scribe'] },
+];
 
-  if (isBrowse) {
-    return [
-      { agent: 'Navigator',   reason: 'Navigate to URL and capture page content' },
-      { agent: 'Atlas',       reason: 'Cross-reference findings with indexed memory' },
-      { agent: 'FactChecker', reason: 'Grounding gate — verify captured claims' },
-      { agent: 'Scribe',      reason: 'Document findings in changelog' },
-    ];
-  }
+const DEFAULT_CHAIN = ['Atlas','Architect','Forge','FactChecker','Reviewer','SecurityReviewer','Probe','Scribe','ReleaseKeeper'];
 
-  if (isAudit) {
-    return [
-      { agent: 'Atlas', reason: 'Query memory for architecture' },
-      { agent: 'SecurityReviewer', reason: 'Run security scan' },
-      { agent: 'Scribe', reason: 'Document audit findings' }
-    ];
+function keywordFallback(taskStr) {
+  for (const { re, agents } of KEYWORD_ROUTES) {
+    if (re.test(taskStr)) return agents;
   }
-
-  if (isDoc) {
-    return [
-      { agent: 'Atlas', reason: 'Query memory for current docs' },
-      { agent: 'Forge', reason: 'Draft documentation edits' },
-      { agent: 'Reviewer', reason: 'Review documentation quality' },
-      { agent: 'Scribe', reason: 'Update changelog' }
-    ];
-  }
-  
-  if (isRelease) {
-    return [
-      { agent: 'ReleaseKeeper', reason: 'Verify all gates before release' }
-    ];
-  }
-  
-  // Default: Full feature/implementation chain
-  return [
-    { agent: 'Atlas',            reason: 'Query memory before opening files' },
-    { agent: 'Architect',        reason: 'Assess boundary impact' },
-    { agent: 'Forge',            reason: 'Scope the implementation' },
-    { agent: 'FactChecker',      reason: 'Grounding gate — verify claims against memory' },
-    { agent: 'Reviewer',         reason: 'Quality gate — must approve' },
-    { agent: 'SecurityReviewer', reason: 'Security gate — must approve' },
-    { agent: 'Probe',            reason: 'Test coverage gate — must pass' },
-    { agent: 'Scribe',           reason: 'Update docs and changelog' },
-    { agent: 'ReleaseKeeper',    reason: 'Final release gate' }
-  ];
+  return DEFAULT_CHAIN;
 }
+
+// ── LLM-backed planning ───────────────────────────────────────────────────────
+
+async function llmPlan(taskStr, available) {
+  if (!available.length) throw new Error('No agents registered');
+
+  const agentList = available
+    .map(a => `- ${a.name} (${a.role})${a.canApprove ? ' [GATE: stops chain on failure]' : ''}`)
+    .join('\n');
+
+  const prompt = `You are Cortex, the planner in the Octopus multi-agent AI system.
+Select the minimal ordered set of agents needed for this specific task.
+
+Available agents:
+${agentList}
+
+Task: "${taskStr}"
+
+Rules:
+- Only include agents genuinely needed for THIS task
+- Order: research → implement → verify → document → release
+- GATE agents stop the pipeline if they fail — include when verification is critical
+- Lean plans preferred: 2-4 agents for simple tasks, up to 9 for full release cycles
+- Return ONLY a valid JSON array of agent names — no explanation, no markdown
+
+JSON array:`;
+
+  const out = await complete(prompt, { maxTokens: 200, timeout: 15000 });
+  const match = out.match(/\[[\s\S]*?\]/);
+  if (!match) throw new Error('No JSON array in LLM output');
+
+  const arr = JSON.parse(match[0]);
+  if (!Array.isArray(arr) || !arr.length) throw new Error('Empty plan array');
+
+  // Only include names that exist in the registry
+  const validNames = new Set(available.map(a => a.name.toLowerCase()));
+  const valid = arr.filter(n => typeof n === 'string' && validNames.has(n.toLowerCase()));
+  if (!valid.length) throw new Error('No valid agent names in LLM plan');
+
+  return valid;
+}
+
+// ── Core planning entry point ─────────────────────────────────────────────────
+
+async function determineAgents(taskStr) {
+  // Lazy-require agents/index to avoid circular dep at module load time.
+  // By the time this function is called, all modules are fully initialised.
+  let available = [];
+  try {
+    const { listAgents } = require('./index');
+    available = listAgents();
+  } catch {}
+
+  // 1. Try LLM-backed planning
+  if (available.length) {
+    try {
+      const names = await llmPlan(taskStr, available);
+      return names.map(agent => ({ agent, reason: 'llm-selected' }));
+    } catch (err) {
+      console.warn(`[cortex] LLM planning failed (${err.message}) — using keyword fallback`);
+    }
+  }
+
+  // 2. Keyword fallback
+  return keywordFallback(taskStr).map(agent => ({ agent, reason: 'keyword-matched' }));
+}
+
+// ── Agent run function ────────────────────────────────────────────────────────
 
 async function run(input, memory) {
   const { task } = input;
-  const skills = await loadSkills(REQUIRED_SKILLS, memory);
+  const skills   = await loadSkills(REQUIRED_SKILLS, memory);
   const runState = await skills.get_run_state() || {};
 
-  const steps = determineAgents(task).map((s, i) => ({
-    step: i + 1,
-    agent: s.agent,
+  const agentPlan = await determineAgents(task);
+  const approvals = (runState.approvals || []).map(a => a.agent.toLowerCase());
+
+  const steps = agentPlan.map((s, i) => ({
+    step:   i + 1,
+    agent:  s.agent,
     reason: s.reason,
-    status: 'pending',
+    status: approvals.includes(s.agent.toLowerCase()) ? 'approved' : 'pending',
   }));
 
-  // Mark steps already approved in run state
-  const approvals = (runState.approvals || []).map(a => a.agent.toLowerCase());
-  for (const s of steps) {
-    if (approvals.includes(s.agent.toLowerCase())) s.status = 'approved';
-  }
-
-  const result = {
-    agent: name, role, task,
-    plan: steps,
-    blockers: runState.blockers || [],
-    advice: `Cortex planned ${steps.length} steps. FactChecker is included for grounding.`,
-  };
-
   await skills.writeback(name, {
-    run_patch: { task, status: 'planned', notes: [`Cortex planned: ${task}`] },
+    run_patch: { task, status: 'planned', notes: [`Cortex planned ${steps.length} steps`] },
   });
 
-  return result;
+  return {
+    agent:   name,
+    role,
+    task,
+    plan:    steps,
+    blockers: runState.blockers || [],
+    advice:  `Planned ${steps.length} steps via ${agentPlan[0]?.reason === 'llm-selected' ? 'LLM' : 'keyword'} routing.`,
+  };
 }
 
 module.exports = { name, role, canApprove, run };

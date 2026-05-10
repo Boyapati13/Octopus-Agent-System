@@ -1,5 +1,9 @@
 'use strict';
 jest.mock('../src/memory');
+jest.mock('../src/llm', () => ({
+  complete:       jest.fn().mockRejectedValue(new Error('LLM mocked')),
+  activeProvider: jest.fn().mockReturnValue({ provider: 'anthropic', model: 'claude-sonnet-4-6' }),
+}));
 const memory = require('../src/memory');
 const request = require('supertest');
 
@@ -29,10 +33,10 @@ test('GET /api/health returns ok', async () => {
   expect(res.body.status).toBe('ok');
 });
 
-test('GET /api/agents lists 10 agents', async () => {
+test('GET /api/agents lists 14 agents', async () => {
   const res = await request(app).get('/api/agents');
   expect(res.status).toBe(200);
-  expect(res.body.length).toBe(10);
+  expect(res.body.length).toBe(14);
 });
 
 test('POST /api/onboard returns indexed_files', async () => {

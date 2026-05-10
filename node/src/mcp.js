@@ -9,7 +9,9 @@ const {
 } = require('@modelcontextprotocol/sdk/types.js');
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { exec }  = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 const memory = require('./memory');
 const { runTask } = require('./runner');
 const { runAgent, injectAgent } = require('./agents');
@@ -82,16 +84,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
 
-      case 'octopus_execute_command':
+      case 'octopus_execute_command': {
         if (SAFE_MODE) {
           throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
         }
         try {
-          const output = execSync(args.command, { cwd: args.cwd || process.cwd(), encoding: 'utf8', stdio: 'pipe' });
-          return { content: [{ type: 'text', text: output || 'Command executed successfully.' }] };
+          const { stdout } = await execAsync(args.command, {
+            cwd: args.cwd || process.cwd(),
+            encoding: 'utf8',
+            timeout: 30000,
+          });
+          return { content: [{ type: 'text', text: stdout || 'Command executed successfully.' }] };
         } catch (execErr) {
-          throw new OctopusError(KINDS.SYSTEM_ERROR, `Execution failed: ${execErr.message}`, null, { stderr: execErr.stderr });
+          throw new OctopusError(KINDS.SYSTEM_ERROR, `Execution failed: ${execErr.message}`, null, { stderr: execErr.stderr || '' });
         }
+      }
 
       case 'octopus_write_file':
         if (SAFE_MODE) {

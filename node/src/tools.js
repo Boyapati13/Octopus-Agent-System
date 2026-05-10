@@ -123,7 +123,7 @@ const TOOLS = [
   },
   {
     name: 'octopus_llm_complete',
-    description: 'Send a prompt to the active LLM provider (Anthropic, OpenAI, or Google) and return the completion.',
+    description: 'Send a prompt to the active LLM provider (Anthropic, OpenAI, Google, or Ollama) and return the completion.',
     inputSchema: {
       type: 'object',
       properties: {

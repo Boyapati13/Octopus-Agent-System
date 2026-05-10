@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Octopus post-commit hook
+# Runs the agent pipeline in the background after every local commit.
+# Install: ./scripts/install-hooks.sh
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Source node/.env if it exists
+if [ -f "$REPO_ROOT/node/.env" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$REPO_ROOT/node/.env"
+  set +a
+fi
+
+# Skip gracefully if no LLM provider is configured
+if [ -z "${ANTHROPIC_API_KEY:-}" ] && \
+   [ -z "${OPENAI_API_KEY:-}" ] && \
+   [ -z "${GOOGLE_API_KEY:-}" ] && \
+   [ -z "${OLLAMA_BASE_URL:-}" ]; then
+  echo "[octopus] No LLM provider found in node/.env — hook skipped."
+  echo "[octopus] Set ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY, or OLLAMA_BASE_URL to activate."
+  exit 0
+fi
+
+LOG="/tmp/octopus_pipeline_$$.log"
+echo "[octopus] Launching agent pipeline in background… (log: $LOG)"
+
+# Run detached so it never blocks the commit prompt
+nohup node "$REPO_ROOT/scripts/octopus_push_handler.js" > "$LOG" 2>&1 &
+echo "[octopus] Pipeline PID $!  —  tail -f $LOG"

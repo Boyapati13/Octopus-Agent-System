@@ -1,9 +1,14 @@
 'use strict';
 jest.mock('../src/memory');
+// Mock LLM so Cortex uses keyword fallback without hitting the network
+jest.mock('../src/llm', () => ({
+  complete:       jest.fn().mockRejectedValue(new Error('LLM mocked — using keyword fallback')),
+  activeProvider: jest.fn().mockReturnValue({ provider: 'anthropic', model: 'claude-sonnet-4-6' }),
+}));
 const memory = require('../src/memory');
 
 const fs = require('fs');
-const AGENTS = ['cortex','atlas','architect','forge','reviewer','securityReviewer','probe','scribe','releaseKeeper'];
+const AGENTS = ['cortex','atlas','architect','forge','reviewer','securityReviewer','factChecker','probe','scribe','releaseKeeper'];
 
 const mockCtx = {
   relevant_files: [{ path: 'src/app.py', symbols: ['main'], imports: ['os'], summary: 'Entry', relevance_score: 3 }],

@@ -53,10 +53,21 @@ function injectAgent(name) {
     delete require.cache[require.resolve(agentPath)];
   } catch { /* file may not have been required before — safe to ignore */ }
 
+  const mod = require(agentPath);
+
+  // Validate agent contract before registering
+  const REQUIRED = ['name', 'role', 'canApprove', 'run'];
+  const missing  = REQUIRED.filter(k => mod[k] === undefined);
+  if (missing.length) {
+    throw new Error(`Agent "${name}" is missing required exports: ${missing.join(', ')}`);
+  }
+  if (typeof mod.run !== 'function') {
+    throw new Error(`Agent "${name}" must export run as a function, got ${typeof mod.run}`);
+  }
+
   if (!AGENT_FILES.includes(name)) {
     AGENT_FILES.push(name);
   }
-  const mod = require(agentPath);
   _registry[mod.name.toLowerCase()] = mod;
 
   // Persist to disk
