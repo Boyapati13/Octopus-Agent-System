@@ -1,17 +1,17 @@
-# Octopus Agent System
+# 🐙 Octopus Agent System
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-63%20passing-brightgreen)](#testing)
+[![Agents](https://img.shields.io/badge/agents-14-blue)](#agents)
+[![Tools](https://img.shields.io/badge/MCP%20tools-20-purple)](#mcp-tools)
 
-A **self-evolving** AI agent harness — 14 specialist agents, 20 MCP tools, 5-layer memory,
-self-synthesizing skill marketplace, **4-provider LLM gateway** (Claude · GPT-4o · Gemini · Ollama),
-browser control, caveman token compression, and a one-command universal installer.
+A **self-evolving** multi-agent AI system. Cortex uses an LLM to plan which agents are needed for each task, the runner auto-synthesises missing agents on demand, and the Skill Marketplace discovers new tools, reads their docs, writes integration code, validates it in an isolated Worker thread, and deploys — automatically.
 
-> Octopus discovers new tools, reads their documentation, writes the integration code,
-> tests it in an isolated Worker thread, and deploys it — while you sleep.
+Works with **Claude · GPT-4o · Gemini · Ollama** (local). Exposes 20 tools via MCP, installs into Claude Desktop / Cursor / Windsurf in one command.
 
 ---
 
-## Install on any LLM in 30 seconds
+## Quick Install (any LLM client)
 
 ```bash
 # Mac / Linux
@@ -21,8 +21,28 @@ browser control, caveman token compression, and a one-command universal installe
 .\install.ps1
 ```
 
-Auto-detects and configures: **Claude Desktop · Cursor · Windsurf · Cline · Continue.dev**  
 Restart your LLM client — all 20 Octopus tools appear automatically.
+
+---
+
+## What happens on every git push
+
+```
+git push  →  GitHub Actions fires
+              ├── npm test (63 tests)
+              ├── Cortex plans agents via LLM
+              ├── Agent chain runs (auto-creates stubs for unknown agents)
+              ├── Navigator browses any URLs in the commit message
+              ├── MarketScout scans new packages in package.json / requirements.txt
+              ├── Toolsmith synthesises MCP skills from their docs
+              ├── SandboxQA validates in isolated Worker thread (self-corrects 3×)
+              └── Auto-commits synthesised skills back to repo [skip ci]
+```
+
+Local hook (fires in background, non-blocking):
+```bash
+bash scripts/install-hooks.sh   # one-time setup
+```
 
 ---
 
@@ -31,49 +51,33 @@ Restart your LLM client — all 20 Octopus tools appear automatically.
 ### 5-Layer Memory
 
 ```
-L5  Task Context Profile  — ephemeral, per-agent, built on demand
-L4  Prompt Cache          — Redis/Valkey optional, in-memory fallback
-L3  Run State             — SQLite session tables + session compaction
-L2  Decision Memory       — SQLite append-only, versioned ADRs
-L1  Structural Memory     — SQLite graph facts + NetworkX runtime reasoning
+L5  Task Context Profile    ephemeral, per-agent, built on demand
+L4  Prompt Cache            Redis/Valkey optional, in-memory fallback
+L3  Run State               SQLite session + compaction
+L2  Decision Memory         SQLite append-only ADRs
+L1  Structural Memory       SQLite graph facts + NetworkX runtime reasoning
 ```
 
 ### Self-Evolving Skill Marketplace
 
 ```
-MarketScout ──► Toolsmith ──► SandboxQA ──► Cortex (CEO) ──► Active Registry
-  (scout)        (synthesize)   (validate)     (deploy)         (MCP + REST)
+MarketScout → Toolsmith → SandboxQA (Worker thread) → Cortex CEO → Active Registry
+  scout        synthesise   validate + self-correct      approve       MCP + REST
 ```
 
-Octopus is a **living system** — it detects when APIs deprecate or new libraries emerge,
-reads the docs, writes a working MCP tool, runs it in an isolated Worker thread with memory
-limits, self-corrects up to 3 times on failure, and promotes to production automatically.
+### LLM-Backed Planning
 
-### Multi-LLM Gateway
-
-| Provider | Default Model | Tool Use | Notes |
-|---|---|---|---|
-| `anthropic` | `claude-sonnet-4-6` | ✅ Full | Recommended default |
-| `openai` | `gpt-4o` | ✅ Full | Set `OPENAI_API_KEY` |
-| `google` | `gemini-2.0-flash` | ✅ Full | Set `GOOGLE_API_KEY` |
-| `ollama` | `llama3.2` | ✅ Compatible models | Local, no API key needed |
-
-Switch provider in `.env`:
-```bash
-LLM_PROVIDER=ollama
-LLM_MODEL=llama3.1      # or qwen2.5, mistral-nemo, any tool-capable model
-OLLAMA_BASE_URL=http://localhost:11434
-```
+Cortex calls the active LLM with the full list of registered agents (including dynamically-created ones) and asks it to pick the minimal ordered set for the task. Falls back to regex routing if the LLM is unavailable.
 
 ---
 
-## Quick Start
+## Setup
 
-### 1 — Python memory service (port 5000)
+### 1 — Python memory service
 ```bash
 cd python
 pip install -r requirements.txt
-python services/memory_service.py
+python services/memory_service.py          # port 5000
 ```
 
 ### 2 — Index the repo
@@ -81,38 +85,38 @@ python services/memory_service.py
 python python/indexer/index_repo.py --root . --db ./data/octopus.db
 ```
 
-### 3 — Node environment
+### 3 — Node
 ```bash
 cd node
-cp .env.example .env          # fill in API keys / choose provider
+cp .env.example .env
 npm install
-agent-browser install         # downloads Chrome for Testing (first run only)
 ```
 
-### 4 — Choose your provider
+### 4 — Choose your LLM
 
 **Claude (Anthropic)**
-```bash
+```env
 LLM_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 **GPT-4o (OpenAI)**
-```bash
+```env
 LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 ```
 
 **Gemini (Google)**
-```bash
+```env
 LLM_PROVIDER=google
 GOOGLE_API_KEY=AIza...
 ```
 
-**Ollama (local)**
+**Ollama (local — no API key)**
 ```bash
-# Install Ollama: https://ollama.ai
-ollama pull llama3.2          # or llama3.1, qwen2.5, mistral-nemo
+ollama pull llama3.2        # or llama3.1, qwen2.5, mistral-nemo
+```
+```env
 LLM_PROVIDER=ollama
 OLLAMA_BASE_URL=http://localhost:11434
 LLM_MODEL=llama3.2
@@ -121,14 +125,9 @@ LLM_MODEL=llama3.2
 ### 5 — Start
 
 ```bash
-# MCP server (connects to Claude Desktop / Cursor / etc.)
-npm run mcp
-
-# REST API server
-npm run serve
-
-# Run tests
-npm test
+npm run mcp      # MCP server  (Claude Desktop / Cursor / Windsurf)
+npm run serve    # REST API    (port 3001)
+npm test         # 63 tests
 ```
 
 ---
@@ -137,20 +136,22 @@ npm test
 
 | Agent | Role | Gate |
 |---|---|---|
-| **Cortex** | Planner — picks the exact agents each task needs | ✅ |
-| **Atlas** | Memory search — queries L1 graph before opening files | |
-| **Architect** | Boundary impact — assesses what changes touch | |
-| **Forge** | Implementation — scopes and drafts edits | |
+| **Cortex** | LLM-backed planner — picks agents from live registry each task | ✅ |
+| **Atlas** | Structural memory search — queries L1 graph before opening files | |
+| **Architect** | Boundary impact — assesses what a change touches | |
+| **Forge** | Implementation — scopes and drafts code edits | |
 | **FactChecker** | Grounding gate — verifies claims against indexed memory | ✅ |
-| **Reviewer** | Quality gate — approves or blocks | ✅ |
+| **Reviewer** | Quality gate | ✅ |
 | **SecurityReviewer** | OWASP Top 10 scan — critical findings block release | ✅ |
 | **Probe** | Test coverage gate | ✅ |
 | **Scribe** | Docs and changelog writer | |
-| **ReleaseKeeper** | Final release gate — all approvals must be present | ✅ |
-| **Navigator** | Browser agent — navigate, snapshot, click, fill | |
-| **MarketScout** | Scans GitHub, npm, PyPI for new skill opportunities | |
-| **Toolsmith** | Synthesizes MCP skills from documentation via LLM | |
-| **SandboxQA** | Validates skills in isolated Worker threads, self-corrects | ✅ |
+| **ReleaseKeeper** | Final release gate — all approvals required | ✅ |
+| **Navigator** | Browser — navigate, snapshot, click, fill (async, non-blocking) | |
+| **MarketScout** | Scans GitHub / npm / PyPI for skill opportunities | |
+| **Toolsmith** | Synthesises MCP skills from documentation via LLM | |
+| **SandboxQA** | Validates skills in isolated Worker threads, self-corrects 3× | ✅ |
+
+**Dynamic agents:** if Cortex selects an agent name that doesn't exist in the registry, the runner auto-synthesises a stub, writes it to disk, and hot-loads it — the chain never crashes on a missing agent.
 
 ---
 
@@ -159,84 +160,124 @@ npm test
 ### Task Orchestration
 | Tool | Description |
 |---|---|
-| `octopus_plan_task` | Ask Cortex to plan a task into an agent execution chain |
-| `octopus_run_task_chain` | Run the full Cortex → agents → gates → compact pipeline |
+| `octopus_plan_task` | Ask Cortex to plan a task into an agent chain |
+| `octopus_run_task_chain` | Run the full pipeline end-to-end |
 
 ### Memory
 | Tool | Description |
 |---|---|
-| `octopus_search_memory` | Query L1 structural graph (files, symbols, architecture) |
-| `octopus_get_decisions` | Retrieve past ADRs and risk flags from L2 |
+| `octopus_search_memory` | Query L1 structural graph |
+| `octopus_get_decisions` | Retrieve ADRs from L2 |
 | `octopus_compact_session` | Compress session into long-term memory |
 
 ### File & Execution
 | Tool | Description |
 |---|---|
-| `octopus_read_file` | Read a file from the workspace |
-| `octopus_write_file` | Write a file to the workspace |
-| `octopus_execute_command` | Run a shell command in the workspace |
+| `octopus_read_file` | Read a workspace file |
+| `octopus_write_file` | Write a workspace file |
+| `octopus_execute_command` | Run a shell command (async, non-blocking) |
 
 ### Agents & Security
 | Tool | Description |
 |---|---|
-| `octopus_create_agent` | Dynamically synthesize and hot-reload a new agent |
-| `octopus_scan_security` | OWASP Top 10 static scan on file paths |
+| `octopus_create_agent` | Synthesise and hot-reload a new agent |
+| `octopus_scan_security` | OWASP Top 10 static scan |
 
 ### LLM
 | Tool | Description |
 |---|---|
-| `octopus_llm_complete` | Send a prompt to the active provider and return the completion |
+| `octopus_llm_complete` | Prompt the active provider (Anthropic · OpenAI · Google · Ollama) |
 
 ### Browser
 | Tool | Description |
 |---|---|
-| `octopus_browser_navigate` | Navigate to a URL and return a page snapshot |
-| `octopus_browser_snapshot` | Capture the current accessibility tree |
-| `octopus_browser_interact` | Click, fill, type, or eval on the active page |
+| `octopus_browser_navigate` | Navigate to a URL and return snapshot |
+| `octopus_browser_snapshot` | Capture current accessibility tree |
+| `octopus_browser_interact` | Click / fill / eval on active page |
 
 ### Skill Marketplace
 | Tool | Description |
 |---|---|
-| `octopus_skill_scout` | Scan GitHub/npm/PyPI for skill opportunities |
-| `octopus_skill_synthesize` | Read docs + synthesize a working MCP skill |
-| `octopus_skill_validate` | Run SandboxQA (with self-correction) on a skill |
-| `octopus_skill_deploy` | Deploy a QA-passed skill to the active registry |
+| `octopus_skill_scout` | Scan GitHub / npm / PyPI for opportunities |
+| `octopus_skill_synthesize` | Read docs + synthesise a working MCP skill |
+| `octopus_skill_validate` | Run SandboxQA with self-correction |
+| `octopus_skill_deploy` | Deploy a QA-passed skill |
 | `octopus_skill_retire` | Retire a deprecated skill |
-| `octopus_skill_list` | List all skills with status and QA results |
+| `octopus_skill_list` | List all skills with status |
 
 ---
 
-## SAFE_MODE
-
-All mutating tools are disabled by default (`SAFE_MODE=true`). Read-only tools
-(`octopus_search_memory`, `octopus_scan_security`, `octopus_read_file`, `octopus_plan_task`,
-`octopus_skill_list`, `octopus_llm_complete`, `octopus_browser_snapshot`) always work.
-
-Set `SAFE_MODE=false` in `.env` to enable the full tool set.
-
----
-
-## LLM Adapter Formats
+## Multi-LLM Adapter
 
 ```js
 const { getTools } = require('./src/adapters');
 
 getTools('anthropic')  // → [{ name, description, input_schema }]
-getTools('openai')     // → [{ type:'function', function:{name, description, parameters} }]
+getTools('openai')     // → [{ type:'function', function:{...} }]
 getTools('gemini')     // → { function_declarations: [...] }
-getTools('ollama')     // → [{ type:'function', function:{...} }]  (OpenAI-compatible)
-getTools('mcp')        // → raw tool definitions (default)
+getTools('ollama')     // → [{ type:'function', function:{...} }]  OpenAI-compatible
+getTools('mcp')        // → raw definitions (default)
 ```
+
+---
+
+## SAFE_MODE
+
+All mutating tools are **disabled by default** (`SAFE_MODE=true`).  
+Read-only tools always work:
+`octopus_search_memory`, `octopus_scan_security`, `octopus_read_file`,
+`octopus_plan_task`, `octopus_skill_list`, `octopus_llm_complete`, `octopus_browser_snapshot`
+
+Set `SAFE_MODE=false` in `.env` to enable the full tool set.
+
+---
+
+## CI / GitHub Actions
+
+Add secrets to your repo (**Settings → Secrets and variables → Actions**):
+
+| Secret | Required for |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude (default provider) |
+| `OPENAI_API_KEY` | GPT-4o |
+| `GOOGLE_API_KEY` | Gemini |
+| `GITHUB_TOKEN` | Auto-provided — higher rate limits for MarketScout |
+
+Add variables (**Settings → Secrets and variables → Variables**):
+
+| Variable | Default | Example |
+|---|---|---|
+| `LLM_PROVIDER` | `anthropic` | `ollama` |
+| `LLM_MODEL` | provider default | `llama3.2` |
+| `OLLAMA_BASE_URL` | — | `http://your-server:11434` |
 
 ---
 
 ## REST API
 
 ```
-GET  /api/agents          List all registered agents
-GET  /api/memory/search   Query structural memory
-GET  /api/tools/:format   Get tools in provider format (anthropic|openai|gemini|ollama|mcp)
-POST /api/run             Run the full agent chain
+GET  /api/agents              List all 14 registered agents
+GET  /api/memory/search       Query structural memory
+GET  /api/tools/:format       Tools in provider format (anthropic|openai|gemini|ollama|mcp)
+POST /api/run                 Run the full agent chain
+```
+
+---
+
+## Testing
+
+```bash
+cd node && npm test
+```
+
+```
+Test Suites: 5 passed
+Tests:       63 passed
+  agents.test.js              — 10 core agents (contract + output)
+  agents_marketplace.test.js  — 4 marketplace agents (Navigator, MarketScout, Toolsmith, SandboxQA)
+  commands.test.js            — REST API endpoints
+  mcp.test.js                 — MCP server + all 20 tools
+  memory.test.js              — 5-layer memory bridge
 ```
 
 ---
@@ -245,28 +286,35 @@ POST /api/run             Run the full agent chain
 
 ```
 Octopus-Agent-System/
+├── .github/workflows/
+│   └── octopus.yml              GitHub Actions CI/CD pipeline
 ├── node/
 │   ├── src/
-│   │   ├── agents/          14 specialist agents
-│   │   ├── adapters/        LLM format converters (Anthropic, OpenAI, Gemini, Ollama)
-│   │   ├── skills/          Shared atomic capabilities
-│   │   ├── llm.js           Multi-provider gateway
-│   │   ├── mcp.js           MCP stdio server (20 tools)
-│   │   ├── tools.js         Single source of truth for all tool definitions
-│   │   ├── memory.js        Node ↔ Python memory bridge
-│   │   ├── compress.js      Caveman prose compression (~70% token savings on prose)
-│   │   ├── runner.js        Dynamic task orchestrator
-│   │   ├── server.js        REST API server
-│   │   └── skill_registry.js  Skill lifecycle (proposed→sandbox→active→deprecated)
-│   ├── skills/auto_generated/  LLM-synthesized skills (hot-deployed)
-│   └── tests/
+│   │   ├── agents/              14 specialist agents
+│   │   │   └── index.js         Registry with contract validation + hot-reload
+│   │   ├── adapters/            LLM format converters (Anthropic, OpenAI, Gemini, Ollama)
+│   │   ├── skills/              Shared atomic capabilities
+│   │   ├── llm.js               Multi-provider gateway
+│   │   ├── mcp.js               MCP stdio server (20 tools, async exec)
+│   │   ├── tools.js             Single source of truth for all tool definitions
+│   │   ├── runner.js            Dynamic runner with auto-agent synthesis
+│   │   ├── memory.js            Node ↔ Python memory bridge
+│   │   ├── compress.js          Caveman prose compression (~70% token savings)
+│   │   ├── server.js            REST API server
+│   │   └── skill_registry.js   Skill lifecycle (proposed→sandbox→active→deprecated)
+│   ├── skills/auto_generated/   LLM-synthesised skills (committed by CI)
+│   └── tests/                   63 tests across 5 suites
 ├── python/
-│   ├── memory/              5-layer memory implementation (SQLite + NetworkX)
-│   ├── indexer/             Incremental repo indexer
-│   └── services/            Flask memory service
-├── frontend/                Web dashboard
-├── install.sh / install.ps1 Universal one-command installer
-└── SKILL.md                 Guide for writing new skills
+│   ├── memory/                  5-layer memory (SQLite + NetworkX)
+│   ├── indexer/                 Incremental repo indexer
+│   └── services/                Flask memory service (port 5000)
+├── scripts/
+│   ├── octopus_push_handler.js  Push pipeline (task → chain → browse → skills)
+│   ├── install-hooks.sh         Git hook installer
+│   └── git-hooks/post-commit    Local post-commit hook (background, non-blocking)
+├── frontend/                    Web dashboard
+├── install.sh / install.ps1     Universal one-command installer
+└── README.md
 ```
 
 ---
