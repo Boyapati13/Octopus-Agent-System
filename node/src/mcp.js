@@ -20,6 +20,7 @@ const { compressDescriptionsInPlace } = require('./compress');
 const { complete, activeProvider } = require('./llm');
 const { TOOLS } = require('./tools');
 const skillRegistry = require('./skill_registry');
+const { preToolUse, postToolUse } = require('./hooks');
 
 const SAFE_MODE = process.env.SAFE_MODE !== 'false'; // Default to true
 
@@ -46,6 +47,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
+    // Deterministic PreToolUse hook — synchronous, zero tokens, blocks fatal commands
+    preToolUse(name, args);
+
     let result;
     switch (name) {
       case 'octopus_plan_task':
@@ -105,6 +109,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
         }
         fs.writeFileSync(args.path, args.content, 'utf8');
+        // PostToolUse hook — auto-format JS/TS files after write
+        await postToolUse(name, args);
         return { content: [{ type: 'text', text: `File ${args.path} written successfully.` }] };
 
       case 'octopus_read_file':

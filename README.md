@@ -69,6 +69,57 @@ MarketScout → Toolsmith → SandboxQA (Worker thread) → Cortex CEO → Activ
 
 Cortex calls the active LLM with the full list of registered agents (including dynamically-created ones) and asks it to pick the minimal ordered set for the task. Falls back to regex routing if the LLM is unavailable.
 
+### Parallel QA Execution
+
+The runner groups consecutive review agents (Reviewer, SecurityReviewer, Probe, FactChecker) into a single parallel stage using `Promise.allSettled`. On the default 9-agent chain this collapses four sequential gate checks into one wall-clock round — a **~75% reduction** in QA phase time. All gate failures in a parallel stage are collected and reported together before the chain is stopped.
+
+```
+Before:  Atlas → Forge → Reviewer → SecurityReviewer → Probe → FactChecker → Scribe
+                          ↑ sequential — each waits for the previous
+
+After:   Atlas → Forge → [Reviewer ‖ SecurityReviewer ‖ Probe ‖ FactChecker] → Scribe
+                          ↑ parallel — all four run simultaneously
+```
+
+### Deterministic Guardrails
+
+Three hook layers that run **without AI** — no tokens, no latency:
+
+| Hook | Trigger | Action |
+|---|---|---|
+| `PreToolUse` | Before every `octopus_execute_command` | Regex-blocks fatal commands (`rm -rf /`, fork bombs, raw-disk writes, unguarded `DROP TABLE`) |
+| `PostToolUse` | After every `octopus_write_file` on JS/TS | Runs `prettier --write` (falls back to `eslint --fix`) |
+| `onStop` | End of every task chain | Logs completion; optionally POSTs to `OCTOPUS_WEBHOOK_URL` (Slack/Discord) |
+
+The SecurityReviewer AI agent handles semantic analysis. The hooks handle the obvious fatals that should never cost a token.
+
+### Least-Privilege Permissions
+
+Each agent receives a `Proxy`-wrapped memory object limited to its declared allowlist. Any call outside the allowlist throws `PERMISSION_DENIED` synchronously — no network request is made.
+
+| Agent | Allowed memory methods |
+|---|---|
+| **Atlas** | `searchStructural`, `getContext`, `structuralImpact` |
+| **Forge** | `searchStructural`, `getContext`, `getDecisions`, `getRun`, `writeback`, `saveDecision`, `structuralImpact` |
+| **Scribe** | `getContext`, `getDecisions`, `getRun`, `writeback` |
+| **SecurityReviewer** | `searchStructural`, `getContext`, `writeback`, `structuralImpact` |
+| **MarketScout / Navigator** | `getContext`, `writeback` |
+
+If a hallucinating model generates Scribe code that calls `compactSession`, the Proxy rejects it before the first byte is sent to the memory service.
+
+### OCTOPUS.md Constitution
+
+Drop an `OCTOPUS.md` file in your repository root to establish unbreakable project rules:
+
+```markdown
+# OCTOPUS.md
+- Never use Moment.js — use date-fns
+- All database queries must go through the repository layer, never raw SQL in controllers
+- API responses must follow the envelope format: { ok, data, error }
+```
+
+During L5 Task Context Profile generation the Python memory service injects the full contents of `OCTOPUS.md` as the **first key** in every agent's context — before structural memory, decisions, or run state. Set `PROJECT_ROOT` in the Python service environment to point to your repo root. The L4 cache key includes an MD5 signature of the file so the cache auto-invalidates whenever the constitution changes.
+
 ---
 
 ## Setup
@@ -130,6 +181,17 @@ npm run serve    # REST API    (port 3001)
 npm test         # 63 tests
 ```
 
+### 6 — Optional: OCTOPUS.md + webhook
+
+```bash
+# Project rules — injected into every agent's context
+echo "# OCTOPUS.md\n- Never use Moment.js" > OCTOPUS.md
+export PROJECT_ROOT=$(pwd)    # tell the Python service where to find it
+
+# Slack/Discord notification when a task chain completes
+export OCTOPUS_WEBHOOK_URL=https://hooks.slack.com/services/...
+```
+
 ---
 
 ## 14 Agents
@@ -174,8 +236,8 @@ npm test         # 63 tests
 | Tool | Description |
 |---|---|
 | `octopus_read_file` | Read a workspace file |
-| `octopus_write_file` | Write a workspace file |
-| `octopus_execute_command` | Run a shell command (async, non-blocking) |
+| `octopus_write_file` | Write a workspace file (auto-formats JS/TS via PostToolUse hook) |
+| `octopus_execute_command` | Run a shell command (PreToolUse hook blocks fatal patterns) |
 
 ### Agents & Security
 | Tool | Description |
@@ -229,6 +291,22 @@ Read-only tools always work:
 `octopus_plan_task`, `octopus_skill_list`, `octopus_llm_complete`, `octopus_browser_snapshot`
 
 Set `SAFE_MODE=false` in `.env` to enable the full tool set.
+
+Note: the `PreToolUse` hook applies **even when `SAFE_MODE=false`** — fatal command patterns are unconditionally blocked regardless of mode.
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_PROVIDER` | `anthropic` | `anthropic` · `openai` · `google` · `ollama` |
+| `LLM_MODEL` | provider default | Override the model (e.g. `claude-opus-4-7`) |
+| `SAFE_MODE` | `true` | Set `false` to enable mutating tools |
+| `MEMORY_SERVICE_URL` | `http://localhost:5000` | Python memory service URL |
+| `PROJECT_ROOT` | `.` | Path injected into Python service for OCTOPUS.md lookup |
+| `OCTOPUS_WEBHOOK_URL` | — | Slack/Discord incoming webhook for task completion events |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 
 ---
 
@@ -295,23 +373,29 @@ Octopus-Agent-System/
 │   │   ├── adapters/            LLM format converters (Anthropic, OpenAI, Gemini, Ollama)
 │   │   ├── skills/              Shared atomic capabilities
 │   │   ├── llm.js               Multi-provider gateway
-│   │   ├── mcp.js               MCP stdio server (20 tools, async exec)
+│   │   ├── mcp.js               MCP stdio server (20 tools, Pre/PostToolUse hooks)
 │   │   ├── tools.js             Single source of truth for all tool definitions
-│   │   ├── runner.js            Dynamic runner with auto-agent synthesis
+│   │   ├── hooks.js             Deterministic hooks — PreToolUse, PostToolUse, onStop
+│   │   ├── permissions.js       Least-privilege agent permission matrix
+│   │   ├── runner.js            Parallel stage runner with permission proxies
 │   │   ├── memory.js            Node ↔ Python memory bridge
 │   │   ├── compress.js          Caveman prose compression (~70% token savings)
+│   │   ├── errors.js            Canonical error envelopes (GATE_FAILURE, PERMISSION_DENIED, …)
 │   │   ├── server.js            REST API server
 │   │   └── skill_registry.js   Skill lifecycle (proposed→sandbox→active→deprecated)
 │   ├── skills/auto_generated/   LLM-synthesised skills (committed by CI)
 │   └── tests/                   63 tests across 5 suites
 ├── python/
-│   ├── memory/                  5-layer memory (SQLite + NetworkX)
+│   ├── memory/
+│   │   ├── context_builder.py   L5 profile builder — injects OCTOPUS.md constitution
+│   │   └── …                    L1–L4 layers (graph, decisions, run state, cache)
 │   ├── indexer/                 Incremental repo indexer
 │   └── services/                Flask memory service (port 5000)
 ├── scripts/
 │   ├── octopus_push_handler.js  Push pipeline (task → chain → browse → skills)
 │   ├── install-hooks.sh         Git hook installer
 │   └── git-hooks/post-commit    Local post-commit hook (background, non-blocking)
+├── OCTOPUS.md                   (optional) Developer constitution — injected into all agents
 ├── frontend/                    Web dashboard
 ├── install.sh / install.ps1     Universal one-command installer
 └── README.md

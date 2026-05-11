@@ -4,13 +4,31 @@ L5 Task Context Profile — built on demand, per agent, never stored.
 Each agent gets only what it needs; irrelevant layers are excluded.
 Context is cached in L4 (Redis/memory) with a short TTL to avoid
 rebuilding on repeated calls within the same session.
+
+OCTOPUS.md Constitution: if the developer has placed an OCTOPUS.md at the
+project root (PROJECT_ROOT env var), its contents are injected at the very
+top of every agent's context as an unbreakable source of truth — overriding
+any LLM tendency to use deprecated libraries, banned patterns, etc.
 """
+import os
+import hashlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .graph_store import GraphStore
     from .schema import MemoryStore
     from .cache import CacheStore
+
+def _load_constitution() -> str:
+    """Read OCTOPUS.md from PROJECT_ROOT. Returns empty string if absent."""
+    root = os.environ.get('PROJECT_ROOT', '.')
+    fpath = os.path.join(root, 'OCTOPUS.md')
+    try:
+        with open(fpath, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except (FileNotFoundError, PermissionError, OSError):
+        return ''
+
 
 # Per-agent include/exclude rules.
 # 'includes' drives which data sources are queried.
@@ -40,7 +58,11 @@ def build_context(
     Checks L4 cache first; builds from L1–L3 on miss.
     """
     q = query or task
-    cache_key = f"ctx:{agent_name}:{hash(q)}"
+
+    # Constitution is included in cache key so the cache invalidates when OCTOPUS.md changes
+    constitution = _load_constitution()
+    constitution_sig = hashlib.md5(constitution.encode()).hexdigest()[:8] if constitution else 'none'
+    cache_key = f"ctx:{agent_name}:{hash(q)}:{constitution_sig}"
 
     if cache:
         cached = cache.get(cache_key)
@@ -55,6 +77,11 @@ def build_context(
         'query': q,
         'excluded': profile['exc'],
     }
+
+    # Inject OCTOPUS.md first — unbreakable developer constitution.
+    # Placed before all other context so the LLM sees it with maximum weight.
+    if constitution:
+        ctx['constitution'] = constitution
 
     if graph_store:
         if 'structural' in inc or 'symbols' in inc or 'imports' in inc:

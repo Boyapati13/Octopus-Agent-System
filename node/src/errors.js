@@ -1,9 +1,10 @@
 'use strict';
 
 const KINDS = {
-  GATE_FAILURE: 'gate_failure',
-  PLAN_FAILURE: 'plan_failure',
-  SYSTEM_ERROR: 'system_error',
+  GATE_FAILURE:      'gate_failure',
+  PLAN_FAILURE:      'plan_failure',
+  SYSTEM_ERROR:      'system_error',
+  PERMISSION_DENIED: 'permission_denied',
 };
 
 /**

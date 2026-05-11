@@ -69,6 +69,8 @@ Rules:
 - Order: research → implement → verify → document → release
 - GATE agents stop the pipeline if they fail — include when verification is critical
 - Lean plans preferred: 2-4 agents for simple tasks, up to 9 for full release cycles
+- Verification agents (Reviewer, SecurityReviewer, Probe, FactChecker) review the same
+  output independently — place them consecutively so the runner can batch them in parallel
 - Return ONLY a valid JSON array of agent names — no explanation, no markdown
 
 JSON array:`;
