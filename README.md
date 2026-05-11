@@ -226,13 +226,30 @@ Octopus 2.0 is designed for local inference. Gemma 4 (`gemma4:e2b`) detected and
 # Install Ollama
 # macOS/Linux: https://ollama.com
 # Windows:     https://ollama.com/download/windows
-
-ollama pull gemma4:e2b    # ~8GB download (efficient 2B distilled model)
-# or
-ollama pull llama3.2      # lighter alternative
 ```
 
-`MAX_THINKING_TOKENS=10000` applies to Ollama the same as cloud providers — caps `num_predict` per call.
+**Model selection guide:**
+
+| Model | VRAM | Best for |
+|---|---|---|
+| `gemma4:e2b` | ~3 GB | Day-to-day tasks, Forge, Scribe, fast iteration |
+| `gemma4:9b` | ~8 GB | Complex Cortex planning, SecurityReviewer deep analysis |
+| `llama3.2` | ~2 GB | Minimal footprint, simple task chains |
+| `qwen2.5-coder:7b` | ~5 GB | Code-heavy tasks, Forge + Reviewer |
+
+The installer auto-selects `gemma4:e2b`. For complex multi-agent planning tasks, upgrade to the 9B:
+
+```bash
+ollama pull gemma4:e2b    # default — efficient, works for most tasks
+ollama pull gemma4:9b     # recommended for complex Cortex planning (needs ~8 GB VRAM)
+```
+
+Then set in `node/.env`:
+```env
+LLM_MODEL=gemma4:9b   # upgrade Cortex planning quality
+```
+
+`MAX_THINKING_TOKENS=10000` caps `num_predict` per call across all Ollama models.
 
 ---
 

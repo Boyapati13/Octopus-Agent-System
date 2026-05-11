@@ -37,6 +37,19 @@ NODE_DIR="$REPO_DIR/node"
 MCP_ENTRY="$NODE_DIR/src/mcp.js"
 RULES_DIR="$REPO_DIR/.claude/rules"
 
+# ── .gitignore guard — belt-and-suspenders for credentials ───────────────────
+GITIGNORE="$REPO_DIR/.gitignore"
+if [ -f "$GITIGNORE" ]; then
+    NEEDS_UPDATE=0
+    grep -q '^node/\.env' "$GITIGNORE" || { printf '\nnode/.env\n' >> "$GITIGNORE"; NEEDS_UPDATE=1; }
+    grep -q '^\.env'      "$GITIGNORE" || { printf '.env\n'       >> "$GITIGNORE"; NEEDS_UPDATE=1; }
+    if [ "$NEEDS_UPDATE" -eq 1 ]; then
+        warn ".gitignore updated — added node/.env and .env to prevent credential leaks"
+    else
+        log ".gitignore already protects .env files ✅"
+    fi
+fi
+
 # ── Step 2: Node dependencies ─────────────────────────────────────────────────
 head "Step 1/5 — Node.js dependencies"
 if ! command -v node &>/dev/null; then

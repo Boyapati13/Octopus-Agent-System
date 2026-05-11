@@ -12,6 +12,7 @@ build/
 # Node
 node_modules/
 npm-debug.log*
+node/.env
 
 # Data — ignore live DB/index files, but keep the data/ folder itself
 data/octopus.db

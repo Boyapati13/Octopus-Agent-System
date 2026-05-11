@@ -37,6 +37,26 @@ $NodeDir  = Join-Path $RepoDir 'node'
 $McpEntry = Join-Path $NodeDir 'src\mcp.js'
 $RulesDir = Join-Path $RepoDir '.claude\rules'
 
+# ── .gitignore guard — belt-and-suspenders for credentials ───────────────────
+$GitIgnore = Join-Path $RepoDir '.gitignore'
+if (Test-Path $GitIgnore) {
+    $content = Get-Content $GitIgnore -Raw
+    $needsUpdate = $false
+    if ($content -notmatch '(?m)^node/\.env') {
+        Add-Content -Path $GitIgnore -Value "`nnode/.env"
+        $needsUpdate = $true
+    }
+    if ($content -notmatch '(?m)^\.env') {
+        Add-Content -Path $GitIgnore -Value ".env"
+        $needsUpdate = $true
+    }
+    if ($needsUpdate) {
+        Warn ".gitignore updated — added node/.env and .env to prevent credential leaks"
+    } else {
+        Log ".gitignore already protects .env files ✅"
+    }
+}
+
 # ── Step 2: Node dependencies ─────────────────────────────────────────────────
 Head "Step 1/5 — Node.js dependencies"
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
