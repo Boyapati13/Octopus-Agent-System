@@ -1,34 +1,54 @@
 'use strict';
 /**
- * Multi-LLM Gateway
+ * Multi-LLM Gateway — Cross-Market Router
  * Routes completions to Anthropic, OpenAI, Google, or Ollama.
- * Controlled by LLM_PROVIDER + LLM_MODEL env vars.
+ *
+ * Caller-aware routing via OCTOPUS_CALLER env var (set per MCP client):
+ *   OCTOPUS_CALLER=claude   → anthropic / claude-sonnet-4-6  (default)
+ *   OCTOPUS_CALLER=openai   → openai    / gpt-4o
+ *   OCTOPUS_CALLER=gemini   → google    / gemini-2.5-pro
+ *   OCTOPUS_CALLER=cursor   → uses LLM_PROVIDER/LLM_MODEL (no override)
+ *   (unset)                 → uses LLM_PROVIDER/LLM_MODEL env vars
+ *
+ * Sovereign Fallback: if selected provider has no key, auto-routes to
+ * local Ollama (SOVEREIGN_FALLBACK_MODEL, default: gemma4:e2b).
  *
  * Key retrieval — 4-tier Cascade Resolver (getSecureKey):
  *   1. OS Vault    — keytar → Windows Credential Manager / macOS Keychain / Linux Secret Service
  *   2. CLI Session — ~/.octopus/sessions.json (written by octopus_login; cross-platform fallback)
  *   3. Process Env — externally set, parent shell, or dotenv-sourced before start
  *   4. .env file   — node/.env direct parse (plain-text last resort)
- *
- * Providers:  anthropic | openai | google | ollama
- * Model defaults:
- *   anthropic → claude-sonnet-4-6
- *   openai    → gpt-4o
- *   google    → gemini-2.0-flash
- *   ollama    → llama3.2
  */
 const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 const axios = require('axios');
 
-const PROVIDER = (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
-const MODEL    = process.env.LLM_MODEL || {
+// Caller-aware provider + model presets
+// OCTOPUS_CALLER is set in the MCP client's env block — MCP stdio has no built-in caller identity
+const CALLER = (process.env.OCTOPUS_CALLER || '').toLowerCase();
+const CALLER_PRESETS = {
+  claude:   { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+  openai:   { provider: 'openai',    model: 'gpt-4o'            },
+  gemini:   { provider: 'google',    model: 'gemini-2.5-pro'    },
+  // cursor/windsurf/continue defer to LLM_PROVIDER/LLM_MODEL env vars
+};
+const preset = CALLER_PRESETS[CALLER] || null;
+
+const PROVIDER = preset
+  ? preset.provider
+  : (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
+
+const MODEL = process.env.LLM_MODEL || (preset ? preset.model : {
   anthropic: 'claude-sonnet-4-6',
   openai:    'gpt-4o',
   google:    'gemini-2.0-flash',
   ollama:    'llama3.2',
-}[PROVIDER] || 'claude-sonnet-4-6';
+}[PROVIDER]) || 'claude-sonnet-4-6';
+
+if (CALLER && preset) {
+  console.error(`[llm] Caller preset: OCTOPUS_CALLER=${CALLER} → ${PROVIDER}/${MODEL}`);
+}
 
 const MAX_THINKING_TOKENS = parseInt(process.env.MAX_THINKING_TOKENS) || Infinity;
 const MAX_RETRIES = 2;

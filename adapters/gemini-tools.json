@@ -1,0 +1,449 @@
+{
+  "_note": "Gemini tool declarations. Pass the \"tools\" array to google.generativeai SDK. Gemini CLI MCP support: add to ~/.gemini/config.json as an mcpServer entry.",
+  "suggestedModel": "gemini-2.5-pro",
+  "geminiCliMcp": {
+    "name": "octopus-2",
+    "command": "node",
+    "args": [
+      "C:\\Users\\Tenders\\Downloads\\octopus-software-full\\node\\src\\mcp.js"
+    ],
+    "env": {
+      "SAFE_MODE": "false",
+      "MEMORY_SERVICE_URL": "http://localhost:5000",
+      "OCTOPUS_CALLER": "gemini"
+    }
+  },
+  "tools": [
+    {
+      "functionDeclarations": [
+        {
+          "name": "octopus_plan_task",
+          "description": "Ask Cortex to break down a complex task into an execution plan of specialized agents.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "task": {
+                "type": "STRING",
+                "description": "The task description"
+              }
+            },
+            "required": [
+              "task"
+            ]
+          }
+        },
+        {
+          "name": "octopus_run_task_chain",
+          "description": "Run the entire dynamic Octopus agent chain (Cortex planning + all needed agents + gate verification + session compact).",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "task": {
+                "type": "STRING",
+                "description": "The task description"
+              }
+            },
+            "required": [
+              "task"
+            ]
+          }
+        },
+        {
+          "name": "octopus_search_memory",
+          "description": "Query the L1 structural graph memory to find relevant indexed files and their architectural context.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "query": {
+                "type": "STRING",
+                "description": "Search term (e.g. file name or symbol)"
+              },
+              "limit": {
+                "type": "NUMBER",
+                "description": "Max results to return"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        },
+        {
+          "name": "octopus_get_decisions",
+          "description": "Retrieve past architectural decisions and risk flags from L2 memory.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "tags": {
+                "type": "ARRAY",
+                "description": "Optional tags to filter by",
+                "items": {
+                  "type": "STRING"
+                }
+              }
+            },
+            "required": []
+          }
+        },
+        {
+          "name": "octopus_compact_session",
+          "description": "Compress current workspace context into long-term memory at the end of an LLM session.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "summary": {
+                "type": "STRING",
+                "description": "Summary of what was achieved"
+              },
+              "facts": {
+                "type": "ARRAY",
+                "description": "Array of factual string outcomes",
+                "items": {
+                  "type": "STRING"
+                }
+              }
+            },
+            "required": [
+              "summary",
+              "facts"
+            ]
+          }
+        },
+        {
+          "name": "octopus_execute_command",
+          "description": "Execute arbitrary OS commands in the workspace (e.g., npm run test).",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "command": {
+                "type": "STRING",
+                "description": "The shell command to run"
+              },
+              "cwd": {
+                "type": "STRING",
+                "description": "Optional working directory"
+              }
+            },
+            "required": [
+              "command"
+            ]
+          }
+        },
+        {
+          "name": "octopus_write_file",
+          "description": "Write raw content to a file in the workspace.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "path": {
+                "type": "STRING",
+                "description": "Absolute or relative path to the file"
+              },
+              "content": {
+                "type": "STRING",
+                "description": "The file contents to write"
+              }
+            },
+            "required": [
+              "path",
+              "content"
+            ]
+          }
+        },
+        {
+          "name": "octopus_read_file",
+          "description": "Read the contents of a file in the workspace.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "path": {
+                "type": "STRING",
+                "description": "Absolute or relative path to the file"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        {
+          "name": "octopus_create_agent",
+          "description": "Dynamically create and hot-reload a new Octopus agent into the active registry.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "agentName": {
+                "type": "STRING",
+                "description": "Name of the new agent in camelCase (e.g. frontendDeveloper)"
+              },
+              "role": {
+                "type": "STRING",
+                "description": "Role of the new agent"
+              },
+              "javascriptLogic": {
+                "type": "STRING",
+                "description": "Full Node.js module source for the agent"
+              }
+            },
+            "required": [
+              "agentName",
+              "role",
+              "javascriptLogic"
+            ]
+          }
+        },
+        {
+          "name": "octopus_scan_security",
+          "description": "Scan an array of file paths for cyberthreats and vulnerabilities (OWASP Top 10).",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "paths": {
+                "type": "ARRAY",
+                "description": "File paths to scan",
+                "items": {
+                  "type": "STRING"
+                }
+              }
+            },
+            "required": [
+              "paths"
+            ]
+          }
+        },
+        {
+          "name": "octopus_llm_complete",
+          "description": "Send a prompt to the active LLM provider (Anthropic, OpenAI, Google, or Ollama) and return the completion.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "prompt": {
+                "type": "STRING",
+                "description": "Prompt to send to the LLM"
+              },
+              "maxTokens": {
+                "type": "NUMBER",
+                "description": "Max tokens in response (default 1024)"
+              }
+            },
+            "required": [
+              "prompt"
+            ]
+          }
+        },
+        {
+          "name": "octopus_browser_navigate",
+          "description": "Open a URL in the agent-browser and return a page snapshot with element refs.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "url": {
+                "type": "STRING",
+                "description": "Fully-qualified URL to navigate to"
+              }
+            },
+            "required": [
+              "url"
+            ]
+          }
+        },
+        {
+          "name": "octopus_browser_snapshot",
+          "description": "Capture accessibility tree snapshot from the active browser session. Returns element refs (@e1, @e2 …).",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {},
+            "required": []
+          }
+        },
+        {
+          "name": "octopus_skill_scout",
+          "description": "Trigger MarketScout to scan GitHub, npm, and PyPI for skill opportunities and deprecations.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "topics": {
+                "type": "ARRAY",
+                "description": "Technology topics to scan (e.g. [\"vector-search\", \"llm\", \"mcp\"])",
+                "items": {
+                  "type": "STRING"
+                }
+              }
+            },
+            "required": []
+          }
+        },
+        {
+          "name": "octopus_skill_synthesize",
+          "description": "Toolsmith reads a documentation URL and synthesizes a new MCP skill (code + schema). Deploys to sandbox for QA.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "name": {
+                "type": "STRING",
+                "description": "Skill identifier (snake_case, e.g. github_graphql_v4)"
+              },
+              "doc_url": {
+                "type": "STRING",
+                "description": "URL of the API or library documentation to read"
+              },
+              "description": {
+                "type": "STRING",
+                "description": "What this skill should do"
+              }
+            },
+            "required": [
+              "name",
+              "doc_url",
+              "description"
+            ]
+          }
+        },
+        {
+          "name": "octopus_skill_validate",
+          "description": "Run SandboxQA on a synthesized skill. Self-corrects via Toolsmith on failure (up to 3 attempts).",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "skill_id": {
+                "type": "STRING",
+                "description": "Skill ID from the registry"
+              }
+            },
+            "required": [
+              "skill_id"
+            ]
+          }
+        },
+        {
+          "name": "octopus_skill_deploy",
+          "description": "CEO deploys a sandbox-validated skill to the active registry. Retires any skill it supersedes.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "skill_id": {
+                "type": "STRING",
+                "description": "Skill ID to deploy (must have passed QA)"
+              },
+              "retires": {
+                "type": "STRING",
+                "description": "Optional skill_id to retire when this one activates"
+              }
+            },
+            "required": [
+              "skill_id"
+            ]
+          }
+        },
+        {
+          "name": "octopus_skill_retire",
+          "description": "Retire an active skill from the marketplace registry.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "skill_id": {
+                "type": "STRING",
+                "description": "Skill ID to retire"
+              },
+              "reason": {
+                "type": "STRING",
+                "description": "Reason for retirement (e.g. \"Deprecated by provider\")"
+              }
+            },
+            "required": [
+              "skill_id"
+            ]
+          }
+        },
+        {
+          "name": "octopus_skill_list",
+          "description": "List all skills in the marketplace registry with their status and QA results.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "status": {
+                "type": "STRING",
+                "description": "Filter by status",
+                "enum": [
+                  "proposed",
+                  "sandbox",
+                  "active",
+                  "deprecated"
+                ]
+              }
+            },
+            "required": []
+          }
+        },
+        {
+          "name": "octopus_browser_interact",
+          "description": "Interact with the active browser page: click, fill, type, or eval JavaScript.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "action": {
+                "type": "STRING",
+                "description": "Action to perform",
+                "enum": [
+                  "click",
+                  "fill",
+                  "type",
+                  "eval"
+                ]
+              },
+              "ref": {
+                "type": "STRING",
+                "description": "Element ref from snapshot (e.g. @e3) or CSS selector"
+              },
+              "value": {
+                "type": "STRING",
+                "description": "Text to fill/type, or JS expression to evaluate"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          }
+        },
+        {
+          "name": "octopus_login",
+          "description": "Zero-Key authentication: opens an interactive terminal menu (enquirer) to authorize a provider. Three paths: Anthropic API key, OpenAI API key, Google API key, or Vertex AI/Bedrock setup instructions. Keys are stored in the OS Vault (Windows Credential Manager / macOS Keychain / Linux Secret Service) — no .env editing required.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "provider": {
+                "type": "STRING",
+                "description": "Provider to authorize: anthropic | openai | google | enterprise (Vertex AI/Bedrock)",
+                "enum": [
+                  "anthropic",
+                  "openai",
+                  "google",
+                  "enterprise"
+                ]
+              }
+            },
+            "required": []
+          }
+        },
+        {
+          "name": "octopus_vault_check",
+          "description": "Diagnostic: check which LLM providers have keys stored in the OS Vault or session file, and whether local Ollama is running. Reports the active provider and whether Sovereign Fallback is engaged.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {},
+            "required": []
+          }
+        },
+        {
+          "name": "octopus_memory_status",
+          "description": "Diagnostic: ping the Python memory service (port 5000) and return its health status. Use this to verify the service is running before running agent task chains.",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {},
+            "required": []
+          }
+        }
+      ]
+    }
+  ]
+}

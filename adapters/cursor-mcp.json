@@ -1,0 +1,47 @@
+{
+  "_note": "Cursor MCP registration. Merge the mcpServers block into %APPDATA%\\Cursor\\User\\globalStorage\\mcp.json (Windows) or ~/.cursor/mcp.json (Mac/Linux). Then: Cursor → Settings → MCP → Reload.",
+  "mcpServers": {
+    "octopus-2": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\Tenders\\Downloads\\octopus-software-full\\node\\src\\mcp.js"
+      ],
+      "env": {
+        "SAFE_MODE": "false",
+        "MAX_THINKING_TOKENS": "10000",
+        "AGENTSHIELD_MODE": "advisory",
+        "PROJECT_ROOT": "C:\\Users\\Tenders\\Downloads\\octopus-software-full",
+        "ECC_RULES_PATH": "C:\\Users\\Tenders\\Downloads\\octopus-software-full\\.claude\\rules",
+        "MEMORY_SERVICE_URL": "http://localhost:5000",
+        "LLM_PROVIDER": "anthropic",
+        "OCTOPUS_CALLER": "cursor"
+      }
+    }
+  },
+  "toolCount": 23,
+  "tools": [
+    "octopus_plan_task",
+    "octopus_run_task_chain",
+    "octopus_search_memory",
+    "octopus_get_decisions",
+    "octopus_compact_session",
+    "octopus_execute_command",
+    "octopus_write_file",
+    "octopus_read_file",
+    "octopus_create_agent",
+    "octopus_scan_security",
+    "octopus_llm_complete",
+    "octopus_browser_navigate",
+    "octopus_browser_snapshot",
+    "octopus_skill_scout",
+    "octopus_skill_synthesize",
+    "octopus_skill_validate",
+    "octopus_skill_deploy",
+    "octopus_skill_retire",
+    "octopus_skill_list",
+    "octopus_browser_interact",
+    "octopus_login",
+    "octopus_vault_check",
+    "octopus_memory_status"
+  ]
+}

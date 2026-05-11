@@ -1,0 +1,124 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/server-manifest.json",
+  "mcpVersion": "1.0",
+  "name": "octopus-2",
+  "version": "2.0.1",
+  "description": "Octopus Sovereign Edition — self-evolving AI agent system with 23 tools. Zero-Key auth, Sovereign Fallback to local Ollama, 14 specialist agents.",
+  "homepage": "https://github.com/Boyapati13/Octopus-Agent-System",
+  "server": {
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "C:\\Users\\Tenders\\Downloads\\octopus-software-full\\node\\src\\mcp.js"
+    ],
+    "env": {
+      "SAFE_MODE": "false",
+      "MAX_THINKING_TOKENS": "10000",
+      "COMPACT_THRESHOLD": "50",
+      "AGENTSHIELD_MODE": "advisory",
+      "ECC_HOOK_PROFILE": "standard",
+      "MEMORY_SERVICE_URL": "http://localhost:5000",
+      "LLM_PROVIDER": "ollama",
+      "LLM_MODEL": "gemma4:e2b",
+      "OLLAMA_BASE_URL": "http://localhost:11434"
+    }
+  },
+  "capabilities": {
+    "tools": {}
+  },
+  "tools": [
+    {
+      "name": "octopus_plan_task",
+      "description": "Ask Cortex to break down a complex task into an execution plan of specialized agents."
+    },
+    {
+      "name": "octopus_run_task_chain",
+      "description": "Run the entire dynamic Octopus agent chain (Cortex planning + all needed agents + gate verification + session compact)."
+    },
+    {
+      "name": "octopus_search_memory",
+      "description": "Query the L1 structural graph memory to find relevant indexed files and their architectural context."
+    },
+    {
+      "name": "octopus_get_decisions",
+      "description": "Retrieve past architectural decisions and risk flags from L2 memory."
+    },
+    {
+      "name": "octopus_compact_session",
+      "description": "Compress current workspace context into long-term memory at the end of an LLM session."
+    },
+    {
+      "name": "octopus_execute_command",
+      "description": "Execute arbitrary OS commands in the workspace (e.g., npm run test)."
+    },
+    {
+      "name": "octopus_write_file",
+      "description": "Write raw content to a file in the workspace."
+    },
+    {
+      "name": "octopus_read_file",
+      "description": "Read the contents of a file in the workspace."
+    },
+    {
+      "name": "octopus_create_agent",
+      "description": "Dynamically create and hot-reload a new Octopus agent into the active registry."
+    },
+    {
+      "name": "octopus_scan_security",
+      "description": "Scan an array of file paths for cyberthreats and vulnerabilities (OWASP Top 10)."
+    },
+    {
+      "name": "octopus_llm_complete",
+      "description": "Send a prompt to the active LLM provider (Anthropic, OpenAI, Google, or Ollama) and return the completion."
+    },
+    {
+      "name": "octopus_browser_navigate",
+      "description": "Open a URL in the agent-browser and return a page snapshot with element refs."
+    },
+    {
+      "name": "octopus_browser_snapshot",
+      "description": "Capture accessibility tree snapshot from the active browser session. Returns element refs (@e1, @e2 …)."
+    },
+    {
+      "name": "octopus_skill_scout",
+      "description": "Trigger MarketScout to scan GitHub, npm, and PyPI for skill opportunities and deprecations."
+    },
+    {
+      "name": "octopus_skill_synthesize",
+      "description": "Toolsmith reads a documentation URL and synthesizes a new MCP skill (code + schema). Deploys to sandbox for QA."
+    },
+    {
+      "name": "octopus_skill_validate",
+      "description": "Run SandboxQA on a synthesized skill. Self-corrects via Toolsmith on failure (up to 3 attempts)."
+    },
+    {
+      "name": "octopus_skill_deploy",
+      "description": "CEO deploys a sandbox-validated skill to the active registry. Retires any skill it supersedes."
+    },
+    {
+      "name": "octopus_skill_retire",
+      "description": "Retire an active skill from the marketplace registry."
+    },
+    {
+      "name": "octopus_skill_list",
+      "description": "List all skills in the marketplace registry with their status and QA results."
+    },
+    {
+      "name": "octopus_browser_interact",
+      "description": "Interact with the active browser page: click, fill, type, or eval JavaScript."
+    },
+    {
+      "name": "octopus_login",
+      "description": "Zero-Key authentication: opens an interactive terminal menu (enquirer) to authorize a provider. Three paths: Anthropic API key, OpenAI API key, Google API key, or Vertex AI/Bedrock setup instructions. Keys are stored in the OS Vault (Windows Credential Manager / macOS Keychain / Linux Secret Service) — no .env editing required."
+    },
+    {
+      "name": "octopus_vault_check",
+      "description": "Diagnostic: check which LLM providers have keys stored in the OS Vault or session file, and whether local Ollama is running. Reports the active provider and whether Sovereign Fallback is engaged."
+    },
+    {
+      "name": "octopus_memory_status",
+      "description": "Diagnostic: ping the Python memory service (port 5000) and return its health status. Use this to verify the service is running before running agent task chains."
+    }
+  ],
+  "prerequisite": "Python memory service must be running on port 5000 before starting this server."
+}

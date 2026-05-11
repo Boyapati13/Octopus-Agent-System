@@ -73,6 +73,42 @@ cd node && npm run serve
 
 ---
 
+## Cross-Market Universal MCP
+
+Octopus exposes a standard MCP stdio server that any MCP-compatible client can connect to. A Universal Adapter Registry lives in `global-config/` and `adapters/` — regenerate it any time with:
+
+```bash
+cd node && npm run cross-link
+```
+
+This reads `node/src/tools.js` (single source of truth) and regenerates five files in sync:
+
+| File | Purpose |
+|---|---|
+| `global-config/universal-mcp.json` | Standard MCP server manifest — import into any MCP client |
+| `global-config/claude-plugin/plugin.json` | Claude Code integration descriptor |
+| `adapters/openai-functions.json` | OpenAI function-calling schema (Assistants API / Chat Completions) |
+| `adapters/gemini-tools.json` | Gemini API tool declarations + Gemini CLI MCP config snippet |
+| `adapters/cursor-mcp.json` | Cursor MCP registration block |
+
+### Caller-Aware Routing
+
+Set `OCTOPUS_CALLER` in your MCP client's env block to tell Octopus which AI is calling. It auto-selects the best provider and model for that AI:
+
+| `OCTOPUS_CALLER` | Provider | Model |
+|---|---|---|
+| `claude` | Anthropic | `claude-sonnet-4-6` |
+| `openai` | OpenAI | `gpt-4o` |
+| `gemini` | Google | `gemini-2.5-pro` |
+| `cursor` / `windsurf` / `continue` | Uses `LLM_PROVIDER` env | Uses `LLM_MODEL` env |
+| *(unset)* | Uses `LLM_PROVIDER` env | Uses `LLM_MODEL` env |
+
+**Sovereign Fallback** applies for all callers: if the selected provider has no key in the Vault, calls are automatically routed to local Ollama (`gemma4:e2b`).
+
+> **ChatGPT Desktop** does not support MCP. Use `adapters/openai-functions.json` directly with the OpenAI Assistants API or pass it as the `tools` parameter in Chat Completions calls.
+
+---
+
 ## Connect to Your AI
 
 The installer registers Octopus automatically with every detected client. For manual setup, add the block below to each client's config file — replace `YOUR_INSTALL_PATH` with your actual clone directory.
@@ -151,6 +187,8 @@ No restart needed — Claude Code picks up MCP config changes on the next sessio
 - Windows: `%APPDATA%\Cursor\User\globalStorage\mcp.json`
 - Mac/Linux: `~/.cursor/mcp.json`
 
+Or copy the pre-generated block from `adapters/cursor-mcp.json` (kept in sync by `npm run cross-link`).
+
 ```json
 {
   "mcpServers": {
@@ -163,7 +201,8 @@ No restart needed — Claude Code picks up MCP config changes on the next sessio
         "PROJECT_ROOT": "YOUR_INSTALL_PATH",
         "MEMORY_SERVICE_URL": "http://localhost:5000",
         "LLM_PROVIDER": "ollama",
-        "LLM_MODEL": "gemma4:e2b"
+        "LLM_MODEL": "gemma4:e2b",
+        "OCTOPUS_CALLER": "cursor"
       }
     }
   }

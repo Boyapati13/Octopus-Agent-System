@@ -5,6 +5,48 @@ Format: [Semantic Versioning](https://semver.org) · Scribe agent standard.
 
 ---
 
+## [2.0.2] — 2026-05-11 — Cross-Market Universal MCP
+
+### Summary
+Octopus becomes a cross-AI universal MCP server. A single adapter registry
+auto-syncs tool definitions to every AI ecosystem from one source of truth.
+
+### ✨ New
+- **`node/src/cross-link.js`** — regenerates all cross-AI adapter files from
+  `node/src/tools.js`. Run via `npm run cross-link` after any tool change.
+- **`global-config/universal-mcp.json`** — Standard MCP server manifest,
+  importable by any MCP-compatible client.
+- **`global-config/claude-plugin/plugin.json`** — Claude Code integration
+  descriptor (connection is via MCP stdio + `~/.claude/settings.json`).
+- **`adapters/openai-functions.json`** — OpenAI Assistants API / Chat
+  Completions function-calling schema for all 23 tools.
+  Note: ChatGPT Desktop does not support MCP; use this schema with the API.
+- **`adapters/gemini-tools.json`** — Gemini API `functionDeclarations` schema
+  + Gemini CLI MCP config snippet.
+- **`adapters/cursor-mcp.json`** — Cursor MCP registration block with
+  `OCTOPUS_CALLER=cursor`.
+
+### 🔀 Caller-Aware LLM Router (`node/src/llm.js`)
+`OCTOPUS_CALLER` env var (set per MCP client) activates provider + model
+presets at module load time:
+  - `claude`  → anthropic / claude-sonnet-4-6
+  - `openai`  → openai    / gpt-4o
+  - `gemini`  → google    / gemini-2.5-pro
+  - unset/other → defers to LLM_PROVIDER + LLM_MODEL env vars
+Sovereign Fallback (local Ollama) still applies for all callers when no key found.
+
+Note: `gpt-4o-2026-priority` and `gemini-2.0-pro-ultra` are not documented
+model names; `gpt-4o` and `gemini-2.5-pro` are used instead.
+
+### 🔧 `npm run cross-link`
+Added as a package.json script. Must be run after any change to `tools.js`
+to keep all adapter files in sync. CI can run this as a lint step.
+
+### ✅ Testing
+All 72 tests pass. Caller routing tested manually via OCTOPUS_CALLER env var.
+
+---
+
 ## [2.0.1] — 2026-05-11 — Zero-Key Authentication
 
 ### Summary
