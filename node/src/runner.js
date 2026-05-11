@@ -47,7 +47,7 @@ function resetToolCalls() {
 async function ensureAgent(agentName) {
   if (getAgent(agentName)) return;
 
-  console.log(`[runner] Agent "${agentName}" not found — auto-synthesising stub…`);
+  console.error(`[runner] Agent "${agentName}" not found — auto-synthesising stub…`);
 
   const safeRole = agentName
     .replace(/([A-Z])/g, m => `-${m.toLowerCase()}`)
@@ -84,7 +84,7 @@ module.exports = { name, role, canApprove, run };
   const agentPath = path.join(__dirname, 'agents', `${agentName}.js`);
   fs.writeFileSync(agentPath, src, 'utf8');
   injectAgent(agentName);
-  console.log(`[runner] Injected auto-synthesised agent: ${agentName}`);
+  console.error(`[runner] Injected auto-synthesised agent: ${agentName}`);
 }
 
 // ── Gate check ────────────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ function groupIntoStages(plan) {
 
 async function runParallelStage(stageAgents, task, memory, results, errors) {
   const names = stageAgents.map(s => s.agent);
-  console.log(`[runner] Parallel stage: [${names.join(', ')}]`);
+  console.error(`[runner] Parallel stage: [${names.join(', ')}]`);
 
   const settled = await Promise.allSettled(
     names.map(async agentName => {
@@ -173,7 +173,7 @@ async function runSequentialStage(stepObj, task, memory, results, errors) {
   );
 
   try {
-    console.log(`[runner] Spawning ${agentName}…`);
+    console.error(`[runner] Spawning ${agentName}…`);
     incrementToolCalls();
     const restricted = createPermissionProxy(agentName, memory);
     const result = await runAgent(agentName, { task, query: task }, restricted);
@@ -205,7 +205,7 @@ async function runSequentialStage(stepObj, task, memory, results, errors) {
 // ── Main runner ───────────────────────────────────────────────────────────────
 
 async function runTask(task, memory) {
-  console.log(`[runner] Task: "${task}"`);
+  console.error(`[runner] Task: "${task}"`);
   resetToolCalls();
 
   const planResult = await runAgent('cortex', { task, query: task }, memory);

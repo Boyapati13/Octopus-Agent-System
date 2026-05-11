@@ -209,7 +209,7 @@ app.post('/api/llm/complete', async (req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`Octopus API running on http://localhost:${PORT}`));
+  app.listen(PORT, () => console.error(`Octopus API running on http://localhost:${PORT}`));
 }
 
 module.exports = app;
