@@ -5,6 +5,58 @@ Format: [Semantic Versioning](https://semver.org) · Scribe agent standard.
 
 ---
 
+## [2.0.1] — 2026-05-11 — Zero-Key Authentication
+
+### Summary
+Universal OS-Vault Authentication makes Octopus 2.0 a "Zero-Key First" system.
+API keys no longer live in `.env`. The `octopus_login` MCP tool stores them in the OS
+native credential store on first use. All cloud providers fall back gracefully to
+local Gemma 4 / Ollama when no keys are configured.
+
+### 🔐 Security
+- **`getSecureKey` 4-tier Cascade Resolver** (`node/src/llm.js`):
+  priority: OS Vault → CLI Session file → process.env → .env parse.
+  Replaces direct `process.env.ANTHROPIC_API_KEY` reads in all three cloud completers.
+- **`octopus_login` MCP tool** (`node/src/mcp.js`, `node/src/tools.js`):
+  opens the provider API dashboard in the agent-browser, then guides the user through a
+  platform-specific Authorize flow: masked PS window (Windows), osascript dialog (macOS),
+  or clear terminal instructions with manual `vault_set.js` command (Linux).
+- **`node/src/vault_set.js`** NEW: reads API key from stdin; supports TTY masked prompt
+  (readline `_writeToOutput`) and pipe mode. Writes to OS Vault first, falls back to
+  `~/.octopus/sessions.json` (mode 0600) when keytar unavailable.
+- **`node/src/vault_preflight.js`** NEW: lightweight vault/session-file presence check
+  used by start scripts to offer `.env` → Vault migration.
+- **`start_mcp.sh` and `start_mcp.ps1`** updated with vault pre-flight loop: detects
+  plain-text keys in `.env` and offers automatic migration before starting services.
+
+### 📦 Dependencies
+- `keytar ^7.9.0` added to `node/package.json` (uses prebuilt binaries on Windows/macOS;
+  requires `libsecret-1-dev` on Linux for native Secret Service build).
+
+### 🚀 Installers
+- **`install.sh`**: libsecret detection + install hint for Debian/Ubuntu/Fedora/Arch;
+  fixes pre-existing `REPO_URL` shell syntax bug; adds Claude Code (`~/.claude/settings.json`)
+  and Continue.dev (`~/.continue/config.json`) to the MCP registration loop.
+- **`install.ps1`**: adds Claude Code and Continue.dev to the MCP registration loop;
+  `.env` template updated — API key fields marked as optional fallbacks.
+- Both installers update "Done" output to the Zero-Key 3-step flow:
+  Start → Index → `octopus_login`.
+
+### 📚 Documentation
+- `README.md`: Zero-Key badge + description, `octopus_login` in MCP tools table,
+  new Zero-Key Authentication section, updated tool count (21), test count (72),
+  project structure updated.
+- `DEPLOYMENT.md`: fully rewritten — Zero-Key as the primary setup path; "Add keys
+  to .env" step removed; `octopus_login` authorize flow documented with per-platform
+  instructions; MCP config examples no longer include API key env vars.
+
+### ✅ Testing
+- `node/tests/vault_fallback.test.js` NEW: 9 tests covering the full getSecureKey
+  cascade, Ollama-only routing when cloud keys are absent, and SecurityReviewer
+  static-analysis operation without any API calls. All 72 tests pass.
+
+---
+
 ## [2.0.0-rc.1] — 2026-05-11 — Octopus 2.0 ECC Fusion
 
 ### Summary

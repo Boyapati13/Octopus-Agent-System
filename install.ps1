@@ -1,19 +1,19 @@
-# Octopus 2.0 — ECC Fusion · Universal Windows Installer
+# Octopus 2.0 — Zero-Key · Universal Windows Installer
 # Works both locally (.\install.ps1) and via one-liner remote install:
 #   powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/Boyapati13/Octopus-Agent-System/master/install.ps1)"
 
 $ErrorActionPreference = 'Stop'
 
-$REPO_URL    = 'https://github.com/Boyapati13/Octopus-Agent-System.git'
-$REPO_NAME   = 'Octopus-Agent-System'
+$REPO_URL  = 'https://github.com/Boyapati13/Octopus-Agent-System.git'
+$REPO_NAME = 'Octopus-Agent-System'
 
 function Log  { param($m) Write-Host "  [octopus] $m" -ForegroundColor Green }
 function Info { param($m) Write-Host "  [octopus] $m" -ForegroundColor Cyan }
 function Warn { param($m) Write-Host "  [octopus] $m" -ForegroundColor Yellow }
 function Head { param($m) Write-Host "`n$m" -ForegroundColor Magenta }
 
-Head "🐙 Octopus 2.0 — ECC Fusion Installer"
-Write-Host "  Self-evolving AI · 14 agents · 20 MCP tools · AgentShield · Instincts v2"
+Head "🐙 Octopus 2.0 — Zero-Key Installer"
+Write-Host "  Self-evolving AI · 14 agents · 21 MCP tools · AgentShield · Zero-Key Auth"
 Write-Host ""
 
 # ── Step 1: Clone if running remotely ────────────────────────────────────────
@@ -37,36 +37,27 @@ $NodeDir  = Join-Path $RepoDir 'node'
 $McpEntry = Join-Path $NodeDir 'src\mcp.js'
 $RulesDir = Join-Path $RepoDir '.claude\rules'
 
-# ── .gitignore guard — belt-and-suspenders for credentials ───────────────────
+# ── .gitignore guard ──────────────────────────────────────────────────────────
 $GitIgnore = Join-Path $RepoDir '.gitignore'
 if (Test-Path $GitIgnore) {
     $content = Get-Content $GitIgnore -Raw
     $needsUpdate = $false
-    if ($content -notmatch '(?m)^node/\.env') {
-        Add-Content -Path $GitIgnore -Value "`nnode/.env"
-        $needsUpdate = $true
-    }
-    if ($content -notmatch '(?m)^\.env') {
-        Add-Content -Path $GitIgnore -Value ".env"
-        $needsUpdate = $true
-    }
-    if ($needsUpdate) {
-        Warn ".gitignore updated — added node/.env and .env to prevent credential leaks"
-    } else {
-        Log ".gitignore already protects .env files ✅"
-    }
+    if ($content -notmatch '(?m)^node/\.env') { Add-Content -Path $GitIgnore -Value "`nnode/.env"; $needsUpdate = $true }
+    if ($content -notmatch '(?m)^\.env')      { Add-Content -Path $GitIgnore -Value ".env";       $needsUpdate = $true }
+    if ($needsUpdate) { Warn ".gitignore updated — node/.env protected" } else { Log ".gitignore already guards .env ✅" }
 }
 
-# ── Step 2: Node dependencies ─────────────────────────────────────────────────
+# ── Step 2: Node.js dependencies ─────────────────────────────────────────────
 Head "Step 1/5 — Node.js dependencies"
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Warn "Node.js not found. Install from https://nodejs.org (LTS) then re-run."
     exit 1
 }
 Log "Node $(node --version) / npm $(npm --version)"
+# keytar uses a prebuilt binary on Windows (Windows Credential Manager — no build tools needed)
 Push-Location $NodeDir
 npm install --silent
-Log "300 packages ready"
+Log "Dependencies installed (keytar + dotenv + 21-tool MCP stack)"
 Pop-Location
 
 # ── Step 3: Python dependencies ───────────────────────────────────────────────
@@ -85,18 +76,17 @@ if (-not $pyCmd) {
 & $pyCmd -m pip install -r (Join-Path $RepoDir 'python\requirements.txt') -q
 Log "Python dependencies installed"
 
-# ── Step 4: Create .env ────────────────────────────────────────────────────────
+# ── Step 4: Create .env (non-sensitive config only) ───────────────────────────
 Head "Step 3/5 — Configuration"
 $EnvFile = Join-Path $NodeDir '.env'
 if (-not (Test-Path $EnvFile)) {
-    # Detect Ollama
     $ollamaRunning = $false
     $ollamaModels  = @()
     try {
         $r = Invoke-WebRequest -Uri 'http://localhost:11434/api/tags' -TimeoutSec 2 -ErrorAction Stop
         $ollamaRunning = $true
         $ollamaModels  = ($r.Content | ConvertFrom-Json).models.name
-        Log "Ollama detected — $(($ollamaModels).Count) model(s): $($ollamaModels -join ', ')"
+        Log "Ollama detected — $($ollamaModels.Count) model(s): $($ollamaModels -join ', ')"
     } catch {
         Info "Ollama not running (optional — needed for local Gemma 4)"
     }
@@ -113,9 +103,10 @@ if (-not (Test-Path $EnvFile)) {
         Log "Auto-configured for Ollama: $model"
     }
 
-    $escapedRoot = $RepoDir -replace '\\','\\'
     @"
-# Octopus 2.0 — ECC Fusion Configuration
+# Octopus 2.0 — Zero-Key Configuration
+# API keys are NOT stored here — use 'octopus_login' in your AI chat instead.
+# Keys are stored securely in Windows Credential Manager via the OS Vault.
 MEMORY_SERVICE_URL=http://localhost:5000
 DATA_DIR=../data
 PORT=3001
@@ -134,18 +125,18 @@ ECC_HOOK_PROFILE=standard
 PROJECT_ROOT=$RepoDir
 ECC_RULES_PATH=$RulesDir
 
-# LLM Provider
+# LLM Provider (no API key needed — use octopus_login to authorize cloud providers)
 LLM_PROVIDER=$provider
 LLM_MODEL=$model
 OLLAMA_BASE_URL=http://localhost:11434
 
-# API Keys (fill in your chosen provider)
+# Optional fallback keys (prefer octopus_login — these are plain-text)
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 GOOGLE_API_KEY=
 GITHUB_TOKEN=
 "@ | Out-File -FilePath $EnvFile -Encoding utf8
-    Log ".env created (LLM_PROVIDER=$provider)"
+    Log ".env created (LLM_PROVIDER=$provider) — API keys go in OS Vault, not here"
 } else {
     Log ".env already exists — skipping"
 }
@@ -170,7 +161,7 @@ if (-not (Test-Path (Join-Path $RulesDir 'security.md'))) {
 description: Security guardrails (AgentShield-aligned, always-loaded)
 alwaysApply: true
 ---
-- Never hardcode secrets — all credentials via environment variables
+- Never hardcode secrets — all credentials via OS Vault (octopus_login) or environment variables
 - Validate agentName: /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/ before path construction
 - No eval(), new Function(), or __proto__ assignments
 - All database queries through the memory/repository layer
@@ -179,19 +170,8 @@ alwaysApply: true
 }
 Log "ECC rules bootstrapped (.claude/rules/)"
 
-# ── Step 6: Configure MCP clients ────────────────────────────────────────────
-Head "Step 4/5 — MCP client configuration"
-
-$McpEntryEsc = $McpEntry -replace '\\','\\\\'
-$RootEsc     = $RepoDir  -replace '\\','\\\\'
-$RulesEsc    = $RulesDir -replace '\\','\\\\'
-
-$Clients = [ordered]@{
-    'Claude Desktop' = "$env:APPDATA\Claude\claude_desktop_config.json"
-    'Cursor'         = "$env:APPDATA\Cursor\User\globalStorage\mcp.json"
-    'Windsurf'       = "$env:USERPROFILE\.codeium\windsurf\mcp_config.json"
-    'Continue.dev'   = "$env:USERPROFILE\.continue\config.json"
-}
+# ── Step 6: Register with MCP clients ────────────────────────────────────────
+Head "Step 4/5 — MCP client registration"
 
 function Inject-Mcp {
     param([string]$CfgPath, [string]$ClientName)
@@ -219,35 +199,45 @@ function Inject-Mcp {
     }
     $cfg.mcpServers | Add-Member -MemberType NoteProperty -Name 'octopus-2' -Value $entry -Force
     $cfg | ConvertTo-Json -Depth 10 | Out-File -FilePath $CfgPath -Encoding utf8
-    Log "$ClientName configured → $CfgPath"
+    Log "$ClientName registered → $CfgPath"
+}
+
+$Clients = [ordered]@{
+    'Claude Desktop' = "$env:APPDATA\Claude\claude_desktop_config.json"
+    'Claude Code'    = "$env:USERPROFILE\.claude\settings.json"
+    'Cursor'         = "$env:APPDATA\Cursor\User\globalStorage\mcp.json"
+    'Windsurf'       = "$env:USERPROFILE\.codeium\windsurf\mcp_config.json"
+    'Continue.dev'   = "$env:USERPROFILE\.continue\config.json"
 }
 
 $installed = 0
 foreach ($client in $Clients.GetEnumerator()) {
-    $appDir = Split-Path (Split-Path $client.Value)
-    if (Test-Path $appDir) {
-        Inject-Mcp -CfgPath $client.Value -ClientName $client.Key
-        $installed++
+    $appDir = Split-Path $client.Value
+    # Claude Code: check ~/.claude exists; others: check parent of parent
+    if ($client.Key -eq 'Claude Code') {
+        if (Test-Path $appDir) { Inject-Mcp -CfgPath $client.Value -ClientName $client.Key; $installed++ }
+    } else {
+        if (Test-Path (Split-Path $appDir)) { Inject-Mcp -CfgPath $client.Value -ClientName $client.Key; $installed++ }
     }
 }
 
 if ($installed -eq 0) {
-    Warn "No LLM client detected. Add to your config manually (see DEPLOYMENT.md)."
+    Warn "No LLM client detected. Add manually (see DEPLOYMENT.md)."
 }
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 Head "Step 5/5 — Done"
-Log "Octopus 2.0 installed ($installed client(s) configured)"
+Log "Octopus 2.0 installed ($installed client(s) registered)"
 Write-Host ""
-Info "Next steps:"
-Write-Host "  1. Add API keys:    notepad `"$NodeDir\.env`""
-Write-Host "  2. Start services:  .\start_mcp.ps1"
-Write-Host "  3. Index your repo: $pyCmd python\indexer\index_repo.py --root . --db .\data\octopus.db"
-Write-Host "  4. Restart your LLM client — all 20 Octopus tools appear automatically"
+Info "Zero-Key setup — 3 steps:"
+Write-Host "  1. Start services:  .\start_mcp.ps1"
+Write-Host "  2. Index your repo: $pyCmd python\indexer\index_repo.py --root . --db .\data\octopus.db"
+Write-Host "  3. In your AI chat: octopus_login"
+Write-Host "     → browser opens the API dashboard · paste your key · stored in Windows Vault"
 Write-Host ""
-Info "Local Gemma 4 (no API key needed):"
+Info "Local Gemma 4 (no API key, no cloud cost):"
 Write-Host "  ollama pull gemma4:e2b"
-Write-Host "  Then set LLM_PROVIDER=ollama LLM_MODEL=gemma4:e2b in $NodeDir\.env"
+Write-Host "  LLM_PROVIDER=ollama and LLM_MODEL=gemma4:e2b are set automatically if Ollama was detected."
 Write-Host ""
 Info "Full deployment guide: $RepoDir\DEPLOYMENT.md"
 Write-Host ""

@@ -1,16 +1,19 @@
 # 🐙 Octopus 2.0 — ECC Fusion
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-63%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/tests-72%20passing-brightgreen)](#testing)
 [![Agents](https://img.shields.io/badge/agents-14-blue)](#agents)
-[![Tools](https://img.shields.io/badge/MCP%20tools-20-purple)](#mcp-tools)
+[![Tools](https://img.shields.io/badge/MCP%20tools-21-purple)](#mcp-tools)
 [![AgentShield](https://img.shields.io/badge/AgentShield-102%20rules-red)](#agentshield)
 [![ECC Skills](https://img.shields.io/badge/ECC%20Skills-195%2B-orange)](#ecc-fusion)
 [![Ollama](https://img.shields.io/badge/Ollama-Gemma%204%20ready-blue)](#ollama--gemma-4)
+[![Zero-Key](https://img.shields.io/badge/Auth-Zero--Key%20Vault-success)](#zero-key-authentication)
 
 A **self-evolving**, **continuously-learning** multi-agent AI system. Octopus 2.0 fuses the complete [Everything Claude Code (ECC)](https://github.com/affaan-m/everything-claude-code) ecosystem into its core — 195+ pre-vetted skills, 102 AgentShield security rules, Continuous Learning v2 (Instincts), and parallel QA execution.
 
-Works with **Claude · GPT-4o · Gemini · Ollama/Gemma 4** (local, no API key). Installs into Claude Desktop, Cursor, and Windsurf automatically.
+Works with **Claude · GPT-4o · Gemini · Ollama/Gemma 4** (local, no API key). Installs into Claude Desktop, Claude Code, Cursor, Windsurf, and Continue.dev automatically.
+
+**Zero-Key architecture:** API keys never touch `.env`. Run `octopus_login` in your AI chat — the browser opens the provider dashboard, you paste the key once, and it's stored in the OS Vault (Windows Credential Manager / macOS Keychain / Linux Secret Service). No file editing, no credential leaks.
 
 ---
 
@@ -28,13 +31,16 @@ curl -sSL https://raw.githubusercontent.com/Boyapati13/Octopus-Agent-System/mast
 
 The installer:
 - Clones the repo into `~/Octopus-Agent-System`
-- Installs all Node + Python dependencies
+- Installs all Node + Python dependencies (including `keytar` for OS Vault access)
 - Auto-detects Ollama/Gemma 4 and pre-configures the LLM provider
-- Writes `node/.env` with all ECC 2.0 defaults and guards `node/.env` in `.gitignore`
-- Injects the MCP server config into every detected client (Claude Desktop, Cursor, Windsurf)
+- Writes `node/.env` with ECC 2.0 defaults — **no API keys in the file**
+- Guards `node/.env` in `.gitignore`
+- Registers the MCP server with every detected client (Claude Desktop, Claude Code, Cursor, Windsurf, Continue.dev)
 - Bootstraps `.claude/rules/` ECC guardrail files
 
-Restart your LLM client after running — all 20 Octopus tools appear automatically.
+Restart your LLM client after running — all 21 Octopus tools appear automatically.
+
+**Zero-Key first run:** after starting the MCP server, type `octopus_login` in your AI chat to link your first provider.
 
 ---
 
@@ -80,6 +86,8 @@ cd node && npm run serve
 | **Parallel QA execution** | Reviewer ‖ SecurityReviewer ‖ Probe ‖ FactChecker run simultaneously |
 | **TDD-first routing** | Cortex sends Probe before Forge for test-driven tasks |
 | **Ollama / Gemma 4** | Full local inference — no API key, no cloud cost |
+| **Zero-Key Authentication** | `octopus_login` stores keys in OS Vault — no `.env` editing ever |
+| **Cross-platform Vault** | Windows Credential Manager · macOS Keychain · Linux Secret Service |
 | **Windows-native** | Installer auto-escapes paths, detects `py` launcher, configures all clients |
 
 ---
@@ -193,6 +201,34 @@ Research-first Atlas → FactChecker → Architect → Forge → [QA gates] → 
 
 ---
 
+## Zero-Key Authentication
+
+API keys are **never stored in `.env`**. The `getSecureKey` cascade resolver retrieves them at runtime through four tiers:
+
+```
+1. OS Vault       keytar → Windows Credential Manager / macOS Keychain / Linux Secret Service
+2. CLI Session    ~/.octopus/sessions.json  (written by octopus_login; cross-platform fallback)
+3. Process Env    set externally or sourced by the parent shell before start
+4. .env fallback  node/.env plain-text (last resort, not recommended)
+```
+
+### Authorizing a provider
+
+In any AI chat with Octopus connected:
+```
+octopus_login   (then choose: anthropic | openai | google)
+```
+
+What happens:
+1. The agent-browser opens the provider's API key dashboard
+2. A masked prompt appears (or clear Authorize instructions on Linux)
+3. You paste your key — it's stored in the OS Vault immediately
+4. The `.env` file is never touched
+
+To migrate existing keys from `.env` to the Vault, run `.\start_mcp.ps1` (Windows) or `./start_mcp.sh` (Mac/Linux) — the pre-flight check offers to migrate automatically.
+
+---
+
 ## Manual Setup
 
 ### 1 — Python memory service
@@ -210,8 +246,8 @@ python python/indexer/index_repo.py --root . --db ./data/octopus.db
 ### 3 — Node
 ```bash
 cd node
-cp .env.example .env   # then fill in keys
 npm install
+# No .env key editing needed — use octopus_login (see above)
 ```
 
 ### 4 — LLM provider
@@ -227,20 +263,24 @@ LLM_MODEL=gemma4:e2b
 OLLAMA_BASE_URL=http://localhost:11434
 ```
 
-**Cloud providers**
+**Cloud providers — link via OS Vault (no .env required)**
+```
+octopus_login   # then choose: anthropic / openai / google
+```
+Or set environment variables as a fallback:
 ```env
-LLM_PROVIDER=anthropic   ANTHROPIC_API_KEY=sk-ant-...   # Claude
-LLM_PROVIDER=openai      OPENAI_API_KEY=sk-...           # GPT-4o
-LLM_PROVIDER=google      GOOGLE_API_KEY=AIza...          # Gemini
+LLM_PROVIDER=anthropic   ANTHROPIC_API_KEY=sk-ant-...
+LLM_PROVIDER=openai      OPENAI_API_KEY=sk-...
+LLM_PROVIDER=google      GOOGLE_API_KEY=AIza...
 ```
 
 ### 5 — Start
 ```bash
-./start_mcp.sh        # starts memory service + MCP server together
+./start_mcp.sh        # starts memory service + MCP server together (with vault pre-flight)
 # or individually:
 npm run mcp           # MCP stdio server
 npm run serve         # REST API (port 3001)
-npm test              # 63 tests
+npm test              # 72 tests
 ```
 
 ---
@@ -294,6 +334,7 @@ Switch model at any time by updating `LLM_MODEL` in `node/.env` — no restart o
 | LLM | `octopus_llm_complete` (MAX_THINKING_TOKENS capped) |
 | Browser | `octopus_browser_navigate`, `octopus_browser_snapshot`, `octopus_browser_interact` |
 | Skills | `octopus_skill_scout`, `octopus_skill_synthesize`, `octopus_skill_validate`, `octopus_skill_deploy`, `octopus_skill_retire`, `octopus_skill_list` |
+| **Auth** | **`octopus_login`** — Zero-Key OS Vault authentication (Windows · macOS · Linux) |
 
 ---
 
@@ -332,12 +373,13 @@ Set `SAFE_MODE=false` to enable the full pipeline. PreToolUse fatal-command bloc
 cd node && npm test
 ```
 ```
-Test Suites: 5 passed  |  Tests: 63 passed
+Test Suites: 6 passed  |  Tests: 72 passed
   agents.test.js              10 core agents
   agents_marketplace.test.js  4 marketplace agents
   commands.test.js            REST API endpoints
-  mcp.test.js                 MCP server + all 20 tools
+  mcp.test.js                 MCP server + all 21 tools
   memory.test.js              5-layer memory bridge
+  vault_fallback.test.js      Zero-Key: getSecureKey cascade + Gemma 4 fallback
 ```
 
 ---
@@ -346,10 +388,10 @@ Test Suites: 5 passed  |  Tests: 63 passed
 
 ```
 Octopus-Agent-System/
-├── install.ps1 / install.sh     Universal one-liner installers
-├── start_mcp.ps1 / start_mcp.sh Full-stack startup scripts
+├── install.ps1 / install.sh     Universal one-liner installers (Zero-Key aware)
+├── start_mcp.ps1 / start_mcp.sh Full-stack startup + vault pre-flight check
 ├── OCTOPUS.md                   Developer constitution (injected into all agents)
-├── DEPLOYMENT.md                Windows step-by-step guide + MCP config snippets
+├── DEPLOYMENT.md                Step-by-step guide + Zero-Key setup
 ├── CHANGELOG.md
 ├── node/
 │   └── src/
@@ -360,8 +402,10 @@ Octopus-Agent-System/
 │       ├── compress.js          Strategic compaction
 │       ├── permissions.js       Least-privilege memory proxy
 │       ├── runner.js            Parallel stages + instinct extraction
-│       ├── llm.js               Multi-provider + MAX_THINKING_TOKENS cap
-│       └── mcp.js               MCP stdio server
+│       ├── llm.js               Multi-provider + 4-tier getSecureKey cascade
+│       ├── mcp.js               MCP stdio server (21 tools)
+│       ├── vault_set.js         OS Vault writer (keytar + session file fallback)
+│       └── vault_preflight.js   Vault presence check (used by start scripts)
 ├── python/
 │   ├── memory/context_builder.py  L5 — constitution → ECC rules → instincts → L1-L3
 │   ├── memory/schema.py           SQLite + instincts table
@@ -375,10 +419,12 @@ Octopus-Agent-System/
 
 | Secret | Required for |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude |
-| `OPENAI_API_KEY` | GPT-4o |
-| `GOOGLE_API_KEY` | Gemini |
+| `ANTHROPIC_API_KEY` | Claude (CI only — use `octopus_login` locally) |
+| `OPENAI_API_KEY` | GPT-4o (CI only) |
+| `GOOGLE_API_KEY` | Gemini (CI only) |
 | `GITHUB_TOKEN` | Auto-provided — ECC skill library + MarketScout |
+
+For local development, **do not add CI secrets to `.env`** — use `octopus_login` instead.
 
 ---
 

@@ -238,6 +238,21 @@ const TOOLS = [
       required: ['action'],
     },
   },
+  {
+    name: 'octopus_login',
+    description: 'Zero-Key authentication: securely link an LLM provider API key to the OS Vault (Windows Credential Manager / macOS Keychain / Linux Secret Service). Opens the provider API dashboard in the agent-browser so you can generate a key, then guides you through the Authorize flow. Keys are stored under service "Octopus_Vault" — no .env editing required. Works on Windows, macOS, and Linux.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        provider: {
+          type: 'string',
+          enum: ['anthropic', 'openai', 'google'],
+          description: 'LLM provider to authenticate: anthropic | openai | google',
+        },
+      },
+      required: ['provider'],
+    },
+  },
 ];
 
 module.exports = { TOOLS };

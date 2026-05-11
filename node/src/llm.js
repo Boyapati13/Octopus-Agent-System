@@ -3,7 +3,12 @@
  * Multi-LLM Gateway
  * Routes completions to Anthropic, OpenAI, Google, or Ollama.
  * Controlled by LLM_PROVIDER + LLM_MODEL env vars.
- * All providers share the same complete(prompt, opts) interface.
+ *
+ * Key retrieval — 4-tier Cascade Resolver (getSecureKey):
+ *   1. OS Vault    — keytar → Windows Credential Manager / macOS Keychain / Linux Secret Service
+ *   2. CLI Session — ~/.octopus/sessions.json (written by octopus_login; cross-platform fallback)
+ *   3. Process Env — externally set, parent shell, or dotenv-sourced before start
+ *   4. .env file   — node/.env direct parse (plain-text last resort)
  *
  * Providers:  anthropic | openai | google | ollama
  * Model defaults:
@@ -12,6 +17,9 @@
  *   google    → gemini-2.0-flash
  *   ollama    → llama3.2
  */
+const fs   = require('fs');
+const os   = require('os');
+const path = require('path');
 const axios = require('axios');
 
 const PROVIDER = (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
@@ -22,28 +30,76 @@ const MODEL    = process.env.LLM_MODEL || {
   ollama:    'llama3.2',
 }[PROVIDER] || 'claude-sonnet-4-6';
 
-// ECC token optimization: cap max tokens to reduce cost ~60%
-// Set MAX_THINKING_TOKENS=10000 in .env (ECC default)
 const MAX_THINKING_TOKENS = parseInt(process.env.MAX_THINKING_TOKENS) || Infinity;
-
 const MAX_RETRIES = 2;
 
-async function withRetry(fn) {
-  let lastErr;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+const VAULT_SERVICE  = 'Octopus_Vault';
+const SESSION_FILE   = path.join(os.homedir(), '.octopus', 'sessions.json');
+const ENV_KEY_MAP    = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai:    'OPENAI_API_KEY',
+  google:    'GOOGLE_API_KEY',
+};
+
+/**
+ * 4-tier Cascade Resolver:
+ *   1. OS Vault  (keytar — Windows CM / macOS Keychain / Linux Secret Service)
+ *   2. CLI Session  (~/.octopus/sessions.json — written by octopus_login)
+ *   3. Process env  (externally set or parent shell)
+ *   4. .env file    (node/.env plain-text last resort)
+ */
+async function getSecureKey(provider) {
+  const envVar = ENV_KEY_MAP[provider];
+  if (!envVar) return null;
+
+  // Tier 1 — OS Vault
+  let keytar;
+  try { keytar = require('keytar'); } catch { /* native module not available */ }
+  if (keytar) {
     try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      if (attempt < MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      const vaultKey = await keytar.getPassword(VAULT_SERVICE, provider);
+      if (vaultKey) return vaultKey;
+    } catch { /* vault read failed — fall through */ }
+  }
+
+  // Tier 2 — CLI Session file
+  try {
+    const raw = fs.readFileSync(SESSION_FILE, 'utf8');
+    const sessions = JSON.parse(raw);
+    if (sessions[provider]) return sessions[provider];
+  } catch { /* session file absent or malformed */ }
+
+  // Tier 3 — Process environment
+  if (process.env[envVar]) return process.env[envVar];
+
+  // Tier 4 — .env file direct parse
+  try {
+    const envPath = path.join(__dirname, '..', '.env');
+    const raw = fs.readFileSync(envPath, 'utf8');
+    const match = raw.match(new RegExp(`^${envVar}=(.+)$`, 'm'));
+    if (match && match[1].trim()) return match[1].trim();
+  } catch { /* .env absent */ }
+
+  return null;
+}
+
+function withRetry(fn) {
+  let lastErr;
+  return (async () => {
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
       }
     }
-  }
-  throw lastErr;
+    throw lastErr;
+  })();
 }
 
 async function completeAnthropic(prompt, opts = {}) {
+  const apiKey = await getSecureKey('anthropic');
   return withRetry(async () => {
     const res = await axios.post(
       'https://api.anthropic.com/v1/messages',
@@ -54,7 +110,7 @@ async function completeAnthropic(prompt, opts = {}) {
       },
       {
         headers: {
-          'x-api-key':         process.env.ANTHROPIC_API_KEY || '',
+          'x-api-key':         apiKey || '',
           'anthropic-version': '2023-06-01',
           'content-type':      'application/json',
         },
@@ -66,6 +122,7 @@ async function completeAnthropic(prompt, opts = {}) {
 }
 
 async function completeOpenAI(prompt, opts = {}) {
+  const apiKey = await getSecureKey('openai');
   return withRetry(async () => {
     const res = await axios.post(
       'https://api.openai.com/v1/chat/completions',
@@ -76,7 +133,7 @@ async function completeOpenAI(prompt, opts = {}) {
       },
       {
         headers: {
-          Authorization:  `Bearer ${process.env.OPENAI_API_KEY || ''}`,
+          Authorization:  `Bearer ${apiKey || ''}`,
           'content-type': 'application/json',
         },
         timeout: opts.timeout || 30000,
@@ -87,9 +144,10 @@ async function completeOpenAI(prompt, opts = {}) {
 }
 
 async function completeGoogle(prompt, opts = {}) {
+  const apiKey = await getSecureKey('google');
   return withRetry(async () => {
     const res = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${process.env.GOOGLE_API_KEY || ''}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey || ''}`,
       {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: opts.maxTokens || 1024 },
@@ -122,7 +180,6 @@ const COMPLETERS = {
 async function complete(prompt, opts = {}) {
   const fn = COMPLETERS[PROVIDER];
   if (!fn) throw new Error(`Unknown LLM_PROVIDER "${PROVIDER}". Valid: ${Object.keys(COMPLETERS).join(', ')}`);
-  // Apply MAX_THINKING_TOKENS cap (ECC token optimization)
   const cappedOpts = { ...opts, maxTokens: Math.min(opts.maxTokens || 1024, MAX_THINKING_TOKENS) };
   return fn(prompt, cappedOpts);
 }
@@ -131,4 +188,4 @@ function activeProvider() {
   return { provider: PROVIDER, model: MODEL };
 }
 
-module.exports = { complete, activeProvider };
+module.exports = { complete, activeProvider, getSecureKey };

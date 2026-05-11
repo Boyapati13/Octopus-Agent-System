@@ -17,7 +17,7 @@ const { runTask } = require('./runner');
 const { runAgent, injectAgent } = require('./agents');
 const { KINDS, OctopusError, formatError } = require('./errors');
 const { compressDescriptionsInPlace } = require('./compress');
-const { complete, activeProvider } = require('./llm');
+const { complete, activeProvider, getSecureKey } = require('./llm');
 const { TOOLS } = require('./tools');
 const skillRegistry = require('./skill_registry');
 const { preToolUse, postToolUse } = require('./hooks');
@@ -212,6 +212,117 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           task: `Browser ${args.action}${args.ref ? ` on ${args.ref}` : ''}`,
         }, memory);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+
+      case 'octopus_login': {
+        const { provider } = args;
+        const DASHBOARD_URLS = {
+          anthropic: 'https://console.anthropic.com/settings/keys',
+          openai:    'https://platform.openai.com/api-keys',
+          google:    'https://aistudio.google.com/app/apikey',
+        };
+        const PROVIDER_LABELS = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google' };
+
+        const dashUrl = DASHBOARD_URLS[provider];
+        if (!dashUrl) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, `Unknown provider "${provider}". Valid: anthropic, openai, google`);
+        }
+
+        // Step 1: open provider dashboard in agent-browser
+        try {
+          await runAgent('navigator', { url: dashUrl, task: `Open ${provider} API key dashboard` }, memory);
+        } catch (navErr) {
+          console.error(`[octopus_login] Browser navigation skipped: ${navErr.message}`);
+        }
+
+        const vaultSetScript = path.join(__dirname, 'vault_set.js');
+
+        // Step 2: platform-specific Authorize flow
+        if (process.platform === 'win32') {
+          // Windows: spawn a visible PS window — Read-Host -AsSecureString masks input
+          const safeScript = vaultSetScript.replace(/\\/g, '\\\\');
+          const psBody = [
+            `Write-Host ''`,
+            `Write-Host '  Octopus Authorize — ${PROVIDER_LABELS[provider]}' -ForegroundColor Cyan`,
+            `Write-Host '  1. The browser has opened the ${PROVIDER_LABELS[provider]} API key page.'`,
+            `Write-Host '  2. Copy or generate your API key there.'`,
+            `Write-Host '  3. Paste it below and press Enter.'`,
+            `Write-Host ''`,
+            `$ss = Read-Host 'API key (hidden)' -AsSecureString`,
+            `$p = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss))`,
+            `$p | node \\"${safeScript}\\" ${provider}`,
+            `Write-Host ''`,
+            `Read-Host 'Press Enter to close'`,
+          ].join('; ');
+
+          try {
+            await execAsync(
+              `Start-Process -Wait powershell -ArgumentList '-NoProfile', '-Command', "${psBody}"`,
+              { shell: 'powershell.exe', timeout: 120000 }
+            );
+          } catch (loginErr) {
+            throw new OctopusError(KINDS.SYSTEM_ERROR, `Login window failed: ${loginErr.message}`);
+          }
+        } else if (process.platform === 'darwin') {
+          // macOS: osascript password dialog
+          const script = `tell app "System Events" to display dialog "Octopus Authorize — ${PROVIDER_LABELS[provider]}\\n\\nThe browser has opened the API key page.\\nCopy your key and paste it here:" with hidden answer default answer "" buttons {"Cancel","Authorize"} default button "Authorize"`;
+          let stdout = '';
+          try {
+            ({ stdout } = await execAsync(`osascript -e "${script.replace(/"/g, '\\"')}"`, { timeout: 120000 }));
+          } catch (err) {
+            if (/cancel/i.test(err.message)) throw new OctopusError(KINDS.SYSTEM_ERROR, 'Login cancelled.');
+            throw new OctopusError(KINDS.SYSTEM_ERROR, `osascript error: ${err.message}`);
+          }
+          const match = stdout.match(/text returned:(.+)/);
+          if (!match || !match[1].trim()) throw new OctopusError(KINDS.SYSTEM_ERROR, 'No key entered — login cancelled.');
+          const key = match[1].trim();
+          await new Promise((resolve, reject) => {
+            const child = require('child_process').spawn('node', [vaultSetScript, provider], {
+              stdio: ['pipe', 'inherit', 'inherit'],
+            });
+            child.stdin.end(key);
+            child.on('close', code => (code === 0 ? resolve() : reject(new Error(`vault_set exited ${code}`))));
+          });
+        } else {
+          // Linux / other: return clear Authorize instructions
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                ok: false,
+                action_required: true,
+                provider,
+                dashboard_url: dashUrl,
+                authorize_steps: [
+                  `1. The browser has opened: ${dashUrl}`,
+                  `2. Generate or copy your ${PROVIDER_LABELS[provider]} API key from that page.`,
+                  `3. Run this command to store it securely (no .env needed):`,
+                  `   node "${vaultSetScript}" ${provider}`,
+                  `   (You will be prompted to paste the key — input is hidden.)`,
+                  `   Or pipe it directly: echo "your-key" | node "${vaultSetScript}" ${provider}`,
+                ],
+                message: `Authorize ${PROVIDER_LABELS[provider]}: follow the steps above to link your key to the OS Vault.`,
+              }, null, 2),
+            }],
+          };
+        }
+
+        // Step 3: verify key landed in vault or session file
+        const stored = await getSecureKey(provider);
+        if (!stored) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, 'Key not found after login — user may have cancelled.');
+        }
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              ok: true,
+              provider,
+              message: `✅ ${PROVIDER_LABELS[provider]} linked via OS Vault. No .env required.`,
+            }, null, 2),
+          }],
+        };
       }
 
       default:

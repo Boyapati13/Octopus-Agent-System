@@ -26,10 +26,10 @@ afterAll(async () => {
   await client.close();
 });
 
-test('listTools returns exactly 20 tools', async () => {
+test('listTools returns exactly 21 tools', async () => {
   const response = await client.listTools();
   expect(response.tools).toBeDefined();
-  expect(response.tools.length).toBe(20);
+  expect(response.tools.length).toBe(21);
 
   const toolNames = response.tools.map(t => t.name);
   // Core task orchestration
@@ -59,6 +59,8 @@ test('listTools returns exactly 20 tools', async () => {
   expect(toolNames).toContain('octopus_skill_deploy');
   expect(toolNames).toContain('octopus_skill_retire');
   expect(toolNames).toContain('octopus_skill_list');
+  // Vault auth
+  expect(toolNames).toContain('octopus_login');
 });
 
 test('octopus_search_memory (read-only) succeeds in SAFE_MODE', async () => {
