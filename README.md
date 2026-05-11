@@ -494,14 +494,21 @@ Octopus-Agent-System/
 cd node && npm test
 ```
 ```
-Test Suites: 6 passed  |  Tests: 72 passed
-  agents.test.js              14 core agents
-  agents_marketplace.test.js  marketplace agents
-  commands.test.js            REST API endpoints
-  mcp.test.js                 MCP server — all 23 tools verified
-  memory.test.js              5-layer memory bridge
-  vault_fallback.test.js      Zero-Key cascade + Gemma 4 Sovereign Fallback
+Test Suites: 6 passed, 6 total
+Tests:       72 passed, 72 total
+Time:        ~2.5 s
+
+  agents.test.js              32   14 agents (contract + run()) · SecurityReviewer eval · ReleaseKeeper block
+  agents_marketplace.test.js  16   Navigator · MarketScout · Toolsmith · SandboxQA (4 tests each)
+  commands.test.js             6   REST API: health · agent list · onboard · plan · run · 404
+  mcp.test.js                  6   MCP server: 23 tools · SAFE_MODE guards · concurrent reads
+  memory.test.js               3   5-layer structural memory bridge
+  vault_fallback.test.js       9   Zero-Key 4-tier cascade · Ollama routing · Sovereign Fallback
 ```
+
+> Two expected console warnings (not failures):
+> - `[cortex] LLM planning failed — using keyword fallback` — no real LLM in tests; fallback is by design.
+> - `AgentShield scan skipped — hook guard active` — deduplication guard fires correctly in multi-run suites.
 
 ---
 
