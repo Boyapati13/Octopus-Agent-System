@@ -15,7 +15,7 @@ warn() { echo -e "  ${YELLOW}[octopus]${NC} $*"; }
 head() { echo -e "\n${MAGENTA}$*${NC}"; }
 
 head "🐙 Octopus 2.0 — Zero-Key Installer"
-echo "  Self-evolving AI · 14 agents · 21 MCP tools · AgentShield · Zero-Key Auth"
+echo "  Self-evolving AI · 14 agents · 23 MCP tools · AgentShield · Zero-Key Auth"
 echo ""
 
 # ── Step 1: Clone if running remotely ────────────────────────────────────────

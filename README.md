@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-72%20passing-brightgreen)](#testing)
 [![Agents](https://img.shields.io/badge/agents-14-blue)](#agents)
-[![Tools](https://img.shields.io/badge/MCP%20tools-21-purple)](#mcp-tools)
+[![Tools](https://img.shields.io/badge/MCP%20tools-23-purple)](#mcp-tools)
 [![AgentShield](https://img.shields.io/badge/AgentShield-102%20rules-red)](#agentshield)
 [![ECC Skills](https://img.shields.io/badge/ECC%20Skills-195%2B-orange)](#ecc-fusion)
 [![Ollama](https://img.shields.io/badge/Ollama-Gemma%204%20ready-blue)](#ollama--gemma-4)
@@ -38,7 +38,7 @@ The installer:
 - Registers the MCP server with every detected client (Claude Desktop, Claude Code, Cursor, Windsurf, Continue.dev)
 - Bootstraps `.claude/rules/` ECC guardrail files
 
-Restart your LLM client after running — all 21 Octopus tools appear automatically.
+Restart your LLM client after running — all 23 Octopus tools appear automatically.
 
 **Zero-Key first run:** after starting the MCP server, type `octopus_login` in your AI chat to link your first provider.
 
@@ -377,7 +377,7 @@ Test Suites: 6 passed  |  Tests: 72 passed
   agents.test.js              10 core agents
   agents_marketplace.test.js  4 marketplace agents
   commands.test.js            REST API endpoints
-  mcp.test.js                 MCP server + all 21 tools
+  mcp.test.js                 MCP server + all 23 tools
   memory.test.js              5-layer memory bridge
   vault_fallback.test.js      Zero-Key: getSecureKey cascade + Gemma 4 fallback
 ```
@@ -403,7 +403,7 @@ Octopus-Agent-System/
 │       ├── permissions.js       Least-privilege memory proxy
 │       ├── runner.js            Parallel stages + instinct extraction
 │       ├── llm.js               Multi-provider + 4-tier getSecureKey cascade
-│       ├── mcp.js               MCP stdio server (21 tools)
+│       ├── mcp.js               MCP stdio server (23 tools)
 │       ├── vault_set.js         OS Vault writer (keytar + session file fallback)
 │       └── vault_preflight.js   Vault presence check (used by start scripts)
 ├── python/

@@ -13,7 +13,7 @@ function Warn { param($m) Write-Host "  [octopus] $m" -ForegroundColor Yellow }
 function Head { param($m) Write-Host "`n$m" -ForegroundColor Magenta }
 
 Head "🐙 Octopus 2.0 — Zero-Key Installer"
-Write-Host "  Self-evolving AI · 14 agents · 21 MCP tools · AgentShield · Zero-Key Auth"
+Write-Host "  Self-evolving AI · 14 agents · 23 MCP tools · AgentShield · Zero-Key Auth"
 Write-Host ""
 
 # ── Step 1: Clone if running remotely ────────────────────────────────────────

@@ -215,114 +215,137 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'octopus_login': {
-        const { provider } = args;
+        // vault_login.js is an interactive enquirer menu; spawn it in a new visible terminal window.
+        const vaultLoginScript = path.join(__dirname, 'vault_login.js');
+        const provider = (args || {}).provider || '';
+
+        // Open browser to the provider dashboard (best-effort; non-blocking)
         const DASHBOARD_URLS = {
           anthropic: 'https://console.anthropic.com/settings/keys',
           openai:    'https://platform.openai.com/api-keys',
           google:    'https://aistudio.google.com/app/apikey',
         };
-        const PROVIDER_LABELS = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google' };
-
-        const dashUrl = DASHBOARD_URLS[provider];
-        if (!dashUrl) {
-          throw new OctopusError(KINDS.SYSTEM_ERROR, `Unknown provider "${provider}". Valid: anthropic, openai, google`);
+        if (DASHBOARD_URLS[provider]) {
+          try {
+            await runAgent('navigator', { url: DASHBOARD_URLS[provider], task: `Open ${provider} API key dashboard` }, memory);
+          } catch (navErr) {
+            console.error(`[octopus_login] Browser navigation skipped: ${navErr.message}`);
+          }
         }
 
-        // Step 1: open provider dashboard in agent-browser
-        try {
-          await runAgent('navigator', { url: dashUrl, task: `Open ${provider} API key dashboard` }, memory);
-        } catch (navErr) {
-          console.error(`[octopus_login] Browser navigation skipped: ${navErr.message}`);
-        }
-
-        const vaultSetScript = path.join(__dirname, 'vault_set.js');
-
-        // Step 2: platform-specific Authorize flow
         if (process.platform === 'win32') {
-          // Windows: spawn a visible PS window — Read-Host -AsSecureString masks input
-          const safeScript = vaultSetScript.replace(/\\/g, '\\\\');
-          const psBody = [
-            `Write-Host ''`,
-            `Write-Host '  Octopus Authorize — ${PROVIDER_LABELS[provider]}' -ForegroundColor Cyan`,
-            `Write-Host '  1. The browser has opened the ${PROVIDER_LABELS[provider]} API key page.'`,
-            `Write-Host '  2. Copy or generate your API key there.'`,
-            `Write-Host '  3. Paste it below and press Enter.'`,
-            `Write-Host ''`,
-            `$ss = Read-Host 'API key (hidden)' -AsSecureString`,
-            `$p = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss))`,
-            `$p | node \\"${safeScript}\\" ${provider}`,
-            `Write-Host ''`,
-            `Read-Host 'Press Enter to close'`,
-          ].join('; ');
-
+          // Windows: spawn a new PS window running vault_login.js (enquirer menu + masked input)
+          const safe = vaultLoginScript.replace(/\\/g, '\\\\');
           try {
             await execAsync(
-              `Start-Process -Wait powershell -ArgumentList '-NoProfile', '-Command', "${psBody}"`,
-              { shell: 'powershell.exe', timeout: 120000 }
+              `Start-Process -Wait powershell -ArgumentList '-NoProfile', '-Command', "node \\"${safe}\\""`,
+              { shell: 'powershell.exe', timeout: 180000 }
             );
-          } catch (loginErr) {
-            throw new OctopusError(KINDS.SYSTEM_ERROR, `Login window failed: ${loginErr.message}`);
+          } catch (err) {
+            throw new OctopusError(KINDS.SYSTEM_ERROR, `Login window failed: ${err.message}`);
           }
         } else if (process.platform === 'darwin') {
-          // macOS: osascript password dialog
-          const script = `tell app "System Events" to display dialog "Octopus Authorize — ${PROVIDER_LABELS[provider]}\\n\\nThe browser has opened the API key page.\\nCopy your key and paste it here:" with hidden answer default answer "" buttons {"Cancel","Authorize"} default button "Authorize"`;
-          let stdout = '';
+          // macOS: open a new Terminal.app tab running vault_login.js
           try {
-            ({ stdout } = await execAsync(`osascript -e "${script.replace(/"/g, '\\"')}"`, { timeout: 120000 }));
+            await execAsync(
+              `osascript -e 'tell application "Terminal" to do script "node ${vaultLoginScript.replace(/'/g, "'\\''")}"'`,
+              { timeout: 10000 }
+            );
+            // Give the user up to 3 minutes; we poll vault for their key
+            for (let i = 0; i < 36; i++) {
+              await new Promise(r => setTimeout(r, 5000));
+              const key = await getSecureKey(provider || 'anthropic');
+              if (key) break;
+            }
           } catch (err) {
-            if (/cancel/i.test(err.message)) throw new OctopusError(KINDS.SYSTEM_ERROR, 'Login cancelled.');
-            throw new OctopusError(KINDS.SYSTEM_ERROR, `osascript error: ${err.message}`);
+            throw new OctopusError(KINDS.SYSTEM_ERROR, `Terminal launch failed: ${err.message}`);
           }
-          const match = stdout.match(/text returned:(.+)/);
-          if (!match || !match[1].trim()) throw new OctopusError(KINDS.SYSTEM_ERROR, 'No key entered — login cancelled.');
-          const key = match[1].trim();
-          await new Promise((resolve, reject) => {
-            const child = require('child_process').spawn('node', [vaultSetScript, provider], {
-              stdio: ['pipe', 'inherit', 'inherit'],
-            });
-            child.stdin.end(key);
-            child.on('close', code => (code === 0 ? resolve() : reject(new Error(`vault_set exited ${code}`))));
-          });
         } else {
-          // Linux / other: return clear Authorize instructions
+          // Linux / other: return clear Authorize instructions with vault_login.js command
           return {
             content: [{
               type: 'text',
               text: JSON.stringify({
-                ok: false,
-                action_required: true,
-                provider,
-                dashboard_url: dashUrl,
-                authorize_steps: [
-                  `1. The browser has opened: ${dashUrl}`,
-                  `2. Generate or copy your ${PROVIDER_LABELS[provider]} API key from that page.`,
-                  `3. Run this command to store it securely (no .env needed):`,
-                  `   node "${vaultSetScript}" ${provider}`,
-                  `   (You will be prompted to paste the key — input is hidden.)`,
-                  `   Or pipe it directly: echo "your-key" | node "${vaultSetScript}" ${provider}`,
-                ],
-                message: `Authorize ${PROVIDER_LABELS[provider]}: follow the steps above to link your key to the OS Vault.`,
+                ok: false, action_required: true,
+                authorize_command: `node "${vaultLoginScript}"`,
+                message: 'Run the authorize command in a terminal to complete Zero-Key setup.',
               }, null, 2),
             }],
           };
         }
 
-        // Step 3: verify key landed in vault or session file
-        const stored = await getSecureKey(provider);
-        if (!stored) {
-          throw new OctopusError(KINDS.SYSTEM_ERROR, 'Key not found after login — user may have cancelled.');
-        }
-
+        const stored = provider ? await getSecureKey(provider) : true;
         return {
           content: [{
             type: 'text',
             text: JSON.stringify({
               ok: true,
-              provider,
-              message: `✅ ${PROVIDER_LABELS[provider]} linked via OS Vault. No .env required.`,
+              message: stored
+                ? `✅ Provider linked via OS Vault. No .env required.`
+                : 'Login window closed. Run octopus_vault_check to verify key storage.',
             }, null, 2),
           }],
         };
+      }
+
+      case 'octopus_vault_check': {
+        const providers = ['anthropic', 'openai', 'google'];
+        const keyChecks = await Promise.all(
+          providers.map(async p => {
+            const key = await getSecureKey(p);
+            return [p, key ? 'present' : 'missing'];
+          })
+        );
+        const vault = Object.fromEntries(keyChecks);
+
+        let ollamaStatus = 'offline';
+        try {
+          await axios.get(`${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/tags`, { timeout: 2000 });
+          ollamaStatus = 'running';
+        } catch { /* offline */ }
+
+        const activeProvider = (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
+        const sovereignActive = vault[activeProvider] === 'missing' && ollamaStatus === 'running';
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              vault,
+              ollama: ollamaStatus,
+              active_provider: activeProvider,
+              sovereign_fallback: sovereignActive ? 'active (routing to Ollama gemma4:e2b)' : 'inactive',
+              advice: sovereignActive
+                ? 'No cloud key — Sovereign Fallback will route calls to local Ollama automatically.'
+                : Object.values(vault).every(v => v === 'missing')
+                  ? 'No keys configured. Run octopus_login to authorize a provider.'
+                  : `Keys present for: ${Object.entries(vault).filter(([,v]) => v === 'present').map(([k]) => k).join(', ')}`,
+            }, null, 2),
+          }],
+        };
+      }
+
+      case 'octopus_memory_status': {
+        const serviceUrl = process.env.MEMORY_SERVICE_URL || 'http://localhost:5000';
+        try {
+          const res = await axios.get(`${serviceUrl}/health`, { timeout: 3000 });
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ ok: true, url: serviceUrl, response: res.data }, null, 2),
+            }],
+          };
+        } catch (err) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                ok: false, url: serviceUrl, error: err.message,
+                hint: 'Start the memory service: py python/services/memory_service.py',
+              }, null, 2),
+            }],
+          };
+        }
       }
 
       default:

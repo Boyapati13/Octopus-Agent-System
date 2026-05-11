@@ -240,17 +240,32 @@ const TOOLS = [
   },
   {
     name: 'octopus_login',
-    description: 'Zero-Key authentication: securely link an LLM provider API key to the OS Vault (Windows Credential Manager / macOS Keychain / Linux Secret Service). Opens the provider API dashboard in the agent-browser so you can generate a key, then guides you through the Authorize flow. Keys are stored under service "Octopus_Vault" — no .env editing required. Works on Windows, macOS, and Linux.',
+    description: 'Zero-Key authentication: opens an interactive terminal menu (enquirer) to authorize a provider. Three paths: Anthropic API key, OpenAI API key, Google API key, or Vertex AI/Bedrock setup instructions. Keys are stored in the OS Vault (Windows Credential Manager / macOS Keychain / Linux Secret Service) — no .env editing required.',
     inputSchema: {
       type: 'object',
       properties: {
         provider: {
           type: 'string',
-          enum: ['anthropic', 'openai', 'google'],
-          description: 'LLM provider to authenticate: anthropic | openai | google',
+          enum: ['anthropic', 'openai', 'google', 'enterprise'],
+          description: 'Provider to authorize: anthropic | openai | google | enterprise (Vertex AI/Bedrock)',
         },
       },
-      required: ['provider'],
+    },
+  },
+  {
+    name: 'octopus_vault_check',
+    description: 'Diagnostic: check which LLM providers have keys stored in the OS Vault or session file, and whether local Ollama is running. Reports the active provider and whether Sovereign Fallback is engaged.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'octopus_memory_status',
+    description: 'Diagnostic: ping the Python memory service (port 5000) and return its health status. Use this to verify the service is running before running agent task chains.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
     },
   },
 ];

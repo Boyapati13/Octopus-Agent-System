@@ -159,11 +159,13 @@ async function completeGoogle(prompt, opts = {}) {
 }
 
 async function completeOllama(prompt, opts = {}) {
-  const base = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const base  = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  // opts._model lets Sovereign Fallback override the module-level MODEL constant
+  const model = opts._model || MODEL;
   return withRetry(async () => {
     const res = await axios.post(
       `${base}/api/generate`,
-      { model: MODEL, prompt, stream: false, options: { num_predict: opts.maxTokens || 1024 } },
+      { model, prompt, stream: false, options: { num_predict: opts.maxTokens || 1024 } },
       { timeout: opts.timeout || 60000 }
     );
     return res.data.response;
@@ -177,10 +179,23 @@ const COMPLETERS = {
   ollama:    completeOllama,
 };
 
+const SOVEREIGN_MODEL = process.env.SOVEREIGN_FALLBACK_MODEL || 'gemma4:e2b';
+
 async function complete(prompt, opts = {}) {
   const fn = COMPLETERS[PROVIDER];
   if (!fn) throw new Error(`Unknown LLM_PROVIDER "${PROVIDER}". Valid: ${Object.keys(COMPLETERS).join(', ')}`);
   const cappedOpts = { ...opts, maxTokens: Math.min(opts.maxTokens || 1024, MAX_THINKING_TOKENS) };
+
+  // Sovereign Fallback: if a cloud provider is active but no key is present,
+  // automatically route to local Ollama rather than failing with an auth error.
+  if (PROVIDER !== 'ollama') {
+    const key = await getSecureKey(PROVIDER);
+    if (!key) {
+      console.error(`[llm] No key for "${PROVIDER}" — sovereign fallback to Ollama (${SOVEREIGN_MODEL})`);
+      return completeOllama(prompt, { ...cappedOpts, _model: SOVEREIGN_MODEL });
+    }
+  }
+
   return fn(prompt, cappedOpts);
 }
 
