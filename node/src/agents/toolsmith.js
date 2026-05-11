@@ -1,13 +1,14 @@
 'use strict';
 /**
- * Toolsmith — Dynamic Skill Synthesis (Phase 2 of Skill Evolution Pipeline)
- * Reads API/library documentation via browser, uses LLM to synthesize a working
- * MCP tool (code + schema), and writes it to skills/auto_generated/.
+ * Toolsmith — Skill Synthesiser (Phase 2 of Skill Evolution Pipeline)
+ * Reads documentation for a package and uses the LLM to write a working MCP skill.
+ * Writes the skill file and registers it with the skill registry (status: sandbox).
  */
-const fs      = require('fs');
-const path    = require('path');
+const fs       = require('fs');
+const path     = require('path');
+const axios    = require('axios');
 const { complete } = require('../llm');
-const registry     = require('../skill_registry');
+const registry = require('../skill_registry');
 
 const name = 'Toolsmith';
 const role = 'skill-synthesis';
@@ -15,145 +16,120 @@ const canApprove = false;
 
 const SKILLS_DIR = path.join(__dirname, '../../skills/auto_generated');
 
-function ensureSkillsDir() {
-  fs.mkdirSync(SKILLS_DIR, { recursive: true });
-}
-
-function buildPrompt(skillName, description, docContent, errorFeedback) {
-  const retrySection = errorFeedback
-    ? `\n\nPREVIOUS ATTEMPT FAILED WITH:\n${errorFeedback}\nFix the issue in this new version.\n`
-    : '';
-
-  return `You are the Toolsmith agent in the Octopus System. Synthesize a working MCP tool from this documentation.
-
-SKILL NAME: ${skillName}
-TASK: ${description}${retrySection}
-
-DOCUMENTATION (truncated to 4000 chars):
-${docContent.slice(0, 4000)}
-
-Output ONLY a valid JSON object with exactly these fields — no markdown, no explanation:
-{
-  "mcp_schema": {
-    "name": "${skillName}",
-    "description": "One-sentence description of what the tool does.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {},
-      "required": []
-    }
-  },
-  "implementation": "/* Full Node.js module */\\n'use strict';\\nconst axios = require('axios');\\nasync function run(args) {\\n  // implementation using axios or built-ins only\\n  return { result: '...' };\\n}\\nmodule.exports = { run };"
-}
-
-Rules:
-- Use only axios (pre-installed) and Node.js built-ins
-- Wrap all API calls in try/catch, return { error: message } on failure
-- implementation must be valid JS that can be written to a .js file and require()'d
-- Output raw JSON only — no code fences`;
-}
-
-async function fetchDocContent(docUrl, memory) {
+async function fetchDocs(url) {
   try {
-    // Use Navigator agent if available, else raw axios
-    const navigator = require('./navigator');
-    const result = await navigator.run({ url: docUrl, task: 'read documentation' }, memory);
-    const snap = result.snapshot;
-    if (snap && !snap.error) {
-      return JSON.stringify(snap).slice(0, 6000);
-    }
-  } catch {
-    // fall through
-  }
-  // Fallback: raw HTTP fetch
-  try {
-    const axios = require('axios');
-    const res = await axios.get(docUrl, { timeout: 10000 });
-    return String(res.data).slice(0, 6000);
+    const res = await axios.get(url, { timeout: 10000, headers: { 'User-Agent': 'OctopusToolsmith/1.0' } });
+    const text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+    // Strip HTML tags if present, keep first 3000 chars
+    return text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 3000);
   } catch (e) {
-    return `Could not fetch documentation from ${docUrl}: ${e.message}`;
+    return `Documentation fetch failed: ${e.message}`;
   }
+}
+
+async function synthesise(skillName, description, docText) {
+  const prompt = `You are Toolsmith, an AI that writes MCP (Model Context Protocol) skill modules for Node.js.
+
+Synthesise a working MCP skill for: "${skillName}"
+Description: ${description}
+
+Documentation excerpt:
+${docText}
+
+Requirements:
+- Export: { name, description, inputSchema, run }
+- name: snake_case string matching the skill name
+- inputSchema: valid JSON Schema object
+- run(args): async function returning { result } or { error }
+- Handle errors gracefully — never throw, return { error: message } instead
+- Keep it concise (under 80 lines)
+- Use only Node.js built-ins or the documented package
+
+Return ONLY valid JavaScript code, no markdown fences:`;
+
+  const code = await complete(prompt, { maxTokens: 800, timeout: 30000 });
+
+  // Extract JSON schema for MCP registration
+  const schemaPrompt = `Extract the MCP tool schema from this skill code as JSON only:
+${code}
+
+Return JSON: {"name":"...","description":"...","inputSchema":{"type":"object","properties":{},"required":[]}}`;
+
+  const schemaText = await complete(schemaPrompt, { maxTokens: 300, timeout: 15000 });
+
+  let mcpSchema;
+  try {
+    const cleaned = schemaText.replace(/```json\n?|```\n?/g, '').trim();
+    mcpSchema = JSON.parse(cleaned);
+  } catch {
+    mcpSchema = {
+      name: skillName,
+      description,
+      inputSchema: { type: 'object', properties: {}, required: [] },
+    };
+  }
+
+  return { code, mcpSchema };
 }
 
 async function run(input, memory) {
-  const { skill_id, name: skillName, doc_url, description, error: errorFeedback, retry = 0 } = input;
+  const { name: skillName, doc_url, description } = input;
 
-  ensureSkillsDir();
-
-  // Resolve skill details from registry if skill_id provided
-  let resolvedName = skillName;
-  let resolvedUrl  = doc_url;
-  let resolvedDesc = description;
-
-  if (skill_id) {
-    const existing = registry.getSkill(skill_id);
-    if (existing) {
-      resolvedName = existing.name;
-      resolvedUrl  = existing.doc_url;
-      resolvedDesc = existing.description;
-    }
-  }
-
-  if (!resolvedName || !resolvedUrl) {
+  if (!skillName || !doc_url) {
     return { agent: name, role, approved: false, error: 'name and doc_url are required' };
   }
 
-  // 1. Fetch documentation
-  const docContent = await fetchDocContent(resolvedUrl, memory);
+  const resolvedName = skillName.replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+  const resolvedDesc = description || `MCP skill for ${skillName}`;
 
-  // 2. Synthesize via LLM
-  const prompt = buildPrompt(resolvedName, resolvedDesc || 'Interact with this API', docContent, errorFeedback);
-  let llmOutput;
+  // Fetch documentation
+  const docText = await fetchDocs(doc_url);
+
+  // Synthesise skill via LLM
+  let skillData;
   try {
-    llmOutput = await complete(prompt, { maxTokens: 2048 });
+    skillData = await synthesise(resolvedName, resolvedDesc, docText);
   } catch (e) {
-    return { agent: name, role, approved: false, error: `LLM call failed: ${e.message}` };
+    return { agent: name, role, approved: false, error: `LLM synthesis failed: ${e.message}` };
   }
 
-  // 3. Parse LLM JSON output
-  let synthesized;
-  try {
-    const jsonStr = llmOutput.match(/\{[\s\S]*\}/)?.[0];
-    if (!jsonStr) throw new Error('No JSON found in LLM output');
-    synthesized = JSON.parse(jsonStr);
-  } catch (e) {
-    return { agent: name, role, approved: false, error: `LLM output parse failed: ${e.message}`, raw: llmOutput };
-  }
+  // Register in skill registry
+  const registeredSkill = registry.propose({
+    name:             resolvedName,
+    display_name:     skillName,
+    doc_url,
+    description:      resolvedDesc,
+    status:           'sandbox',
+    synthesised_from: doc_url,
+    ...skillData.mcpSchema,
+  });
 
-  // 4. Write implementation file
-  const filePath = path.join(SKILLS_DIR, `${resolvedName}.js`);
-  fs.writeFileSync(filePath, synthesized.implementation, 'utf8');
+  // Write skill file
+  if (!fs.existsSync(SKILLS_DIR)) fs.mkdirSync(SKILLS_DIR, { recursive: true });
+  const execPath = path.join(SKILLS_DIR, `${resolvedName}.js`);
+  fs.writeFileSync(execPath, skillData.code, 'utf8');
 
-  // 5. Update or create registry entry
-  const skillData = {
-    status: 'sandbox',
-    mcp_schema: synthesized.mcp_schema,
-    execution_binary: filePath,
-    market_alignment: resolvedDesc || '',
-    synthesis_attempts: retry + 1,
-  };
+  // Update registry with execution path
+  const updated = registry.updateSkill(registeredSkill.skill_id, { execution_binary: execPath });
 
-  let registeredSkill;
-  if (skill_id) {
-    registeredSkill = registry.updateSkill(skill_id, skillData);
-  } else {
-    registeredSkill = registry.propose({
-      name: resolvedName,
-      doc_url: resolvedUrl,
-      description: resolvedDesc,
-      ...skillData,
-    });
-  }
+  await memory.writeback(name, {
+    decision: {
+      title:     `Toolsmith synthesised: ${resolvedName}`,
+      rationale: `Skill written from ${doc_url}`,
+      tags:      ['skill-synthesis', 'marketplace'],
+      risk:      'low',
+    },
+  });
 
   return {
-    agent: name,
-    role,
-    skill_id: registeredSkill.skill_id,
-    skill_name: resolvedName,
-    mcp_schema: synthesized.mcp_schema,
-    execution_binary: filePath,
-    retry_attempt: retry,
-    advice: `Skill "${resolvedName}" synthesized. SandboxQA will now validate it.`,
+    agent: name, role,
+    skill_id:     updated.skill_id,
+    skill_name:   resolvedName,
+    execution_binary: execPath,
+    doc_url,
+    mcp_schema:   skillData.mcpSchema,
+    lines_written: skillData.code.split('\n').length,
+    advice: `Skill "${resolvedName}" synthesised and registered (status: sandbox). Pass skill_id to SandboxQA to validate.`,
   };
 }
 
