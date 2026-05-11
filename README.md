@@ -30,7 +30,7 @@ The installer:
 - Clones the repo into `~/Octopus-Agent-System`
 - Installs all Node + Python dependencies
 - Auto-detects Ollama/Gemma 4 and pre-configures the LLM provider
-- Writes `node/.env` with all ECC 2.0 defaults (`MAX_THINKING_TOKENS`, `AGENTSHIELD_MODE`, `PROJECT_ROOT`, etc.)
+- Writes `node/.env` with all ECC 2.0 defaults and guards `node/.env` in `.gitignore`
 - Injects the MCP server config into every detected client (Claude Desktop, Cursor, Windsurf)
 - Bootstraps `.claude/rules/` ECC guardrail files
 
@@ -38,7 +38,36 @@ Restart your LLM client after running — all 20 Octopus tools appear automatica
 
 ---
 
-## 🚀 What's New in 2.0 — ECC Fusion
+## Start the Stack
+
+After installing, two scripts launch the full system:
+
+**Windows**
+```powershell
+.\start_mcp.ps1
+```
+
+**Mac / Linux**
+```bash
+./start_mcp.sh
+```
+
+Both scripts start the Python memory service (port 5000) and the Node MCP server together, and clean up the background process on exit. Or start them individually:
+
+```bash
+# Terminal 1 — Python memory service
+python python/services/memory_service.py
+
+# Terminal 2 — MCP server (Claude Desktop / Cursor / Windsurf)
+cd node && npm run mcp
+
+# Terminal 3 — REST API (optional dashboard / direct API access)
+cd node && npm run serve
+```
+
+---
+
+## What's New in 2.0 — ECC Fusion
 
 | Feature | What was added |
 |---|---|
@@ -51,7 +80,7 @@ Restart your LLM client after running — all 20 Octopus tools appear automatica
 | **Parallel QA execution** | Reviewer ‖ SecurityReviewer ‖ Probe ‖ FactChecker run simultaneously |
 | **TDD-first routing** | Cortex sends Probe before Forge for test-driven tasks |
 | **Ollama / Gemma 4** | Full local inference — no API key, no cloud cost |
-| **Windows-native** | Installer auto-escapes paths, detects `py` launcher, configures registry |
+| **Windows-native** | Installer auto-escapes paths, detects `py` launcher, configures all clients |
 
 ---
 
@@ -109,7 +138,7 @@ Injected into L5 context for: Cortex, Forge, Architect, SecurityReviewer, Market
 ```
 Layer 1  PreToolUse hook       0 tokens, synchronous   Blocks rm -rf /, fork bombs, DROP DATABASE
 Layer 2  SecurityReviewer      OWASP Top 10            Quick patterns + AgentShield 5-category scan
-Layer 3  AgentShield gate      102 static rules        AGENTSHIELD_MODE=gate blocks on critical AS findings
+Layer 3  AgentShield gate      102 static rules        AGENTSHIELD_MODE=gate blocks on critical findings
 ```
 
 | Category | Rules | Catches |
@@ -156,8 +185,8 @@ ECC library (primary) → npm / PyPI / GitHub → Toolsmith → SandboxQA → Co
 ### Cortex Planning Patterns
 
 ```
-Default       Atlas → Architect → Forge → [QA gates] → Scribe → ReleaseKeeper
-TDD-first     Atlas → Probe (write tests) → Forge → [QA gates] → Scribe
+Default        Atlas → Architect → Forge → [QA gates] → Scribe → ReleaseKeeper
+TDD-first      Atlas → Probe (write tests) → Forge → [QA gates] → Scribe
 Security-first Atlas → SecurityReviewer → Forge → [QA gates] → Scribe
 Research-first Atlas → FactChecker → Architect → Forge → [QA gates] → Scribe
 ```
@@ -189,7 +218,8 @@ npm install
 
 **Local — Gemma 4 (recommended, no API key)**
 ```bash
-ollama pull gemma4:e2b
+ollama pull gemma4:e2b    # default — efficient, works for most tasks
+ollama pull gemma4:9b     # recommended for complex Cortex planning (~8 GB VRAM)
 ```
 ```env
 LLM_PROVIDER=ollama
@@ -199,55 +229,34 @@ OLLAMA_BASE_URL=http://localhost:11434
 
 **Cloud providers**
 ```env
-# Claude
-LLM_PROVIDER=anthropic   ANTHROPIC_API_KEY=sk-ant-...
-
-# GPT-4o
-LLM_PROVIDER=openai      OPENAI_API_KEY=sk-...
-
-# Gemini
-LLM_PROVIDER=google      GOOGLE_API_KEY=AIza...
+LLM_PROVIDER=anthropic   ANTHROPIC_API_KEY=sk-ant-...   # Claude
+LLM_PROVIDER=openai      OPENAI_API_KEY=sk-...           # GPT-4o
+LLM_PROVIDER=google      GOOGLE_API_KEY=AIza...          # Gemini
 ```
 
 ### 5 — Start
 ```bash
-npm run mcp     # MCP stdio server (Claude Desktop / Cursor / Windsurf)
-npm run serve   # REST API         (port 3001)
-npm test        # 63 tests
+./start_mcp.sh        # starts memory service + MCP server together
+# or individually:
+npm run mcp           # MCP stdio server
+npm run serve         # REST API (port 3001)
+npm test              # 63 tests
 ```
 
 ---
 
 ## Ollama / Gemma 4
 
-Octopus 2.0 is designed for local inference. Gemma 4 (`gemma4:e2b`) detected and pre-configured on verified test machines.
-
-```bash
-# Install Ollama
-# macOS/Linux: https://ollama.com
-# Windows:     https://ollama.com/download/windows
-```
-
-**Model selection guide:**
+Octopus 2.0 is built for local inference. The installer auto-detects Ollama and pre-configures the `.env`.
 
 | Model | VRAM | Best for |
 |---|---|---|
-| `gemma4:e2b` | ~3 GB | Day-to-day tasks, Forge, Scribe, fast iteration |
-| `gemma4:9b` | ~8 GB | Complex Cortex planning, SecurityReviewer deep analysis |
+| `gemma4:e2b` | ~3 GB | Day-to-day tasks, Forge, Scribe, fast iteration (default) |
+| `gemma4:9b` | ~8 GB | **Complex Cortex planning**, SecurityReviewer deep analysis |
 | `llama3.2` | ~2 GB | Minimal footprint, simple task chains |
 | `qwen2.5-coder:7b` | ~5 GB | Code-heavy tasks, Forge + Reviewer |
 
-The installer auto-selects `gemma4:e2b`. For complex multi-agent planning tasks, upgrade to the 9B:
-
-```bash
-ollama pull gemma4:e2b    # default — efficient, works for most tasks
-ollama pull gemma4:9b     # recommended for complex Cortex planning (needs ~8 GB VRAM)
-```
-
-Then set in `node/.env`:
-```env
-LLM_MODEL=gemma4:9b   # upgrade Cortex planning quality
-```
+Switch model at any time by updating `LLM_MODEL` in `node/.env` — no restart of other services needed.
 
 `MAX_THINKING_TOKENS=10000` caps `num_predict` per call across all Ollama models.
 
@@ -281,7 +290,7 @@ LLM_MODEL=gemma4:9b   # upgrade Cortex planning quality
 | Orchestration | `octopus_plan_task`, `octopus_run_task_chain` |
 | Memory | `octopus_search_memory`, `octopus_get_decisions`, `octopus_compact_session` |
 | Files | `octopus_read_file`, `octopus_write_file` (auto-formats JS/TS), `octopus_execute_command` |
-| Agents | `octopus_create_agent` (AS-A04 path validation), `octopus_scan_security` |
+| Agents | `octopus_create_agent` (path-validated), `octopus_scan_security` |
 | LLM | `octopus_llm_complete` (MAX_THINKING_TOKENS capped) |
 | Browser | `octopus_browser_navigate`, `octopus_browser_snapshot`, `octopus_browser_interact` |
 | Skills | `octopus_skill_scout`, `octopus_skill_synthesize`, `octopus_skill_validate`, `octopus_skill_deploy`, `octopus_skill_retire`, `octopus_skill_list` |
@@ -293,7 +302,7 @@ LLM_MODEL=gemma4:9b   # upgrade Cortex planning quality
 | Variable | Default | Description |
 |---|---|---|
 | `LLM_PROVIDER` | `anthropic` | `anthropic` · `openai` · `google` · `ollama` |
-| `LLM_MODEL` | provider default | Model override (e.g. `gemma4:e2b`) |
+| `LLM_MODEL` | provider default | Model override (e.g. `gemma4:9b`) |
 | `MAX_THINKING_TOKENS` | `Infinity` | Token cap per call — set `10000` for ECC optimisation |
 | `COMPACT_THRESHOLD` | `50` | Tool calls before strategic compaction hint |
 | `SAFE_MODE` | `true` | `false` to enable mutating tools |
@@ -337,31 +346,27 @@ Test Suites: 5 passed  |  Tests: 63 passed
 
 ```
 Octopus-Agent-System/
-├── install.ps1                  Universal Windows installer (one-liner)
-├── install.sh                   Universal Mac/Linux installer (one-liner)
-├── start_mcp.ps1 / start_mcp.sh Service launchers
+├── install.ps1 / install.sh     Universal one-liner installers
+├── start_mcp.ps1 / start_mcp.sh Full-stack startup scripts
 ├── OCTOPUS.md                   Developer constitution (injected into all agents)
 ├── DEPLOYMENT.md                Windows step-by-step guide + MCP config snippets
-├── CHANGELOG.md                 Full version history
+├── CHANGELOG.md
 ├── node/
 │   └── src/
-│       ├── agents/              14 agents (Cortex team-patterns, SecurityReviewer 3-layer)
-│       ├── skills/
-│       │   ├── agentshield.js   102-rule 5-category scanner
-│       │   └── security.js      OWASP Top 10 base scanner
+│       ├── agents/              14 agents
+│       ├── skills/agentshield.js  102-rule 5-category scanner
 │       ├── instincts.js         Continuous Learning v2
-│       ├── hooks.js             Pre/PostToolUse + ECC_HOOK_PROFILE + registerHookGuard
-│       ├── compress.js          Strategic compaction + caveman compression
+│       ├── hooks.js             Pre/PostToolUse + ECC_HOOK_PROFILE
+│       ├── compress.js          Strategic compaction
 │       ├── permissions.js       Least-privilege memory proxy
 │       ├── runner.js            Parallel stages + instinct extraction
 │       ├── llm.js               Multi-provider + MAX_THINKING_TOKENS cap
-│       └── mcp.js               MCP stdio server (AS-A04 validated)
+│       └── mcp.js               MCP stdio server
 ├── python/
-│   ├── memory/
-│   │   ├── context_builder.py   L5 — constitution → ECC rules → instincts → L1-L3
-│   │   └── schema.py            L2+L3 SQLite + instincts table
-│   └── services/memory_service.py  Flask + /instincts endpoints
-└── .claude/rules/               ECC guardrails (node.md, security.md)
+│   ├── memory/context_builder.py  L5 — constitution → ECC rules → instincts → L1-L3
+│   ├── memory/schema.py           SQLite + instincts table
+│   └── services/memory_service.py Flask + /instincts endpoints
+└── .claude/rules/               ECC guardrails (always-loaded into every agent)
 ```
 
 ---
@@ -370,10 +375,10 @@ Octopus-Agent-System/
 
 | Secret | Required for |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude (default) |
+| `ANTHROPIC_API_KEY` | Claude |
 | `OPENAI_API_KEY` | GPT-4o |
 | `GOOGLE_API_KEY` | Gemini |
-| `GITHUB_TOKEN` | Auto-provided — ECC skill library + MarketScout rate limits |
+| `GITHUB_TOKEN` | Auto-provided — ECC skill library + MarketScout |
 
 ---
 

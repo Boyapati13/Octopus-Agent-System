@@ -29,3 +29,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Claude Code local session settings (user-specific, not for source control)
+.claude/settings.local.json
