@@ -61,15 +61,183 @@ After installing, two scripts launch the full system:
 Both scripts start the Python memory service (port 5000) and the Node MCP server together, and clean up the background process on exit. Or start them individually:
 
 ```bash
-# Terminal 1 — Python memory service
-python python/services/memory_service.py
+# Terminal 1 — Python memory service (Windows: use py instead of python)
+py python/services/memory_service.py
 
-# Terminal 2 — MCP server (Claude Desktop / Cursor / Windsurf)
+# Terminal 2 — MCP server
 cd node && npm run mcp
 
-# Terminal 3 — REST API (optional dashboard / direct API access)
+# Terminal 3 — REST API (optional)
 cd node && npm run serve
 ```
+
+---
+
+## Connect to Your AI
+
+The installer registers Octopus automatically with every detected client. For manual setup, add the block below to each client's config file — replace `YOUR_INSTALL_PATH` with your actual clone directory.
+
+> **Windows paths** require double backslashes in JSON: `C:\\Users\\You\\Octopus-Agent-System`
+
+---
+
+### Claude Desktop
+
+**Config file:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "octopus-2": {
+      "command": "node",
+      "args": ["YOUR_INSTALL_PATH\\node\\src\\mcp.js"],
+      "env": {
+        "SAFE_MODE": "false",
+        "MAX_THINKING_TOKENS": "10000",
+        "COMPACT_THRESHOLD": "50",
+        "AGENTSHIELD_MODE": "advisory",
+        "ECC_HOOK_PROFILE": "standard",
+        "PROJECT_ROOT": "YOUR_INSTALL_PATH",
+        "ECC_RULES_PATH": "YOUR_INSTALL_PATH\\.claude\\rules",
+        "MEMORY_SERVICE_URL": "http://localhost:5000",
+        "LLM_PROVIDER": "ollama",
+        "LLM_MODEL": "gemma4:e2b",
+        "OLLAMA_BASE_URL": "http://localhost:11434"
+      }
+    }
+  }
+}
+```
+
+After saving, **fully restart Claude Desktop**. All 23 tools appear in the tool tray.
+
+---
+
+### Claude Code
+
+**Config file:** `~/.claude/settings.json` (Windows: `%USERPROFILE%\.claude\settings.json`)
+
+```json
+{
+  "mcpServers": {
+    "octopus-2": {
+      "command": "node",
+      "args": ["YOUR_INSTALL_PATH/node/src/mcp.js"],
+      "env": {
+        "SAFE_MODE": "false",
+        "MAX_THINKING_TOKENS": "10000",
+        "COMPACT_THRESHOLD": "50",
+        "AGENTSHIELD_MODE": "advisory",
+        "ECC_HOOK_PROFILE": "standard",
+        "PROJECT_ROOT": "YOUR_INSTALL_PATH",
+        "ECC_RULES_PATH": "YOUR_INSTALL_PATH/.claude/rules",
+        "MEMORY_SERVICE_URL": "http://localhost:5000",
+        "LLM_PROVIDER": "ollama",
+        "LLM_MODEL": "gemma4:e2b",
+        "OLLAMA_BASE_URL": "http://localhost:11434"
+      }
+    }
+  }
+}
+```
+
+No restart needed — Claude Code picks up MCP config changes on the next session. Type `/mcp` to verify the server connected.
+
+---
+
+### Cursor
+
+**Config file:**
+- Windows: `%APPDATA%\Cursor\User\globalStorage\mcp.json`
+- Mac/Linux: `~/.cursor/mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "octopus-2": {
+      "command": "node",
+      "args": ["YOUR_INSTALL_PATH/node/src/mcp.js"],
+      "env": {
+        "SAFE_MODE": "false",
+        "MAX_THINKING_TOKENS": "10000",
+        "PROJECT_ROOT": "YOUR_INSTALL_PATH",
+        "MEMORY_SERVICE_URL": "http://localhost:5000",
+        "LLM_PROVIDER": "ollama",
+        "LLM_MODEL": "gemma4:e2b"
+      }
+    }
+  }
+}
+```
+
+In Cursor: **Cursor → Settings → MCP** — click **Reload** after saving the file.
+
+---
+
+### Windsurf
+
+**Config file:** `~/.codeium/windsurf/mcp_config.json`
+
+```json
+{
+  "mcpServers": {
+    "octopus-2": {
+      "command": "node",
+      "args": ["YOUR_INSTALL_PATH/node/src/mcp.js"],
+      "env": {
+        "SAFE_MODE": "false",
+        "MAX_THINKING_TOKENS": "10000",
+        "PROJECT_ROOT": "YOUR_INSTALL_PATH",
+        "MEMORY_SERVICE_URL": "http://localhost:5000",
+        "LLM_PROVIDER": "ollama",
+        "LLM_MODEL": "gemma4:e2b"
+      }
+    }
+  }
+}
+```
+
+Reload Windsurf after saving.
+
+---
+
+### Continue.dev
+
+**Config file:** `~/.continue/config.json`
+
+Add inside the existing `mcpServers` array (create the key if it doesn't exist):
+
+```json
+{
+  "mcpServers": [
+    {
+      "name": "octopus-2",
+      "command": "node",
+      "args": ["YOUR_INSTALL_PATH/node/src/mcp.js"],
+      "env": {
+        "SAFE_MODE": "false",
+        "MAX_THINKING_TOKENS": "10000",
+        "PROJECT_ROOT": "YOUR_INSTALL_PATH",
+        "MEMORY_SERVICE_URL": "http://localhost:5000",
+        "LLM_PROVIDER": "ollama",
+        "LLM_MODEL": "gemma4:e2b"
+      }
+    }
+  ]
+}
+```
+
+Reload the Continue extension after saving (`Ctrl+Shift+P` → **Continue: Reload**).
+
+---
+
+### Verify the connection
+
+In any connected client, ask:
+```
+octopus_vault_check
+```
+It will report which providers have keys, whether Ollama is running, and if Sovereign Fallback is active. If you see 23 tools and a response, Octopus is live.
 
 ---
 
@@ -235,12 +403,14 @@ To migrate existing keys from `.env` to the Vault, run `.\start_mcp.ps1` (Window
 ```bash
 cd python
 pip install -r requirements.txt
-python services/memory_service.py    # port 5000
+py services/memory_service.py       # Windows (Python 3.14 launcher)
+# python3 services/memory_service.py  # Mac/Linux
 ```
 
 ### 2 — Index the repo (creates octopus.db + instincts table)
 ```bash
-python python/indexer/index_repo.py --root . --db ./data/octopus.db
+py python/indexer/index_repo.py --root . --db ./data/octopus.db
+# python3 python/indexer/index_repo.py ...   # Mac/Linux
 ```
 
 ### 3 — Node
@@ -334,7 +504,8 @@ Switch model at any time by updating `LLM_MODEL` in `node/.env` — no restart o
 | LLM | `octopus_llm_complete` (MAX_THINKING_TOKENS capped) |
 | Browser | `octopus_browser_navigate`, `octopus_browser_snapshot`, `octopus_browser_interact` |
 | Skills | `octopus_skill_scout`, `octopus_skill_synthesize`, `octopus_skill_validate`, `octopus_skill_deploy`, `octopus_skill_retire`, `octopus_skill_list` |
-| **Auth** | **`octopus_login`** — Zero-Key OS Vault authentication (Windows · macOS · Linux) |
+| **Auth** | **`octopus_login`** — Zero-Key OS Vault authorization (interactive menu) |
+| **Diagnostics** | `octopus_vault_check` — key/Ollama status + Sovereign Fallback indicator · `octopus_memory_status` — memory service health |
 
 ---
 
