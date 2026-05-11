@@ -176,12 +176,22 @@ function scanContent(content, filePath = '<buffer>') {
   });
 }
 
+// Files that contain scanner rule *definitions* — excluded from self-scan
+// to prevent false positives where the pattern literal matches itself.
+const SCANNER_DEFINITION_FILES = new Set([
+  'agentshield.js',   // this file
+  'security.js',      // original RISKY_PATTERNS skill
+]);
+
 /**
  * Scan an array of file paths. Silently skips unreadable files.
+ * Pass excludeNames=true (default) to skip scanner definition files.
  */
-function scanFiles(filePaths = []) {
+function scanFiles(filePaths = [], { excludeDefinitionFiles = true } = {}) {
   const findings = [];
   for (const fp of filePaths) {
+    const base = path.basename(fp);
+    if (excludeDefinitionFiles && SCANNER_DEFINITION_FILES.has(base)) continue;
     try {
       const content = fs.readFileSync(fp, 'utf8');
       findings.push(...scanContent(content, fp));

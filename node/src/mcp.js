@@ -123,14 +123,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const findings = scanSecurity(args.paths);
         return { content: [{ type: 'text', text: JSON.stringify(findings, null, 2) }] };
 
-      case 'octopus_create_agent':
+      case 'octopus_create_agent': {
         if (SAFE_MODE) {
           throw new OctopusError(KINDS.SYSTEM_ERROR, 'Tool disabled in SAFE_MODE');
         }
-        const agentPath = path.join(__dirname, 'agents', `${args.agentName}.js`);
-        fs.writeFileSync(agentPath, args.javascriptLogic, 'utf8');
-        injectAgent(args.agentName);
+        // AS-A04 fix: validate agentName is safe before constructing path
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(args.agentName || '')) {
+          throw new OctopusError(
+            KINDS.PERMISSION_DENIED,
+            `Invalid agent name "${args.agentName}" — must be alphanumeric/underscore, start with a letter, max 64 chars`,
+            null, { rule: 'AS-A04' }
+          );
+        }
+        // agentName validated above — safe to use in path
+        const sanitizedName = args.agentName;
+        const agentSource   = args.javascriptLogic;
+        const agentPath     = path.join(__dirname, 'agents', sanitizedName + '.js');
+        fs.writeFileSync(agentPath, agentSource, 'utf8');
+        injectAgent(sanitizedName);
         return { content: [{ type: 'text', text: `Agent ${args.agentName} created and injected successfully.` }] };
+      }
 
       // ── Skill Evolution Pipeline ────────────────────────────────────────────
       case 'octopus_skill_scout': {
