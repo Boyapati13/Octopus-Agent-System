@@ -22,6 +22,10 @@ const MODEL    = process.env.LLM_MODEL || {
   ollama:    'llama3.2',
 }[PROVIDER] || 'claude-sonnet-4-6';
 
+// ECC token optimization: cap max tokens to reduce cost ~60%
+// Set MAX_THINKING_TOKENS=10000 in .env (ECC default)
+const MAX_THINKING_TOKENS = parseInt(process.env.MAX_THINKING_TOKENS) || Infinity;
+
 const MAX_RETRIES = 2;
 
 async function withRetry(fn) {
@@ -118,7 +122,9 @@ const COMPLETERS = {
 async function complete(prompt, opts = {}) {
   const fn = COMPLETERS[PROVIDER];
   if (!fn) throw new Error(`Unknown LLM_PROVIDER "${PROVIDER}". Valid: ${Object.keys(COMPLETERS).join(', ')}`);
-  return fn(prompt, opts);
+  // Apply MAX_THINKING_TOKENS cap (ECC token optimization)
+  const cappedOpts = { ...opts, maxTokens: Math.min(opts.maxTokens || 1024, MAX_THINKING_TOKENS) };
+  return fn(prompt, cappedOpts);
 }
 
 function activeProvider() {

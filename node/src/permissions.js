@@ -16,23 +16,25 @@ const { KINDS, OctopusError } = require('./errors');
 
 const AGENT_PERMISSIONS = {
   cortex: [
-    'getContext', 'getRun', 'getDecisions', 'writeback', 'compactSession', 'getCacheStats',
+    'getContext', 'getRun', 'getDecisions', 'getInstincts',
+    'writeback', 'compactSession', 'getCacheStats',
   ],
   atlas: [
     'searchStructural', 'getContext', 'structuralImpact',
   ],
   architect: [
-    'searchStructural', 'getContext', 'getDecisions', 'writeback', 'structuralImpact',
+    'searchStructural', 'getContext', 'getDecisions', 'getInstincts',
+    'writeback', 'structuralImpact',
   ],
   forge: [
-    'searchStructural', 'getContext', 'getDecisions', 'getRun',
+    'searchStructural', 'getContext', 'getDecisions', 'getRun', 'getInstincts',
     'writeback', 'saveDecision', 'structuralImpact',
   ],
   reviewer: [
     'searchStructural', 'getContext', 'getRun', 'writeback',
   ],
   securityreviewer: [
-    'searchStructural', 'getContext', 'writeback', 'structuralImpact',
+    'searchStructural', 'getContext', 'getInstincts', 'writeback', 'structuralImpact',
   ],
   probe: [
     'searchStructural', 'getContext', 'getRun', 'writeback',
@@ -50,10 +52,10 @@ const AGENT_PERMISSIONS = {
     'getContext', 'writeback',
   ],
   marketscout: [
-    'getContext', 'writeback',
+    'getContext', 'getInstincts', 'writeback',
   ],
   toolsmith: [
-    'getContext', 'writeback',
+    'getContext', 'getInstincts', 'writeback',
   ],
   sandboxqa: [
     'getContext', 'writeback',

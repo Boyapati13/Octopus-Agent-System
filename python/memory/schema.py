@@ -53,6 +53,17 @@ CREATE TABLE IF NOT EXISTS session_summaries (
     durable_facts TEXT DEFAULT '[]',
     compacted_at  TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS instincts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    pattern      TEXT NOT NULL,
+    confidence   REAL DEFAULT 0.5,
+    occurrences  INTEGER DEFAULT 1,
+    category     TEXT DEFAULT 'general',
+    sources      TEXT DEFAULT '[]',
+    skill_id     TEXT,
+    created_at   TEXT DEFAULT (datetime('now')),
+    updated_at   TEXT DEFAULT (datetime('now'))
+);
 """
 
 
@@ -184,6 +195,61 @@ class MemoryStore:
         for r in results:
             r['durable_facts'] = json.loads(r['durable_facts'])
         return results
+
+    # ── Instincts (ECC Continuous Learning v2) ───────────────────────────────
+
+    def save_instinct(self, instinct: dict) -> int:
+        pattern    = instinct.get('pattern', '')
+        confidence = float(instinct.get('confidence', 0.5))
+        category   = instinct.get('category', 'general')
+        sources    = json.dumps(instinct.get('sources', []))
+
+        # Upsert by pattern similarity (exact match only — clustering done in Node)
+        existing = self.conn.execute(
+            "SELECT id, occurrences, confidence FROM instincts WHERE pattern = ?", (pattern,)
+        ).fetchone()
+
+        if existing:
+            new_occ  = existing['occurrences'] + 1
+            new_conf = min(1.0, max(existing['confidence'], confidence) + 0.05)
+            self.conn.execute(
+                "UPDATE instincts SET occurrences=?, confidence=?, updated_at=datetime('now') WHERE id=?",
+                (new_occ, round(new_conf, 3), existing['id'])
+            )
+            self.conn.commit()
+            return existing['id']
+
+        cur = self.conn.execute(
+            "INSERT INTO instincts (pattern, confidence, occurrences, category, sources) VALUES (?,?,?,?,?)",
+            (pattern, round(confidence, 3), instinct.get('occurrences', 1), category, sources)
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def load_instincts(self, category: str = None, min_confidence: float = 0.5,
+                       limit: int = 20) -> list:
+        if category:
+            rows = self.conn.execute(
+                "SELECT * FROM instincts WHERE category=? AND confidence>=? ORDER BY confidence DESC LIMIT ?",
+                (category, min_confidence, limit)
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM instincts WHERE confidence>=? ORDER BY confidence DESC LIMIT ?",
+                (min_confidence, limit)
+            ).fetchall()
+        results = [dict(r) for r in rows]
+        for r in results:
+            r['sources'] = json.loads(r['sources'])
+        return results
+
+    def evolve_instinct(self, instinct_id: int, skill_id: str) -> bool:
+        self.conn.execute(
+            "UPDATE instincts SET skill_id=?, updated_at=datetime('now') WHERE id=?",
+            (skill_id, instinct_id)
+        )
+        self.conn.commit()
+        return True
 
     def close(self):
         self.conn.close()

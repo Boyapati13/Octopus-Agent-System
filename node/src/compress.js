@@ -1,19 +1,29 @@
 'use strict';
 /**
- * Caveman-style prose compression — ported from JuliusBrussee/caveman (MIT).
- * Strips filler words/articles/leaders while preserving code, URLs, paths, identifiers.
- * ~65-75% token reduction on prose fields.
+ * Prose compression + Strategic Compaction (ECC-port)
+ *
+ * Two modes:
+ *   compressProse()       — caveman strip (~65-75% reduction, always-on)
+ *   strategicCompact()    — milestone-aware aggressive compaction
+ *
+ * Strategic Compaction (from ECC's strategic-compact skill):
+ *   - Suggested after 50 tool calls (COMPACT_THRESHOLD)
+ *   - Reminded every 25 calls thereafter
+ *   - Strips resolved context, keeps live decision trail
+ *   - Never triggers mid-implementation; only at logical boundaries
  */
 
+// ── Caveman compression ───────────────────────────────────────────────────────
+
 const PROTECTED_PATTERNS = [
-  /```[\s\S]*?```/g,            // fenced code blocks
-  /`[^`]+`/g,                   // inline code
-  /https?:\/\/\S+/g,            // URLs
-  /[\w./-]*[/\\][\w./-]+/g,    // file paths
-  /\b[A-Z][A-Z0-9_]{2,}\b/g,   // CONST_CASE identifiers
-  /\w+\.\w+\(/g,                // dotted method calls
-  /\w+\(\)/g,                   // bare function calls
-  /\d+\.\d+\.\d+/g,            // version numbers (x.y.z)
+  /```[\s\S]*?```/g,
+  /`[^`]+`/g,
+  /https?:\/\/\S+/g,
+  /[\w./-]*[/\\][\w./-]+/g,
+  /\b[A-Z][A-Z0-9_]{2,}\b/g,
+  /\w+\.\w+\(/g,
+  /\w+\(\)/g,
+  /\d+\.\d+\.\d+/g,
 ];
 
 const LEADERS      = /\b(I'll|I will|you can|we will|let me)\b\s*/gi;
@@ -51,9 +61,9 @@ function compressProse(text) {
 }
 
 function compress(text) {
-  const before = typeof text === 'string' ? text.length : 0;
+  const before     = typeof text === 'string' ? text.length : 0;
   const compressed = compressProse(text);
-  const after = typeof compressed === 'string' ? compressed.length : 0;
+  const after      = typeof compressed === 'string' ? compressed.length : 0;
   return { compressed, before, after, saved: before - after };
 }
 
@@ -73,4 +83,72 @@ function compressDescriptionsInPlace(obj, fieldNames = ['description']) {
   return obj;
 }
 
-module.exports = { compress, compressProse, compressDescriptionsInPlace, withProtectedSegments };
+// ── Strategic Compaction (ECC strategic-compact skill) ────────────────────────
+
+const COMPACT_THRESHOLD          = parseInt(process.env.COMPACT_THRESHOLD) || 50;
+const COMPACT_REMINDER_INTERVAL  = parseInt(process.env.COMPACT_REMINDER_INTERVAL) || 25;
+
+// Milestones indicate safe compaction points (from ECC's strategic-compact docs)
+const MILESTONE_PATTERNS = [
+  /research.*complete|exploration.*done/i,
+  /milestone.*complete|phase.*complete/i,
+  /tests.*pass(?:ing|ed)?/i,
+  /implementation.*done|feature.*shipped/i,
+  /debugging.*resolved|bug.*fixed/i,
+];
+
+function isAtMilestone(text = '') {
+  return MILESTONE_PATTERNS.some(re => re.test(text));
+}
+
+/**
+ * Aggressive context reduction for milestone boundaries.
+ * Removes resolved sections while preserving decision trail.
+ */
+function strategicCompact(text, milestone = false) {
+  if (typeof text !== 'string' || !text) return text;
+
+  // Always apply base compression first
+  let result = compressProse(text);
+
+  if (!milestone) return result;
+
+  // At milestones: also strip resolved/completed markers
+  const RESOLVED_MARKERS = [
+    /✅[^\n]*/g,                          // completed checkboxes
+    /DONE:[^\n]*/gi,                       // done markers
+    /\[x\][^\n]*/gi,                       // checked items
+    /previously.*(?:decided|resolved|fixed)[^\n]*/gi,
+    /\(already implemented\)[^\n]*/gi,
+  ];
+
+  for (const re of RESOLVED_MARKERS) {
+    result = result.replace(re, '');
+  }
+
+  return result.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * Determine whether a compaction should be suggested.
+ * @param {number} toolCallCount — total tool calls in current session
+ * @param {string} [lastNote]    — last agent advice string (milestone detection)
+ * @returns {{ suggest: boolean, reason: string }}
+ */
+function shouldSuggestCompaction(toolCallCount, lastNote = '') {
+  const atMilestone = isAtMilestone(lastNote);
+
+  if (toolCallCount >= COMPACT_THRESHOLD && atMilestone) {
+    return { suggest: true, reason: `${toolCallCount} tool calls + milestone detected — ideal compaction point` };
+  }
+  if (toolCallCount >= COMPACT_THRESHOLD && toolCallCount % COMPACT_REMINDER_INTERVAL === 0) {
+    return { suggest: true, reason: `${toolCallCount} tool calls — consider compacting before next phase` };
+  }
+  return { suggest: false, reason: '' };
+}
+
+module.exports = {
+  compress, compressProse, compressDescriptionsInPlace, withProtectedSegments,
+  strategicCompact, shouldSuggestCompaction, isAtMilestone,
+  COMPACT_THRESHOLD, COMPACT_REMINDER_INTERVAL,
+};

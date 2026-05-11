@@ -19,26 +19,45 @@ const REQUIRED_SKILLS = ['get_run_state', 'writeback'];
 
 // ── Keyword fallback (used when LLM call fails) ───────────────────────────────
 
+// ECC multi-agent team patterns:
+//   TDD-first:      Probe (write tests) → Forge (implement) → QA gates
+//   Security-first: SecurityReviewer runs early + AgentShield deep scan
+//   Research-first: Atlas + FactChecker before any implementation
+//   Parallel QA:    Reviewer ‖ SecurityReviewer ‖ Probe ‖ FactChecker (grouped by runner)
 const KEYWORD_ROUTES = [
+  // Skill evolution
   { re: /skill|evolve|marketplace|scout|toolsmith|synthesize|new.?tool|market/i,
     agents: ['MarketScout','Toolsmith','SandboxQA','Scribe'] },
+  // Web / research
   { re: /browse|navigate|scrape|website|webpage|https?:|url|visit|web.?research/i,
     agents: ['Navigator','Atlas','FactChecker','Scribe'] },
-  { re: /audit|security|vuln|owasp|cve|penetration/i,
-    agents: ['Atlas','SecurityReviewer','Scribe'] },
+  // Security-first (ECC AgentShield pattern): security agent runs before implementation
+  { re: /audit|security|vuln|owasp|cve|penetration|agentshield/i,
+    agents: ['Atlas','SecurityReviewer','FactChecker','Scribe'] },
+  // Documentation
   { re: /doc|readme|comment|jsdoc|changelog/i,
     agents: ['Atlas','Forge','Reviewer','Scribe'] },
+  // Release
   { re: /release|deploy|publish|version|tag/i,
     agents: ['ReleaseKeeper'] },
-  { re: /test|spec|coverage|jest|pytest|unit/i,
-    agents: ['Atlas','Probe','Forge','Scribe'] },
+  // TDD-first (ECC tdd-workflow): Probe BEFORE Forge to write tests first
+  { re: /tdd|test.first|write.tests?|unit.tests?/i,
+    agents: ['Atlas','Probe','Forge','Reviewer','SecurityReviewer','Scribe'] },
+  // General test/coverage (test after implementation)
+  { re: /test|spec|coverage|jest|pytest/i,
+    agents: ['Atlas','Forge','Probe','Reviewer','Scribe'] },
+  // Performance
   { re: /perf|optim|speed|latency|benchmark/i,
-    agents: ['Atlas','Architect','Forge','Reviewer','Scribe'] },
+    agents: ['Atlas','Architect','Forge','Reviewer','SecurityReviewer','Scribe'] },
+  // Refactor — parallel review stage
   { re: /refactor|clean|lint|format|style/i,
-    agents: ['Atlas','Forge','Reviewer','Scribe'] },
+    agents: ['Atlas','Forge','Reviewer','SecurityReviewer','Scribe'] },
+  // Full verification loop (ECC verification-loop skill)
+  { re: /verification.loop|verify.all|full.check|quality.gate/i,
+    agents: ['Atlas','Forge','Reviewer','SecurityReviewer','Probe','FactChecker','Scribe','ReleaseKeeper'] },
 ];
 
-const DEFAULT_CHAIN = ['Atlas','Architect','Forge','FactChecker','Reviewer','SecurityReviewer','Probe','Scribe','ReleaseKeeper'];
+const DEFAULT_CHAIN = ['Atlas','Architect','Forge','Reviewer','SecurityReviewer','Probe','FactChecker','Scribe','ReleaseKeeper'];
 
 function keywordFallback(taskStr) {
   for (const { re, agents } of KEYWORD_ROUTES) {
@@ -64,13 +83,19 @@ ${agentList}
 
 Task: "${taskStr}"
 
-Rules:
+Planning rules:
 - Only include agents genuinely needed for THIS task
-- Order: research → implement → verify → document → release
-- GATE agents stop the pipeline if they fail — include when verification is critical
+- Standard order: research → implement → verify → document → release
+- TDD-first pattern (use when task mentions "test", "TDD", "test-driven"):
+    Atlas → Probe (write tests first) → Forge → review gates → Scribe
+- Security-first pattern (use when task mentions "security", "audit", "OWASP"):
+    Atlas → SecurityReviewer → Forge → review gates → Scribe
+- Research-first pattern (use when task is unclear or involves external research):
+    Atlas → FactChecker → Architect → Forge → review gates → Scribe
+- GATE agents stop the pipeline on failure — include when correctness is critical
 - Lean plans preferred: 2-4 agents for simple tasks, up to 9 for full release cycles
-- Verification agents (Reviewer, SecurityReviewer, Probe, FactChecker) review the same
-  output independently — place them consecutively so the runner can batch them in parallel
+- Verification agents (Reviewer, SecurityReviewer, Probe, FactChecker) are parallel-safe
+  — place them consecutively so the runner batches them into one parallel stage
 - Return ONLY a valid JSON array of agent names — no explanation, no markdown
 
 JSON array:`;

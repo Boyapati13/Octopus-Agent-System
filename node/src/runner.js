@@ -1,15 +1,14 @@
 'use strict';
 /**
- * Dynamic Task Runner
+ * Dynamic Task Runner — ECC-enhanced
  *
- * Upgrades over the original sequential runner:
- *  1. Parallel stage execution — QA agents (Reviewer, SecurityReviewer, Probe,
- *     FactChecker) that appear consecutively in the plan run simultaneously via
- *     Promise.allSettled, cutting QA wall-clock time by ~66%.
- *  2. Least-privilege memory proxy — each agent receives only the memory methods
- *     its role is allowed to call; unauthorized calls throw PERMISSION_DENIED
- *     synchronously, before any network request is made.
- *  3. Stop hook — fires onStop() after compaction for Slack/webhook notifications.
+ * Upgrades over baseline:
+ *  1. Parallel stage execution  — QA agents run simultaneously (~75% speedup)
+ *  2. Least-privilege proxies   — each agent gets a permission-scoped memory
+ *  3. Strategic compaction      — suggests compact at COMPACT_THRESHOLD tool calls
+ *  4. MAX_THINKING_TOKENS       — applied at LLM level via llm.js
+ *  5. Instincts extraction      — ECC Continuous Learning v2 at session end
+ *  6. Stop hook                 — webhook notification on task complete
  */
 const fs   = require('fs');
 const path = require('path');
@@ -17,16 +16,31 @@ const { runAgent, getAgent, injectAgent } = require('./agents');
 const { KINDS, OctopusError } = require('./errors');
 const { createPermissionProxy } = require('./permissions');
 const { onStop } = require('./hooks');
+const { shouldSuggestCompaction } = require('./compress');
+const { processSession } = require('./instincts');
 
-// Hard-coded gates as safety net; dynamic agents also caught via canApprove flag
+// Hard-coded gates — also caught dynamically via canApprove flag
 const GATE_AGENTS = new Set([
   'reviewer','securityreviewer','probe','factchecker','releasekeeper','sandboxqa',
 ]);
 
-// Agents that review the same artifact independently — safe to run in parallel
+// Agents that review the same artifact independently — run in parallel
 const PARALLEL_SAFE = new Set([
   'reviewer','securityreviewer','probe','factchecker',
 ]);
+
+// ── Tool-call counter (Strategic Compaction) ──────────────────────────────────
+
+let sessionToolCallCount = 0;
+
+function incrementToolCalls() {
+  sessionToolCallCount++;
+  return sessionToolCallCount;
+}
+
+function resetToolCalls() {
+  sessionToolCallCount = 0;
+}
 
 // ── Auto-agent synthesis ──────────────────────────────────────────────────────
 
@@ -81,7 +95,7 @@ function isGate(agentName) {
   return mod ? mod.canApprove === true : false;
 }
 
-// ── Stage grouping — consecutive PARALLEL_SAFE agents → one parallel stage ───
+// ── Stage grouping ────────────────────────────────────────────────────────────
 
 function groupIntoStages(plan) {
   const stages = [];
@@ -89,7 +103,6 @@ function groupIntoStages(plan) {
   while (i < plan.length) {
     const key = plan[i].agent.toLowerCase();
     if (PARALLEL_SAFE.has(key)) {
-      // Collect all consecutive parallel-safe agents into one stage
       const stage = [];
       while (i < plan.length && PARALLEL_SAFE.has(plan[i].agent.toLowerCase())) {
         stage.push(plan[i]);
@@ -115,6 +128,7 @@ async function runParallelStage(stageAgents, task, memory, results, errors) {
       await ensureAgent(agentName).catch(e =>
         console.warn(`[runner] Could not auto-create "${agentName}": ${e.message}`)
       );
+      incrementToolCalls();
       const restricted = createPermissionProxy(agentName, memory);
       const result = await runAgent(agentName, { task, query: task }, restricted);
       return { agentName, result };
@@ -160,6 +174,7 @@ async function runSequentialStage(stepObj, task, memory, results, errors) {
 
   try {
     console.log(`[runner] Spawning ${agentName}…`);
+    incrementToolCalls();
     const restricted = createPermissionProxy(agentName, memory);
     const result = await runAgent(agentName, { task, query: task }, restricted);
     results[agentName] = result;
@@ -191,6 +206,7 @@ async function runSequentialStage(stepObj, task, memory, results, errors) {
 
 async function runTask(task, memory) {
   console.log(`[runner] Task: "${task}"`);
+  resetToolCalls();
 
   const planResult = await runAgent('cortex', { task, query: task }, memory);
 
@@ -203,6 +219,13 @@ async function runTask(task, memory) {
   const errors  = [];
 
   for (const stage of stages) {
+    // Strategic compaction hint (ECC: suggest after COMPACT_THRESHOLD tool calls)
+    const lastAdvice = Object.values(results).pop()?.advice || '';
+    const { suggest, reason } = shouldSuggestCompaction(sessionToolCallCount, lastAdvice);
+    if (suggest) {
+      console.error(`[runner] 💡 Strategic compaction suggested: ${reason}`);
+    }
+
     if (stage.length > 1) {
       await runParallelStage(stage, task, memory, results, errors);
     } else {
@@ -217,15 +240,27 @@ async function runTask(task, memory) {
       `Planned: ${planResult.plan.map(s => s.agent).join(', ')}`,
       `Ran: ${Object.keys(results).length}`,
       `Errors: ${errors.length}`,
+      `Tool calls: ${sessionToolCallCount}`,
     ]
   );
 
-  const finalResults = { task, results, errors, agents_spawned: Object.keys(results).filter(a => a !== 'cortex') };
+  const finalResults = {
+    task,
+    results,
+    errors,
+    agents_spawned:   Object.keys(results).filter(a => a !== 'cortex'),
+    tool_call_count:  sessionToolCallCount,
+  };
 
-  // Stop hook — notifications, webhooks, CI signals
+  // ECC Continuous Learning v2: extract instincts from session
+  processSession(finalResults).catch(e =>
+    console.warn(`[runner] Instinct extraction failed: ${e.message}`)
+  );
+
+  // Stop hook — webhook + console notification
   onStop(task, finalResults);
 
   return finalResults;
 }
 
-module.exports = { runTask };
+module.exports = { runTask, incrementToolCalls, resetToolCalls };

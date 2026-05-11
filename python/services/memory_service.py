@@ -145,6 +145,36 @@ def writeback():
     return jsonify({'ok': True})
 
 
+# ── Instincts (ECC Continuous Learning v2) ───────────────────────────────────
+
+@app.post('/instincts')
+def post_instinct():
+    data = request.json or {}
+    if not data.get('pattern'):
+        return jsonify({'error': 'pattern required'}), 400
+    new_id = store.save_instinct(data)
+    cache.flush()
+    return jsonify({'ok': True, 'id': new_id}), 201
+
+
+@app.get('/instincts')
+def get_instincts():
+    category       = request.args.get('category')
+    min_confidence = float(request.args.get('min_confidence', 0.5))
+    limit          = int(request.args.get('limit', 20))
+    return jsonify(store.load_instincts(category, min_confidence, limit))
+
+
+@app.patch('/instincts/<int:instinct_id>/evolve')
+def evolve_instinct(instinct_id):
+    skill_id = (request.json or {}).get('skill_id')
+    if not skill_id:
+        return jsonify({'error': 'skill_id required'}), 400
+    store.evolve_instinct(instinct_id, skill_id)
+    cache.flush()
+    return jsonify({'ok': True})
+
+
 # ── L4: Cache stats ───────────────────────────────────────────────────────────
 
 @app.get('/cache/stats')

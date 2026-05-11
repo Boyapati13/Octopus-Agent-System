@@ -2,41 +2,104 @@
 /**
  * Deterministic Hook System — Pre/PostToolUse + Stop
  *
- * These hooks are NOT AI. They run synchronously or in O(1) time.
- * Think git hooks for your agent: instant, token-free, always-on.
+ * Layer 1 (this file): token-free, synchronous guardrails.
+ * Layer 2: ECC AgentShield in SecurityReviewer (semantic, LLM-assisted).
+ * Layer 3: Octopus SecurityReviewer GATE (OWASP + quick patterns).
  *
- * PreToolUse  — blocks known-fatal commands before any code runs
- * PostToolUse — auto-formats written files (eslint/prettier)
- * onStop      — fires a completion notification at end of task chain
+ * Conflict prevention: hooks are keyed by ID in REGISTERED_HOOKS.
+ * Calling registerHookGuard() for an already-registered ID is a no-op.
+ * This prevents duplicate firing when both Octopus and ECC hooks are active.
+ *
+ * Profile levels (ECC-compatible ECC_HOOK_PROFILE env var):
+ *   minimal  — fatal command blocks only
+ *   standard — fatal + code quality warnings (default)
+ *   strict   — fatal + quality + extra security checks
  */
 const { execSync } = require('child_process');
+const fs     = require('fs');
 const path   = require('path');
 const https  = require('https');
 const http   = require('http');
 const { KINDS, OctopusError } = require('./errors');
 
-// ── Fatal patterns — blocked instantly, zero AI tokens spent ─────────────────
+const HOOK_PROFILE = (process.env.ECC_HOOK_PROFILE || 'standard').toLowerCase();
+
+// ── Hook deduplication registry ───────────────────────────────────────────────
+
+const REGISTERED_HOOKS = new Set();
+
+function registerHookGuard(id) {
+  if (REGISTERED_HOOKS.has(id)) return false; // already registered — skip
+  REGISTERED_HOOKS.add(id);
+  return true;
+}
+
+// ── Fatal patterns — blocked instantly, zero AI tokens ────────────────────────
 
 const FATAL_COMMAND_PATTERNS = [
-  /rm\s+-[rRfF]{1,2}\s+\/\s*$/,          // rm -rf /
-  /rm\s+-[rRfF]{1,2}\s+\/\*/,            // rm -rf /*
-  /rm\s+-[rRfF]{1,2}\s+~\s*$/,           // rm -rf ~  (home)
-  /mkfs\b/i,                               // format block device
-  /:\s*\(\s*\)\s*\{.*:\|:.*\}/,          // fork bomb
-  /dd\s+.*\bof=\/dev\/[sh]d[a-z]/i,      // dd to raw disk
-  />\s*\/dev\/[sh]d[a-z]\b/,             // redirect to raw disk
-  /chmod\s+-R\s+777\s+\//i,              // chmod 777 / recursive
+  /rm\s+-[rRfF]{1,2}\s+\/\s*$/,
+  /rm\s+-[rRfF]{1,2}\s+\/\*/,
+  /rm\s+-[rRfF]{1,2}\s+~\s*$/,
+  /mkfs\b/i,
+  /:\s*\(\s*\)\s*\{.*:\|:.*\}/,
+  /dd\s+.*\bof=\/dev\/[sh]d[a-z]/i,
+  />\s*\/dev\/[sh]d[a-z]\b/,
+  /chmod\s+-R\s+777\s+\//i,
 ];
 
 const FATAL_SQL_PATTERNS = [
   /\bDROP\s+DATABASE\b/i,
   /\bDROP\s+SCHEMA\b/i,
-  /\bDROP\s+TABLE\b(?!\s+IF\s+EXISTS\s+\w*_test\b)/i,  // allow _test tables
+  /\bDROP\s+TABLE\b(?!\s+IF\s+EXISTS\s+\w*_test\b)/i,
   /\bTRUNCATE\s+TABLE\b(?!\s+\w*_test\b)/i,
-  /\bDELETE\s+FROM\s+\w+\s*(?:;|$)/i,    // DELETE with no WHERE clause
+  /\bDELETE\s+FROM\s+\w+\s*(?:;|$)/i,
 ];
 
-// ── PreToolUse — synchronous, called before any tool logic ───────────────────
+// ── Quality patterns (standard + strict profiles) ─────────────────────────────
+
+const QUALITY_CHECKS = [
+  {
+    re: /console\.log\s*\(/g,
+    level: 'standard',
+    warn: (count, file) =>
+      `[hooks:post] ⚠ ${count} console.log() found in ${file} — use console.error() for debug output or remove before production`,
+  },
+  {
+    re: /\bvar\s+/g,
+    level: 'standard',
+    warn: (count, file) =>
+      `[hooks:post] ⚠ ${count} var declaration(s) in ${file} — ECC coding-standard: prefer const/let`,
+  },
+  {
+    re: /:\s*any\b/g,
+    level: 'standard',
+    warn: (count, file) =>
+      `[hooks:post] ⚠ ${count} TypeScript "any" type(s) in ${file} — ECC: use explicit interfaces`,
+  },
+  {
+    re: /catch\s*\([^)]*\)\s*\{\s*\}/g,
+    level: 'strict',
+    warn: (count, file) =>
+      `[hooks:post] ⚠ ${count} empty catch block(s) in ${file} — silent error swallowing`,
+  },
+  {
+    re: /\.innerHTML\s*=/g,
+    level: 'strict',
+    warn: (count, file) =>
+      `[hooks:post] 🚨 innerHTML assignment in ${file} — XSS risk (OWASP A03)`,
+  },
+  {
+    re: /Math\.random\s*\(\s*\)/g,
+    level: 'strict',
+    warn: (count, file) =>
+      `[hooks:post] ⚠ Math.random() in ${file} — not cryptographically secure`,
+  },
+];
+
+const PROFILE_LEVEL = { minimal: 0, standard: 1, strict: 2 };
+const CURRENT_LEVEL = PROFILE_LEVEL[HOOK_PROFILE] ?? 1;
+
+// ── PreToolUse — synchronous, called before any tool logic ────────────────────
 
 function preToolUse(toolName, args) {
   if (toolName !== 'octopus_execute_command') return;
@@ -47,7 +110,7 @@ function preToolUse(toolName, args) {
     if (pattern.test(cmd)) {
       throw new OctopusError(
         KINDS.PERMISSION_DENIED,
-        `PreToolUse hook: fatal command blocked — "${cmd}"`,
+        `PreToolUse [Octopus]: fatal command blocked — "${cmd.slice(0, 80)}"`,
         'hooks',
         { hook: 'PreToolUse', pattern: pattern.toString(), command: cmd }
       );
@@ -58,7 +121,7 @@ function preToolUse(toolName, args) {
     if (pattern.test(cmd)) {
       throw new OctopusError(
         KINDS.PERMISSION_DENIED,
-        `PreToolUse hook: dangerous SQL blocked — "${cmd}"`,
+        `PreToolUse [Octopus]: dangerous SQL blocked — "${cmd.slice(0, 80)}"`,
         'hooks',
         { hook: 'PreToolUse', pattern: pattern.toString(), command: cmd }
       );
@@ -66,19 +129,20 @@ function preToolUse(toolName, args) {
   }
 }
 
-// ── PostToolUse — async, fires after octopus_write_file succeeds ──────────────
+// ── PostToolUse — async, fires after octopus_write_file ───────────────────────
 
 async function postToolUse(toolName, args) {
   if (toolName !== 'octopus_write_file') return;
 
   const filePath = args.path || '';
-  const ext = path.extname(filePath).toLowerCase();
-  const JS_EXTS = new Set(['.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs']);
+  const ext      = path.extname(filePath).toLowerCase();
+  const JS_EXTS  = new Set(['.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs']);
 
   if (!JS_EXTS.has(ext)) return;
 
   const opts = { timeout: 15000, stdio: 'ignore', windowsHide: true };
 
+  // Auto-format (ECC PostToolUse hook behaviour)
   try {
     try {
       execSync(`npx prettier --write "${filePath}"`, opts);
@@ -88,12 +152,25 @@ async function postToolUse(toolName, args) {
       console.error(`[hooks:post] eslint --fix applied to ${filePath}`);
     }
   } catch (e) {
-    // Non-fatal: formatter missing or file has parse errors — log and continue
     console.warn(`[hooks:post] auto-format skipped for ${filePath}: ${e.message}`);
+  }
+
+  // ECC code-quality warnings (non-blocking)
+  if (CURRENT_LEVEL >= PROFILE_LEVEL.standard) {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      for (const { re, level, warn } of QUALITY_CHECKS) {
+        if (PROFILE_LEVEL[level] > CURRENT_LEVEL) continue;
+        const matches = content.match(new RegExp(re.source, re.flags));
+        if (matches && matches.length > 0) {
+          console.warn(warn(matches.length, path.basename(filePath)));
+        }
+      }
+    } catch { /* file gone between write and read — skip */ }
   }
 }
 
-// ── onStop — fires at end of runTask(), notifies external watchers ────────────
+// ── onStop — fires at end of runTask() ───────────────────────────────────────
 
 function onStop(task, results) {
   const agentCount = Object.keys(results.results || {}).length;
@@ -113,7 +190,7 @@ function onStop(task, results) {
     const url  = new URL(webhookUrl);
     const mod  = url.protocol === 'https:' ? https : http;
     const req  = mod.request(url, {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length },
     });
     req.on('error', e => console.warn(`[hooks:stop] webhook failed: ${e.message}`));
@@ -124,4 +201,4 @@ function onStop(task, results) {
   }
 }
 
-module.exports = { preToolUse, postToolUse, onStop };
+module.exports = { preToolUse, postToolUse, onStop, registerHookGuard, REGISTERED_HOOKS };

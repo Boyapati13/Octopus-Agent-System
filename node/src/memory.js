@@ -88,6 +88,22 @@ async function getCacheStats() {
   return svcGet('/cache/stats') || {};
 }
 
+// ── Instincts (ECC Continuous Learning v2) ────────────────────────────────────
+
+async function getInstincts(category, minConfidence = 0.5, limit = 20) {
+  const params = { min_confidence: minConfidence, limit };
+  if (category) params.category = category;
+  return svcGet('/instincts', params) || [];
+}
+
+async function saveInstinct(instinct) {
+  return svcPost('/instincts', instinct);
+}
+
+async function evolveInstinct(instinctId, skillId) {
+  return svcPost(`/instincts/${instinctId}/evolve`, { skill_id: skillId });
+}
+
 async function structuralImpact(paths) {
   return svcPost('/structural/impact', { paths }) || [];
 }
@@ -122,4 +138,5 @@ module.exports = {
   getContext, searchStructural, getDecisions, saveDecision,
   getRun, saveRun, compactSession, writeback, getCacheStats,
   structuralImpact, findRelevantFiles, loadLocalStructural,
+  getInstincts, saveInstinct, evolveInstinct,
 };
