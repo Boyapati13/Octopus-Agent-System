@@ -1,5 +1,5 @@
 {
-  "_note": "Gemini tool declarations. Pass the \"tools\" array to google.generativeai SDK. Gemini CLI MCP support: add to ~/.gemini/config.json as an mcpServer entry.",
+  "_note": "Gemini tool declarations for google.generativeai SDK. Gemini CLI: add geminiCliMcp block to ~/.gemini/config.json.",
   "suggestedModel": "gemini-2.5-pro",
   "geminiCliMcp": {
     "name": "octopus-2",

@@ -1,8 +1,8 @@
 {
-  "_note": "Claude Code uses MCP stdio transport. Register in ~/.claude/settings.json — see README Connect section.",
+  "_note": "Claude Code uses MCP stdio. Register in ~/.claude/settings.json — see README.",
   "name": "octopus-2",
-  "version": "2.0.1",
-  "description": "Octopus Sovereign Edition — 23 tools, Zero-Key auth, Sovereign Fallback",
+  "version": "2.0.2",
+  "description": "Octopus Sovereign Edition — 23 tools, Zero-Key auth",
   "entrypoint": "C:\\Users\\Tenders\\Downloads\\octopus-software-full\\node\\src\\mcp.js",
   "transport": "stdio",
   "connection": {

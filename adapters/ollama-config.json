@@ -1,0 +1,130 @@
+{
+  "_note": "Ollama integration config. Set LLM_PROVIDER=ollama and LLM_MODEL=<name> in node/.env or MCP client env block.",
+  "status": "online",
+  "base_url": "http://localhost:11434",
+  "recommended_model": "gemma4:e2b",
+  "sovereign_fallback_model": "gemma4:e2b",
+  "installed_models": [
+    {
+      "name": "nemotron-3-super:cloud",
+      "paramSize": "unknown",
+      "quantization": "unknown",
+      "sizeGb": "0.0 GB",
+      "family": "unknown",
+      "isCloud": true,
+      "toolCalling": true,
+      "bestFor": "Cloud — Nvidia Nemotron (via Ollama proxy)"
+    },
+    {
+      "name": "kimi-k2.6:cloud",
+      "paramSize": "1T",
+      "quantization": "int4",
+      "sizeGb": "0.0 GB",
+      "family": "kimi-k2",
+      "isCloud": true,
+      "toolCalling": true,
+      "bestFor": "Cloud — 1T param, best Cortex planning (via Ollama proxy)"
+    },
+    {
+      "name": "qwen2.5-coder:1.5b-base",
+      "paramSize": "1.5B",
+      "quantization": "Q4_K_M",
+      "sizeGb": "1.0 GB",
+      "family": "qwen2",
+      "isCloud": false,
+      "toolCalling": false,
+      "bestFor": "Fast iteration, simple chains (no tool calling)"
+    },
+    {
+      "name": "gemma4:e2b",
+      "paramSize": "5.1B",
+      "quantization": "Q4_K_M",
+      "sizeGb": "7.2 GB",
+      "family": "gemma4",
+      "isCloud": false,
+      "toolCalling": true,
+      "bestFor": "Default — fast, all agents, Sovereign Fallback"
+    },
+    {
+      "name": "glm-4.7-flash:latest",
+      "paramSize": "29.9B",
+      "quantization": "Q4_K_M",
+      "sizeGb": "19.0 GB",
+      "family": "glm4moelite",
+      "isCloud": false,
+      "toolCalling": true,
+      "bestFor": "Highest quality local inference — all agents"
+    },
+    {
+      "name": "qwen2.5-coder:7b",
+      "paramSize": "7.6B",
+      "quantization": "Q4_K_M",
+      "sizeGb": "4.7 GB",
+      "family": "qwen2",
+      "isCloud": false,
+      "toolCalling": true,
+      "bestFor": "Code tasks — Forge, Reviewer, SandboxQA"
+    }
+  ],
+  "env_snippets": {
+    "default": {
+      "LLM_PROVIDER": "ollama",
+      "LLM_MODEL": "gemma4:e2b",
+      "OCTOPUS_CALLER": "ollama"
+    },
+    "coding": {
+      "LLM_PROVIDER": "ollama",
+      "LLM_MODEL": "qwen2.5-coder:7b",
+      "OCTOPUS_CALLER": "ollama"
+    },
+    "best_quality": {
+      "LLM_PROVIDER": "ollama",
+      "LLM_MODEL": "gemma4:e2b",
+      "OCTOPUS_CALLER": "ollama"
+    }
+  },
+  "open_webui_mcp": {
+    "_note": "Open WebUI supports MCP tools. Add this server in Open WebUI → Admin → Tools → Add MCP Server.",
+    "command": "node",
+    "args": [
+      "C:\\Users\\Tenders\\Downloads\\octopus-software-full\\node\\src\\mcp.js"
+    ],
+    "env": {
+      "SAFE_MODE": "false",
+      "MEMORY_SERVICE_URL": "http://localhost:5000",
+      "OCTOPUS_CALLER": "ollama"
+    }
+  },
+  "pull_commands": [
+    "ollama pull gemma4:e2b         # Default Sovereign Fallback (~7 GB)",
+    "ollama pull gemma4:9b          # Complex planning (~9 GB)",
+    "ollama pull qwen2.5-coder:7b   # Coding tasks (~5 GB)",
+    "ollama pull glm-4.7-flash      # Best local quality (~19 GB)"
+  ],
+  "tools": [
+    "octopus_plan_task",
+    "octopus_run_task_chain",
+    "octopus_search_memory",
+    "octopus_get_decisions",
+    "octopus_compact_session",
+    "octopus_execute_command",
+    "octopus_write_file",
+    "octopus_read_file",
+    "octopus_create_agent",
+    "octopus_scan_security",
+    "octopus_llm_complete",
+    "octopus_browser_navigate",
+    "octopus_browser_snapshot",
+    "octopus_skill_scout",
+    "octopus_skill_synthesize",
+    "octopus_skill_validate",
+    "octopus_skill_deploy",
+    "octopus_skill_retire",
+    "octopus_skill_list",
+    "octopus_browser_interact",
+    "octopus_login",
+    "octopus_vault_check",
+    "octopus_memory_status"
+  ],
+  "toolCount": 23
+}

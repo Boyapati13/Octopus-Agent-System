@@ -2,8 +2,8 @@
   "$schema": "https://modelcontextprotocol.io/schema/server-manifest.json",
   "mcpVersion": "1.0",
   "name": "octopus-2",
-  "version": "2.0.1",
-  "description": "Octopus Sovereign Edition — self-evolving AI agent system with 23 tools. Zero-Key auth, Sovereign Fallback to local Ollama, 14 specialist agents.",
+  "version": "2.0.2",
+  "description": "Octopus Sovereign Edition — self-evolving AI agent system. 23 tools, Zero-Key auth, Sovereign Fallback to local Ollama.",
   "homepage": "https://github.com/Boyapati13/Octopus-Agent-System",
   "server": {
     "transport": "stdio",
@@ -120,5 +120,5 @@
       "description": "Diagnostic: ping the Python memory service (port 5000) and return its health status. Use this to verify the service is running before running agent task chains."
     }
   ],
-  "prerequisite": "Python memory service must be running on port 5000 before starting this server."
+  "prerequisite": "Python memory service must be running on port 5000."
 }

@@ -1,5 +1,5 @@
 {
-  "_note": "Cursor MCP registration. Merge the mcpServers block into %APPDATA%\\Cursor\\User\\globalStorage\\mcp.json (Windows) or ~/.cursor/mcp.json (Mac/Linux). Then: Cursor → Settings → MCP → Reload.",
+  "_note": "Merge mcpServers into %APPDATA%\\Cursor\\User\\globalStorage\\mcp.json (Win) or ~/.cursor/mcp.json (Mac/Linux). Then: Cursor → Settings → MCP → Reload.",
   "mcpServers": {
     "octopus-2": {
       "command": "node",

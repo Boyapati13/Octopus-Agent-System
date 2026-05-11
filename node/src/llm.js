@@ -7,6 +7,7 @@
  *   OCTOPUS_CALLER=claude   → anthropic / claude-sonnet-4-6  (default)
  *   OCTOPUS_CALLER=openai   → openai    / gpt-4o
  *   OCTOPUS_CALLER=gemini   → google    / gemini-2.5-pro
+ *   OCTOPUS_CALLER=ollama   → ollama    / gemma4:e2b  (local, no key needed)
  *   OCTOPUS_CALLER=cursor   → uses LLM_PROVIDER/LLM_MODEL (no override)
  *   (unset)                 → uses LLM_PROVIDER/LLM_MODEL env vars
  *
@@ -28,9 +29,10 @@ const axios = require('axios');
 // OCTOPUS_CALLER is set in the MCP client's env block — MCP stdio has no built-in caller identity
 const CALLER = (process.env.OCTOPUS_CALLER || '').toLowerCase();
 const CALLER_PRESETS = {
-  claude:   { provider: 'anthropic', model: 'claude-sonnet-4-6' },
-  openai:   { provider: 'openai',    model: 'gpt-4o'            },
-  gemini:   { provider: 'google',    model: 'gemini-2.5-pro'    },
+  claude:    { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+  openai:    { provider: 'openai',    model: 'gpt-4o'            },
+  gemini:    { provider: 'google',    model: 'gemini-2.5-pro'    },
+  ollama:    { provider: 'ollama',    model: 'gemma4:e2b'        },
   // cursor/windsurf/continue defer to LLM_PROVIDER/LLM_MODEL env vars
 };
 const preset = CALLER_PRESETS[CALLER] || null;

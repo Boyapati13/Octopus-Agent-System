@@ -1,5 +1,5 @@
 {
-  "_note": "OpenAI function-calling schema. Pass the \"tools\" array to Chat Completions or Assistants API. ChatGPT Desktop does not support MCP — use this schema with the API directly.",
+  "_note": "OpenAI function-calling. Pass \"tools\" to Chat Completions or Assistants API. ChatGPT Desktop does not support MCP.",
   "model": "gpt-4o",
   "tools": [
     {
