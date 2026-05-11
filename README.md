@@ -1,19 +1,34 @@
-# 🐙 Octopus 2.0 — ECC Fusion
+# 🐙 Octopus 2.0 — Sovereign Edition
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-72%20passing-brightgreen)](#testing)
 [![Agents](https://img.shields.io/badge/agents-14-blue)](#agents)
 [![Tools](https://img.shields.io/badge/MCP%20tools-23-purple)](#mcp-tools)
 [![AgentShield](https://img.shields.io/badge/AgentShield-102%20rules-red)](#agentshield)
-[![ECC Skills](https://img.shields.io/badge/ECC%20Skills-195%2B-orange)](#ecc-fusion)
-[![Ollama](https://img.shields.io/badge/Ollama-Gemma%204%20ready-blue)](#ollama--gemma-4)
 [![Zero-Key](https://img.shields.io/badge/Auth-Zero--Key%20Vault-success)](#zero-key-authentication)
+[![Ollama](https://img.shields.io/badge/Ollama-6%20models%20detected-blue)](#ollama--local-models)
+[![Cross-Market](https://img.shields.io/badge/MCP-Universal%20Registry-orange)](#cross-market-universal-mcp)
 
-A **self-evolving**, **continuously-learning** multi-agent AI system. Octopus 2.0 fuses the complete [Everything Claude Code (ECC)](https://github.com/affaan-m/everything-claude-code) ecosystem into its core — 195+ pre-vetted skills, 102 AgentShield security rules, Continuous Learning v2 (Instincts), and parallel QA execution.
+A **self-evolving**, **continuously-learning** multi-agent AI system. Sovereign Edition adds Zero-Key OS Vault auth, a Cross-Market Universal MCP adapter registry, caller-aware LLM routing, and Sovereign Fallback to local Ollama when no cloud key is present.
 
-Works with **Claude · GPT-4o · Gemini · Ollama/Gemma 4** (local, no API key). Installs into Claude Desktop, Claude Code, Cursor, Windsurf, and Continue.dev automatically.
+Works with **Claude · GPT-4o · Gemini · Ollama** (local, no API key). Connects to Claude Desktop, Claude Code, Cursor, Windsurf, Continue.dev, and any MCP-compatible client automatically.
 
-**Zero-Key architecture:** API keys never touch `.env`. Run `octopus_login` in your AI chat — the browser opens the provider dashboard, you paste the key once, and it's stored in the OS Vault (Windows Credential Manager / macOS Keychain / Linux Secret Service). No file editing, no credential leaks.
+---
+
+## What's New — Sovereign Edition
+
+| Feature | Description |
+|---|---|
+| **23 MCP Tools** | Added `octopus_login`, `octopus_vault_check`, `octopus_memory_status` |
+| **Zero-Key Auth** | `octopus_login` stores keys in OS Vault — no `.env` editing, ever |
+| **4-Tier Key Cascade** | OS Vault → CLI Session → Process Env → .env fallback |
+| **Sovereign Fallback** | No cloud key? Auto-routes to local Ollama `gemma4:e2b` |
+| **Caller-Aware Routing** | `OCTOPUS_CALLER` env picks the right model per connected AI |
+| **Cross-Market Adapters** | `npm run cross-link` syncs 6 adapter files from one source of truth |
+| **Ollama Live Detection** | `adapters/ollama-config.json` built from your actual installed models |
+| **Self-Healing Startup** | `start_mcp.ps1` auto-installs missing deps, detects `py` launcher |
+| **Python 3.14 / Windows** | Uses `py` launcher throughout — works with Python 3.14.x |
+| **Interactive Login Menu** | `vault_login.js` — enquirer select + masked password, 3 providers + Vertex/Bedrock guide |
 
 ---
 
@@ -31,24 +46,20 @@ curl -sSL https://raw.githubusercontent.com/Boyapati13/Octopus-Agent-System/mast
 
 The installer:
 - Clones the repo into `~/Octopus-Agent-System`
-- Installs all Node + Python dependencies (including `keytar` for OS Vault access)
-- Auto-detects Ollama/Gemma 4 and pre-configures the LLM provider
-- Writes `node/.env` with ECC 2.0 defaults — **no API keys in the file**
-- Guards `node/.env` in `.gitignore`
-- Registers the MCP server with every detected client (Claude Desktop, Claude Code, Cursor, Windsurf, Continue.dev)
+- Installs all Node + Python dependencies (`keytar`, `enquirer`, `chalk` included)
+- Auto-detects Ollama and pre-configures `LLM_PROVIDER=ollama`
+- Writes `node/.env` — **no API keys in the file** (use `octopus_login` instead)
+- Registers Octopus with every detected client: Claude Desktop, Claude Code, Cursor, Windsurf, Continue.dev
 - Bootstraps `.claude/rules/` ECC guardrail files
+- Linux: detects and prompts to install `libsecret-1-dev` for OS Vault support
 
-Restart your LLM client after running — all 23 Octopus tools appear automatically.
-
-**Zero-Key first run:** after starting the MCP server, type `octopus_login` in your AI chat to link your first provider.
+Restart your AI client after running — all 23 tools appear automatically.
 
 ---
 
 ## Start the Stack
 
-After installing, two scripts launch the full system:
-
-**Windows**
+**Windows (Self-Healing)**
 ```powershell
 .\start_mcp.ps1
 ```
@@ -58,11 +69,13 @@ After installing, two scripts launch the full system:
 ./start_mcp.sh
 ```
 
-Both scripts start the Python memory service (port 5000) and the Node MCP server together, and clean up the background process on exit. Or start them individually:
+Both scripts run a **vault pre-flight check** (migrates plain-text `.env` keys to the OS Vault), start the Python memory service on port 5000, and launch the MCP server. `start_mcp.ps1` also auto-installs missing Node dependencies.
 
+Or start individually:
 ```bash
-# Terminal 1 — Python memory service (Windows: use py instead of python)
-py python/services/memory_service.py
+# Terminal 1 — Python memory service
+py python/services/memory_service.py      # Windows
+python3 python/services/memory_service.py # Mac/Linux
 
 # Terminal 2 — MCP server
 cd node && npm run mcp
@@ -73,53 +86,14 @@ cd node && npm run serve
 
 ---
 
-## Cross-Market Universal MCP
-
-Octopus exposes a standard MCP stdio server that any MCP-compatible client can connect to. A Universal Adapter Registry lives in `global-config/` and `adapters/` — regenerate it any time with:
-
-```bash
-cd node && npm run cross-link
-```
-
-This reads `node/src/tools.js` (single source of truth) and regenerates five files in sync:
-
-| File | Purpose |
-|---|---|
-| `global-config/universal-mcp.json` | Standard MCP server manifest — import into any MCP client |
-| `global-config/claude-plugin/plugin.json` | Claude Code integration descriptor |
-| `adapters/openai-functions.json` | OpenAI function-calling schema (Assistants API / Chat Completions) |
-| `adapters/gemini-tools.json` | Gemini API tool declarations + Gemini CLI MCP config snippet |
-| `adapters/cursor-mcp.json` | Cursor MCP registration block |
-
-### Caller-Aware Routing
-
-Set `OCTOPUS_CALLER` in your MCP client's env block to tell Octopus which AI is calling. It auto-selects the best provider and model for that AI:
-
-| `OCTOPUS_CALLER` | Provider | Model |
-|---|---|---|
-| `claude` | Anthropic | `claude-sonnet-4-6` |
-| `openai` | OpenAI | `gpt-4o` |
-| `gemini` | Google | `gemini-2.5-pro` |
-| `cursor` / `windsurf` / `continue` | Uses `LLM_PROVIDER` env | Uses `LLM_MODEL` env |
-| *(unset)* | Uses `LLM_PROVIDER` env | Uses `LLM_MODEL` env |
-
-**Sovereign Fallback** applies for all callers: if the selected provider has no key in the Vault, calls are automatically routed to local Ollama (`gemma4:e2b`).
-
-> **ChatGPT Desktop** does not support MCP. Use `adapters/openai-functions.json` directly with the OpenAI Assistants API or pass it as the `tools` parameter in Chat Completions calls.
-
----
-
 ## Connect to Your AI
 
-The installer registers Octopus automatically with every detected client. For manual setup, add the block below to each client's config file — replace `YOUR_INSTALL_PATH` with your actual clone directory.
+The installer auto-registers Octopus with every detected client. For manual setup, add the config below — replace `YOUR_INSTALL_PATH` with your clone directory.
 
-> **Windows paths** require double backslashes in JSON: `C:\\Users\\You\\Octopus-Agent-System`
-
----
+> **Windows JSON paths** need double backslashes: `C:\\Users\\You\\Octopus-Agent-System`
 
 ### Claude Desktop
-
-**Config file:** `%APPDATA%\Claude\claude_desktop_config.json`
+**Config:** `%APPDATA%\Claude\claude_desktop_config.json`
 
 ```json
 {
@@ -130,28 +104,25 @@ The installer registers Octopus automatically with every detected client. For ma
       "env": {
         "SAFE_MODE": "false",
         "MAX_THINKING_TOKENS": "10000",
-        "COMPACT_THRESHOLD": "50",
         "AGENTSHIELD_MODE": "advisory",
-        "ECC_HOOK_PROFILE": "standard",
         "PROJECT_ROOT": "YOUR_INSTALL_PATH",
         "ECC_RULES_PATH": "YOUR_INSTALL_PATH\\.claude\\rules",
         "MEMORY_SERVICE_URL": "http://localhost:5000",
         "LLM_PROVIDER": "ollama",
         "LLM_MODEL": "gemma4:e2b",
-        "OLLAMA_BASE_URL": "http://localhost:11434"
+        "OLLAMA_BASE_URL": "http://localhost:11434",
+        "OCTOPUS_CALLER": "claude"
       }
     }
   }
 }
 ```
-
-After saving, **fully restart Claude Desktop**. All 23 tools appear in the tool tray.
+**After saving:** fully restart Claude Desktop.
 
 ---
 
 ### Claude Code
-
-**Config file:** `~/.claude/settings.json` (Windows: `%USERPROFILE%\.claude\settings.json`)
+**Config:** `%USERPROFILE%\.claude\settings.json` (Mac: `~/.claude/settings.json`)
 
 ```json
 {
@@ -162,32 +133,27 @@ After saving, **fully restart Claude Desktop**. All 23 tools appear in the tool 
       "env": {
         "SAFE_MODE": "false",
         "MAX_THINKING_TOKENS": "10000",
-        "COMPACT_THRESHOLD": "50",
         "AGENTSHIELD_MODE": "advisory",
-        "ECC_HOOK_PROFILE": "standard",
         "PROJECT_ROOT": "YOUR_INSTALL_PATH",
         "ECC_RULES_PATH": "YOUR_INSTALL_PATH/.claude/rules",
         "MEMORY_SERVICE_URL": "http://localhost:5000",
         "LLM_PROVIDER": "ollama",
         "LLM_MODEL": "gemma4:e2b",
-        "OLLAMA_BASE_URL": "http://localhost:11434"
+        "OLLAMA_BASE_URL": "http://localhost:11434",
+        "OCTOPUS_CALLER": "claude"
       }
     }
   }
 }
 ```
-
-No restart needed — Claude Code picks up MCP config changes on the next session. Type `/mcp` to verify the server connected.
+Type `/mcp` to verify the server connected. No restart needed.
 
 ---
 
 ### Cursor
+**Config:** `%APPDATA%\Cursor\User\globalStorage\mcp.json` (Mac: `~/.cursor/mcp.json`)
 
-**Config file:**
-- Windows: `%APPDATA%\Cursor\User\globalStorage\mcp.json`
-- Mac/Linux: `~/.cursor/mcp.json`
-
-Or copy the pre-generated block from `adapters/cursor-mcp.json` (kept in sync by `npm run cross-link`).
+Or copy `adapters/cursor-mcp.json` directly — kept in sync by `npm run cross-link`.
 
 ```json
 {
@@ -200,22 +166,19 @@ Or copy the pre-generated block from `adapters/cursor-mcp.json` (kept in sync by
         "MAX_THINKING_TOKENS": "10000",
         "PROJECT_ROOT": "YOUR_INSTALL_PATH",
         "MEMORY_SERVICE_URL": "http://localhost:5000",
-        "LLM_PROVIDER": "ollama",
-        "LLM_MODEL": "gemma4:e2b",
+        "LLM_PROVIDER": "anthropic",
         "OCTOPUS_CALLER": "cursor"
       }
     }
   }
 }
 ```
-
-In Cursor: **Cursor → Settings → MCP** — click **Reload** after saving the file.
+**After saving:** Cursor → Settings → MCP → Reload.
 
 ---
 
 ### Windsurf
-
-**Config file:** `~/.codeium/windsurf/mcp_config.json`
+**Config:** `~/.codeium/windsurf/mcp_config.json`
 
 ```json
 {
@@ -235,16 +198,12 @@ In Cursor: **Cursor → Settings → MCP** — click **Reload** after saving the
   }
 }
 ```
-
 Reload Windsurf after saving.
 
 ---
 
 ### Continue.dev
-
-**Config file:** `~/.continue/config.json`
-
-Add inside the existing `mcpServers` array (create the key if it doesn't exist):
+**Config:** `~/.continue/config.json`
 
 ```json
 {
@@ -265,101 +224,132 @@ Add inside the existing `mcpServers` array (create the key if it doesn't exist):
   ]
 }
 ```
-
-Reload the Continue extension after saving (`Ctrl+Shift+P` → **Continue: Reload**).
+`Ctrl+Shift+P` → **Continue: Reload** after saving.
 
 ---
 
-### Verify the connection
-
-In any connected client, ask:
+### Verify
+In any connected client:
 ```
 octopus_vault_check
 ```
-It will report which providers have keys, whether Ollama is running, and if Sovereign Fallback is active. If you see 23 tools and a response, Octopus is live.
+Returns vault key status per provider, Ollama health, and whether Sovereign Fallback is active.
 
 ---
 
-## What's New in 2.0 — ECC Fusion
+## Cross-Market Universal MCP
 
-| Feature | What was added |
+Octopus runs as a standard MCP stdio server — any MCP-compatible client can connect. A Universal Adapter Registry in `global-config/` and `adapters/` stays in sync with one command:
+
+```bash
+cd node && npm run cross-link
+```
+
+Reads `node/src/tools.js` and regenerates all 6 adapter files:
+
+| File | Use with |
 |---|---|
-| **195+ ECC Skills** | MarketScout checks the ECC library first before npm/PyPI/GitHub |
-| **102 AgentShield rules** | 5-category security scanner wired into SecurityReviewer |
-| **Continuous Learning v2** | Instincts extracted from sessions, stored in SQLite, graduated to skills |
-| **Strategic Compaction** | Milestone-aware context reduction — hint fires at 50 tool calls |
-| **MAX_THINKING_TOKENS** | Token budget cap applied across all 4 LLM providers |
-| **ECC Constitution layer** | `.claude/rules/*.md` injected first into every agent's context |
-| **Parallel QA execution** | Reviewer ‖ SecurityReviewer ‖ Probe ‖ FactChecker run simultaneously |
-| **TDD-first routing** | Cortex sends Probe before Forge for test-driven tasks |
-| **Ollama / Gemma 4** | Full local inference — no API key, no cloud cost |
-| **Zero-Key Authentication** | `octopus_login` stores keys in OS Vault — no `.env` editing ever |
-| **Cross-platform Vault** | Windows Credential Manager · macOS Keychain · Linux Secret Service |
-| **Windows-native** | Installer auto-escapes paths, detects `py` launcher, configures all clients |
+| `global-config/universal-mcp.json` | Any MCP client — standard server manifest |
+| `global-config/claude-plugin/plugin.json` | Claude Code integration descriptor |
+| `adapters/openai-functions.json` | OpenAI Assistants API / Chat Completions `tools` param |
+| `adapters/gemini-tools.json` | Gemini API `functionDeclarations` + Gemini CLI config |
+| `adapters/cursor-mcp.json` | Cursor `mcpServers` registration block |
+| `adapters/ollama-config.json` | Ollama model registry — built from your live Ollama instance |
+
+> **ChatGPT Desktop** does not support MCP. Use `adapters/openai-functions.json` with the OpenAI API directly.
 
 ---
 
-## ⚡ Performance
+## Caller-Aware Routing
 
-### ~75% QA Speedup — Parallel Gate Execution
+Set `OCTOPUS_CALLER` in any MCP client's `env` block. Octopus auto-selects provider + model for that AI:
+
+| `OCTOPUS_CALLER` | Provider | Model | Key needed |
+|---|---|---|---|
+| `claude` | Anthropic | `claude-sonnet-4-6` | Yes (or Sovereign Fallback) |
+| `openai` | OpenAI | `gpt-4o` | Yes (or Sovereign Fallback) |
+| `gemini` | Google | `gemini-2.5-pro` | Yes (or Sovereign Fallback) |
+| `ollama` | Ollama | `gemma4:e2b` | **No** — fully local |
+| `cursor` / `windsurf` / `continue` | Uses `LLM_PROVIDER` env | Uses `LLM_MODEL` env | Depends |
+| *(unset)* | Uses `LLM_PROVIDER` env | Uses `LLM_MODEL` env | Depends |
+
+**Sovereign Fallback** is always active: if the selected provider has no key in the Vault, the call automatically routes to local Ollama `gemma4:e2b` with no error.
+
+---
+
+## Zero-Key Authentication
+
+API keys never live in `.env`. The `getSecureKey` cascade retrieves them at runtime:
 
 ```
-Before  Atlas → Forge → Reviewer → SecurityReviewer → Probe → FactChecker → Scribe
-                         ↑  sequential — each waits for the previous (~4s)
-
-After   Atlas → Forge → [Reviewer ‖ SecurityReviewer ‖ Probe ‖ FactChecker] → Scribe
-                         ↑  one Promise.allSettled stage (~1s)  75% faster
+1. OS Vault      keytar → Windows Credential Manager / macOS Keychain / Linux Secret Service
+2. CLI Session   ~/.octopus/sessions.json  (cross-platform fallback when keytar unavailable)
+3. Process Env   externally set or sourced before start
+4. .env fallback node/.env plain-text (last resort)
 ```
 
-All gate failures collected together — no partial reporting on first fail.
+### Authorize a provider — first time only
 
-### ~60% Token Cost Reduction
+In any AI chat:
+```
+octopus_login
+```
 
+An interactive menu opens (provider select + masked key input). Choose your provider, paste the key — it's stored in the OS Vault immediately. No `.env` changes.
+
+**Migrate existing `.env` keys:** run `.\start_mcp.ps1` — the pre-flight check detects plain-text keys and offers automatic migration.
+
+---
+
+## Ollama / Local Models
+
+Octopus runs entirely on local models — no API key, no cloud cost.
+
+### Detected models on this machine
+
+| Model | Size | Tool calling | Best for |
+|---|---|---|---|
+| `kimi-k2.6:cloud` | 1T (cloud proxy) | ✅ | **Best Cortex planning**, complex task chains |
+| `nemotron-3-super:cloud` | cloud proxy | ✅ | Nvidia Nemotron quality via Ollama |
+| `glm-4.7-flash:latest` | 29.9 GB | ✅ | Best **local** quality — all agents |
+| `gemma4:e2b` | 7.2 GB | ✅ | **Default + Sovereign Fallback** — fast, all agents |
+| `qwen2.5-coder:7b` | 4.7 GB | ✅ | Forge, Reviewer, SandboxQA — coding tasks |
+| `qwen2.5-coder:1.5b-base` | 1.0 GB | ❌ | Fast iteration, simple chains |
+
+Pull additional models any time:
+```bash
+ollama pull gemma4:9b          # Complex planning (~9 GB)
+ollama pull llama3.2           # Minimal footprint (~2 GB)
+```
+
+After pulling, re-run `npm run cross-link` to update `adapters/ollama-config.json`.
+
+Switch model without restarting any service:
 ```env
-MAX_THINKING_TOKENS=10000    # ECC default — caps every LLM call
-COMPACT_THRESHOLD=50         # Suggest compaction after 50 tool calls
+LLM_PROVIDER=ollama
+LLM_MODEL=kimi-k2.6:cloud      # best quality (cloud via Ollama)
+LLM_MODEL=glm-4.7-flash:latest # best local quality
+LLM_MODEL=gemma4:e2b           # default
+LLM_MODEL=qwen2.5-coder:7b     # coding tasks
 ```
 
-`strategicCompact()` strips resolved context at milestone boundaries. The runner emits a compaction hint between stages, never mid-stage. Works across all providers.
-
----
-
-## 🧠 Continuous Learning v2 — Instincts
-
-At the end of every task chain, `processSession()` extracts patterns automatically:
-
-```
-Agent notes + findings
-      ↓  extractCandidates()  — confidence-weighted scoring
-      ↓  cluster()            — word-overlap similarity grouping
-      ↓  persistInstinct()    — SQLite instincts table  →  GET /instincts
-      ↓  elevateToSkills()    — confidence ≥ 0.8 → MarketScout proposal → active skill
-```
-
-**Lifecycle:**
-```
-Session 1  "Always use Promise.all for parallel calls"  confidence 0.55  occurrences 1
-Session 3  Same pattern seen again                       confidence 0.70  occurrences 3
-Session 6  Pattern confirmed                             confidence 0.83  occurrences 6
-           → elevated to skill candidate → /evolve → active skill
-```
-
-Injected into L5 context for: Cortex, Forge, Architect, SecurityReviewer, MarketScout, Toolsmith.
+### Open WebUI (Ollama browser UI with MCP)
+Go to **Admin → Tools → Add MCP Server** and paste the `open_webui_mcp` block from `adapters/ollama-config.json`.
 
 ---
 
 ## 🛡️ AgentShield — 3-Layer Security
 
 ```
-Layer 1  PreToolUse hook       0 tokens, synchronous   Blocks rm -rf /, fork bombs, DROP DATABASE
+Layer 1  PreToolUse hook       synchronous, 0 tokens   Blocks rm -rf, fork bombs, DROP DATABASE
 Layer 2  SecurityReviewer      OWASP Top 10            Quick patterns + AgentShield 5-category scan
 Layer 3  AgentShield gate      102 static rules        AGENTSHIELD_MODE=gate blocks on critical findings
 ```
 
 | Category | Rules | Catches |
 |---|---|---|
-| AS-S Secrets | 14 | API keys, private keys, connection strings |
-| AS-P Permissions | 20 | `SAFE_MODE=false`, `new Function()`, `__proto__`, `chmod 777` |
+| AS-S Secrets | 14 | Hardcoded API keys, private keys, connection strings |
+| AS-P Permissions | 20 | `eval()`, `new Function()`, `__proto__`, `chmod 777` |
 | AS-H Hook injection | 15 | `$()` in hooks, unescaped `execSync`, `eval` in PreToolUse |
 | AS-M MCP risk | 15 | `autoApprove:true`, raw shell transport, system root paths |
 | AS-A Agent config | 15 | Path traversal in agentName, unconditional `approved:true` |
@@ -367,8 +357,8 @@ Layer 3  AgentShield gate      102 static rules        AGENTSHIELD_MODE=gate blo
 
 ```env
 AGENTSHIELD_MODE=none      # disabled
-AGENTSHIELD_MODE=advisory  # log only (default)
-AGENTSHIELD_MODE=gate      # block pipeline on critical findings
+AGENTSHIELD_MODE=advisory  # log findings, don't block (default)
+AGENTSHIELD_MODE=gate      # block pipeline on any critical finding
 ```
 
 ---
@@ -378,173 +368,65 @@ AGENTSHIELD_MODE=gate      # block pipeline on critical findings
 ### 5-Layer Memory + Instincts
 
 ```
-L5  Task Context Profile  ephemeral · built per agent per call
-                          Injection order (highest weight first):
-                          1. OCTOPUS.md constitution
-                          2. ECC rules (.claude/rules/*.md)
-                          3. Instincts (confidence ≥ 0.7, top 10)
-                          4. L1 structural / L2 decisions / L3 run state
-L4  Prompt Cache          Redis optional · MD5-keyed (auto-invalidates on rule change)
-L3  Run State             SQLite session + compaction
-L2  Decision Memory       SQLite ADRs + instincts table
+L5  Task Context Profile  ephemeral — rebuilt per agent per call
+                          Priority: OCTOPUS.md → ECC Rules → Instincts → L1-L3
+L4  Prompt Cache          Redis (optional) · MD5-keyed, auto-invalidates on rule change
+L3  Run State             SQLite — session log + compaction records
+L2  Decision Memory       SQLite — ADRs + instincts table (confidence-weighted)
 L1  Structural Memory     SQLite graph + NetworkX runtime reasoning
 ```
 
 ### Self-Evolving Skill Marketplace
 
 ```
-ECC library (primary) → npm / PyPI / GitHub → Toolsmith → SandboxQA → Cortex → Active Registry
-  195+ vetted skills      fallback search       LLM synth   validate    approve    MCP + REST
+ECC library (195+ skills) → npm/PyPI/GitHub → Toolsmith → SandboxQA → Cortex → Active Registry
 ```
 
 ### Cortex Planning Patterns
 
 ```
-Default        Atlas → Architect → Forge → [QA gates] → Scribe → ReleaseKeeper
-TDD-first      Atlas → Probe (write tests) → Forge → [QA gates] → Scribe
-Security-first Atlas → SecurityReviewer → Forge → [QA gates] → Scribe
-Research-first Atlas → FactChecker → Architect → Forge → [QA gates] → Scribe
+Default         Atlas → Architect → Forge → [QA gates] → Scribe → ReleaseKeeper
+TDD-first       Atlas → Probe (write tests) → Forge → [QA gates] → Scribe
+Security-first  Atlas → SecurityReviewer → Forge → [QA gates] → Scribe
+Research-first  Atlas → FactChecker → Architect → Forge → [QA gates] → Scribe
 ```
-
----
-
-## Zero-Key Authentication
-
-API keys are **never stored in `.env`**. The `getSecureKey` cascade resolver retrieves them at runtime through four tiers:
-
-```
-1. OS Vault       keytar → Windows Credential Manager / macOS Keychain / Linux Secret Service
-2. CLI Session    ~/.octopus/sessions.json  (written by octopus_login; cross-platform fallback)
-3. Process Env    set externally or sourced by the parent shell before start
-4. .env fallback  node/.env plain-text (last resort, not recommended)
-```
-
-### Authorizing a provider
-
-In any AI chat with Octopus connected:
-```
-octopus_login   (then choose: anthropic | openai | google)
-```
-
-What happens:
-1. The agent-browser opens the provider's API key dashboard
-2. A masked prompt appears (or clear Authorize instructions on Linux)
-3. You paste your key — it's stored in the OS Vault immediately
-4. The `.env` file is never touched
-
-To migrate existing keys from `.env` to the Vault, run `.\start_mcp.ps1` (Windows) or `./start_mcp.sh` (Mac/Linux) — the pre-flight check offers to migrate automatically.
-
----
-
-## Manual Setup
-
-### 1 — Python memory service
-```bash
-cd python
-pip install -r requirements.txt
-py services/memory_service.py       # Windows (Python 3.14 launcher)
-# python3 services/memory_service.py  # Mac/Linux
-```
-
-### 2 — Index the repo (creates octopus.db + instincts table)
-```bash
-py python/indexer/index_repo.py --root . --db ./data/octopus.db
-# python3 python/indexer/index_repo.py ...   # Mac/Linux
-```
-
-### 3 — Node
-```bash
-cd node
-npm install
-# No .env key editing needed — use octopus_login (see above)
-```
-
-### 4 — LLM provider
-
-**Local — Gemma 4 (recommended, no API key)**
-```bash
-ollama pull gemma4:e2b    # default — efficient, works for most tasks
-ollama pull gemma4:9b     # recommended for complex Cortex planning (~8 GB VRAM)
-```
-```env
-LLM_PROVIDER=ollama
-LLM_MODEL=gemma4:e2b
-OLLAMA_BASE_URL=http://localhost:11434
-```
-
-**Cloud providers — link via OS Vault (no .env required)**
-```
-octopus_login   # then choose: anthropic / openai / google
-```
-Or set environment variables as a fallback:
-```env
-LLM_PROVIDER=anthropic   ANTHROPIC_API_KEY=sk-ant-...
-LLM_PROVIDER=openai      OPENAI_API_KEY=sk-...
-LLM_PROVIDER=google      GOOGLE_API_KEY=AIza...
-```
-
-### 5 — Start
-```bash
-./start_mcp.sh        # starts memory service + MCP server together (with vault pre-flight)
-# or individually:
-npm run mcp           # MCP stdio server
-npm run serve         # REST API (port 3001)
-npm test              # 72 tests
-```
-
----
-
-## Ollama / Gemma 4
-
-Octopus 2.0 is built for local inference. The installer auto-detects Ollama and pre-configures the `.env`.
-
-| Model | VRAM | Best for |
-|---|---|---|
-| `gemma4:e2b` | ~3 GB | Day-to-day tasks, Forge, Scribe, fast iteration (default) |
-| `gemma4:9b` | ~8 GB | **Complex Cortex planning**, SecurityReviewer deep analysis |
-| `llama3.2` | ~2 GB | Minimal footprint, simple task chains |
-| `qwen2.5-coder:7b` | ~5 GB | Code-heavy tasks, Forge + Reviewer |
-
-Switch model at any time by updating `LLM_MODEL` in `node/.env` — no restart of other services needed.
-
-`MAX_THINKING_TOKENS=10000` caps `num_predict` per call across all Ollama models.
 
 ---
 
 ## Agents
 
-| Agent | Role | Gate | 2.0 Addition |
-|---|---|---|---|
-| **Cortex** | LLM planner — TDD/security/research-first | ✅ | Team pattern routing |
-| **Atlas** | Structural memory search | | |
-| **Architect** | Boundary impact analysis | | Instincts-aware |
-| **Forge** | Implementation | | Instincts-aware |
-| **FactChecker** | Grounding gate | ✅ | Parallel QA stage |
-| **Reviewer** | Quality gate | ✅ | Parallel QA stage |
-| **SecurityReviewer** | OWASP + AgentShield 102-rule scan | ✅ | 3-layer pipeline |
-| **Probe** | Test coverage gate | ✅ | Parallel QA; TDD-first |
-| **Scribe** | Docs + changelog | | |
-| **ReleaseKeeper** | Final release gate | ✅ | |
-| **Navigator** | Browser automation | | |
-| **MarketScout** | ECC library → npm/PyPI/GitHub | | ECC primary source |
-| **Toolsmith** | LLM skill synthesis | | Instincts-aware |
-| **SandboxQA** | Isolated skill validation, self-corrects 3× | ✅ | |
+| Agent | Role | Gate |
+|---|---|---|
+| **Cortex** | LLM planner — TDD / security / research-first routing | ✅ |
+| **Atlas** | Structural memory search | |
+| **Architect** | Boundary impact analysis, instincts-aware | |
+| **Forge** | Implementation, instincts-aware | |
+| **FactChecker** | Grounding gate — parallel QA | ✅ |
+| **Reviewer** | Quality gate — parallel QA | ✅ |
+| **SecurityReviewer** | OWASP + AgentShield 102-rule scan — parallel QA | ✅ |
+| **Probe** | Test coverage gate — parallel QA, TDD-first | ✅ |
+| **Scribe** | Docs + changelog | |
+| **ReleaseKeeper** | Final release gate | ✅ |
+| **Navigator** | Browser automation | |
+| **MarketScout** | ECC library → npm / PyPI / GitHub | |
+| **Toolsmith** | LLM skill synthesis, instincts-aware | |
+| **SandboxQA** | Isolated skill validation, self-corrects 3× | ✅ |
 
 ---
 
-## MCP Tools
+## MCP Tools (23)
 
 | Category | Tools |
 |---|---|
-| Orchestration | `octopus_plan_task`, `octopus_run_task_chain` |
-| Memory | `octopus_search_memory`, `octopus_get_decisions`, `octopus_compact_session` |
-| Files | `octopus_read_file`, `octopus_write_file` (auto-formats JS/TS), `octopus_execute_command` |
-| Agents | `octopus_create_agent` (path-validated), `octopus_scan_security` |
-| LLM | `octopus_llm_complete` (MAX_THINKING_TOKENS capped) |
-| Browser | `octopus_browser_navigate`, `octopus_browser_snapshot`, `octopus_browser_interact` |
-| Skills | `octopus_skill_scout`, `octopus_skill_synthesize`, `octopus_skill_validate`, `octopus_skill_deploy`, `octopus_skill_retire`, `octopus_skill_list` |
-| **Auth** | **`octopus_login`** — Zero-Key OS Vault authorization (interactive menu) |
-| **Diagnostics** | `octopus_vault_check` — key/Ollama status + Sovereign Fallback indicator · `octopus_memory_status` — memory service health |
+| Orchestration | `octopus_plan_task` · `octopus_run_task_chain` |
+| Memory | `octopus_search_memory` · `octopus_get_decisions` · `octopus_compact_session` |
+| Files | `octopus_read_file` · `octopus_write_file` · `octopus_execute_command` |
+| Agents | `octopus_create_agent` · `octopus_scan_security` |
+| LLM | `octopus_llm_complete` |
+| Browser | `octopus_browser_navigate` · `octopus_browser_snapshot` · `octopus_browser_interact` |
+| Skills | `octopus_skill_scout` · `octopus_skill_synthesize` · `octopus_skill_validate` · `octopus_skill_deploy` · `octopus_skill_retire` · `octopus_skill_list` |
+| Auth | `octopus_login` — interactive OS Vault authorization (3 providers + Vertex/Bedrock guide) |
+| Diagnostics | `octopus_vault_check` · `octopus_memory_status` |
 
 ---
 
@@ -553,27 +435,56 @@ Switch model at any time by updating `LLM_MODEL` in `node/.env` — no restart o
 | Variable | Default | Description |
 |---|---|---|
 | `LLM_PROVIDER` | `anthropic` | `anthropic` · `openai` · `google` · `ollama` |
-| `LLM_MODEL` | provider default | Model override (e.g. `gemma4:9b`) |
-| `MAX_THINKING_TOKENS` | `Infinity` | Token cap per call — set `10000` for ECC optimisation |
+| `LLM_MODEL` | provider default | Model override — e.g. `gemma4:e2b`, `kimi-k2.6:cloud` |
+| `OCTOPUS_CALLER` | — | `claude` · `openai` · `gemini` · `ollama` · `cursor` — activates caller preset |
+| `SOVEREIGN_FALLBACK_MODEL` | `gemma4:e2b` | Ollama model used when cloud key is absent |
+| `MAX_THINKING_TOKENS` | `Infinity` | Token cap per LLM call — `10000` recommended |
 | `COMPACT_THRESHOLD` | `50` | Tool calls before strategic compaction hint |
 | `SAFE_MODE` | `true` | `false` to enable mutating tools |
 | `AGENTSHIELD_MODE` | `advisory` | `none` · `advisory` · `gate` |
 | `ECC_HOOK_PROFILE` | `standard` | `minimal` · `standard` · `strict` |
-| `PROJECT_ROOT` | `.` | Repo root — for OCTOPUS.md + instinct paths |
+| `PROJECT_ROOT` | `.` | Repo root for OCTOPUS.md + instinct paths |
 | `ECC_RULES_PATH` | `.claude/rules` | Always-loaded ECC guardrail rules |
 | `MEMORY_SERVICE_URL` | `http://localhost:5000` | Python memory service |
-| `OCTOPUS_WEBHOOK_URL` | — | Slack/Discord webhook on task completion |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server |
+| `OCTOPUS_WEBHOOK_URL` | — | Slack / Discord webhook on task completion |
 
 ---
 
-## SAFE_MODE
+## Project Structure
 
-Mutating tools disabled by default. Always-on read-only tools:
-`octopus_search_memory`, `octopus_scan_security`, `octopus_read_file`,
-`octopus_plan_task`, `octopus_skill_list`, `octopus_llm_complete`, `octopus_browser_snapshot`
-
-Set `SAFE_MODE=false` to enable the full pipeline. PreToolUse fatal-command blocks apply regardless of SAFE_MODE.
+```
+Octopus-Agent-System/
+├── install.ps1 / install.sh        One-liner installers (Zero-Key, py-aware)
+├── start_mcp.ps1 / start_mcp.sh    Self-healing startup + vault pre-flight
+├── global-config/
+│   ├── universal-mcp.json          Standard MCP manifest for any client
+│   └── claude-plugin/plugin.json   Claude Code integration descriptor
+├── adapters/
+│   ├── openai-functions.json       OpenAI function-calling schema (23 tools)
+│   ├── gemini-tools.json           Gemini API tool declarations
+│   ├── cursor-mcp.json             Cursor MCP registration block
+│   └── ollama-config.json          Ollama model registry (live-detected)
+├── OCTOPUS.md                      Developer constitution (injected into agents)
+├── DEPLOYMENT.md                   Zero-Key deployment guide
+├── CHANGELOG.md
+└── node/
+    └── src/
+        ├── agents/                 14 specialist agents
+        ├── skills/agentshield.js   102-rule security scanner
+        ├── instincts.js            Continuous Learning v2
+        ├── hooks.js                Pre/PostToolUse + ECC_HOOK_PROFILE
+        ├── compress.js             Strategic compaction
+        ├── permissions.js          Least-privilege memory proxy
+        ├── runner.js               Parallel QA stages + instinct extraction
+        ├── llm.js                  Multi-provider + caller-aware router + Sovereign Fallback
+        ├── mcp.js                  MCP stdio server (23 tools)
+        ├── tools.js                Single source of truth for all tool definitions
+        ├── cross-link.js           Regenerates all 6 adapter files from tools.js
+        ├── vault_set.js            OS Vault writer (keytar + session file fallback)
+        ├── vault_login.js          Interactive login menu (enquirer + chalk)
+        └── vault_preflight.js      Vault presence check for start scripts
+```
 
 ---
 
@@ -584,43 +495,52 @@ cd node && npm test
 ```
 ```
 Test Suites: 6 passed  |  Tests: 72 passed
-  agents.test.js              10 core agents
-  agents_marketplace.test.js  4 marketplace agents
+  agents.test.js              14 core agents
+  agents_marketplace.test.js  marketplace agents
   commands.test.js            REST API endpoints
-  mcp.test.js                 MCP server + all 23 tools
+  mcp.test.js                 MCP server — all 23 tools verified
   memory.test.js              5-layer memory bridge
-  vault_fallback.test.js      Zero-Key: getSecureKey cascade + Gemma 4 fallback
+  vault_fallback.test.js      Zero-Key cascade + Gemma 4 Sovereign Fallback
 ```
 
 ---
 
-## Project Structure
+## Manual Setup
 
+### 1 — Python memory service
+```bash
+# Windows
+py -m pip install -r python/requirements.txt
+py python/services/memory_service.py
+
+# Mac/Linux
+pip3 install -r python/requirements.txt
+python3 python/services/memory_service.py
 ```
-Octopus-Agent-System/
-├── install.ps1 / install.sh     Universal one-liner installers (Zero-Key aware)
-├── start_mcp.ps1 / start_mcp.sh Full-stack startup + vault pre-flight check
-├── OCTOPUS.md                   Developer constitution (injected into all agents)
-├── DEPLOYMENT.md                Step-by-step guide + Zero-Key setup
-├── CHANGELOG.md
-├── node/
-│   └── src/
-│       ├── agents/              14 agents
-│       ├── skills/agentshield.js  102-rule 5-category scanner
-│       ├── instincts.js         Continuous Learning v2
-│       ├── hooks.js             Pre/PostToolUse + ECC_HOOK_PROFILE
-│       ├── compress.js          Strategic compaction
-│       ├── permissions.js       Least-privilege memory proxy
-│       ├── runner.js            Parallel stages + instinct extraction
-│       ├── llm.js               Multi-provider + 4-tier getSecureKey cascade
-│       ├── mcp.js               MCP stdio server (23 tools)
-│       ├── vault_set.js         OS Vault writer (keytar + session file fallback)
-│       └── vault_preflight.js   Vault presence check (used by start scripts)
-├── python/
-│   ├── memory/context_builder.py  L5 — constitution → ECC rules → instincts → L1-L3
-│   ├── memory/schema.py           SQLite + instincts table
-│   └── services/memory_service.py Flask + /instincts endpoints
-└── .claude/rules/               ECC guardrails (always-loaded into every agent)
+
+### 2 — Index the repo
+```bash
+py python/indexer/index_repo.py --root . --db ./data/octopus.db      # Windows
+python3 python/indexer/index_repo.py --root . --db ./data/octopus.db # Mac/Linux
+```
+
+### 3 — Node
+```bash
+cd node && npm install
+# No .env key editing — use octopus_login in your AI chat
+```
+
+### 4 — Authorize (first time)
+In your AI chat after connecting:
+```
+octopus_login
+```
+Choose Anthropic / OpenAI / Google. A masked prompt captures the key and stores it in the OS Vault.
+
+### 5 — Start
+```bash
+.\start_mcp.ps1    # Windows — self-healing, vault pre-flight, starts everything
+./start_mcp.sh     # Mac/Linux
 ```
 
 ---
@@ -629,12 +549,12 @@ Octopus-Agent-System/
 
 | Secret | Required for |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude (CI only — use `octopus_login` locally) |
-| `OPENAI_API_KEY` | GPT-4o (CI only) |
-| `GOOGLE_API_KEY` | Gemini (CI only) |
-| `GITHUB_TOKEN` | Auto-provided — ECC skill library + MarketScout |
+| `ANTHROPIC_API_KEY` | Claude in CI (use `octopus_login` locally) |
+| `OPENAI_API_KEY` | GPT-4o in CI |
+| `GOOGLE_API_KEY` | Gemini in CI |
+| `GITHUB_TOKEN` | Auto-provided — ECC library + MarketScout |
 
-For local development, **do not add CI secrets to `.env`** — use `octopus_login` instead.
+Do **not** add CI secrets to `.env` for local development — use `octopus_login` instead.
 
 ---
 
