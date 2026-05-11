@@ -1,142 +1,221 @@
 #!/usr/bin/env bash
-# Octopus Agent System — Universal Installer
-# Detects your LLM environment and configures the MCP server automatically.
-# Supports: Claude Desktop, Cursor, Windsurf, Cline, Continue.dev, VS Code, any MCP client.
+# Octopus 2.0 — ECC Fusion · Universal Mac/Linux Installer
+# Works locally (./install.sh) and via one-liner:
+#   curl -sSL https://raw.githubusercontent.com/Boyapati13/Octopus-Agent-System/master/install.sh | bash
 
 set -e
 
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_URL  ="https://github.com/Boyapati13/Octopus-Agent-System.git"
+REPO_NAME ="Octopus-Agent-System"
+
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; MAGENTA='\033[0;35m'; NC='\033[0m'
+log()  { echo -e "  ${GREEN}[octopus]${NC} $*"; }
+info() { echo -e "  ${CYAN}[octopus]${NC} $*"; }
+warn() { echo -e "  ${YELLOW}[octopus]${NC} $*"; }
+head() { echo -e "\n${MAGENTA}$*${NC}"; }
+
+head "🐙 Octopus 2.0 — ECC Fusion Installer"
+echo "  Self-evolving AI · 14 agents · 20 MCP tools · AgentShield · Instincts v2"
+echo ""
+
+# ── Step 1: Clone if running remotely ────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
+if [ -z "$SCRIPT_DIR" ] || [ ! -d "$SCRIPT_DIR/node" ]; then
+    DEST="$HOME/$REPO_NAME"
+    if [ -d "$DEST" ]; then
+        log "Repo exists at $DEST — pulling latest..."
+        git -C "$DEST" pull --quiet
+    else
+        log "Cloning Octopus 2.0 into $DEST..."
+        git clone "$REPO_URL" "$DEST" --quiet
+    fi
+    SCRIPT_DIR="$DEST"
+fi
+
+REPO_DIR="$SCRIPT_DIR"
 NODE_DIR="$REPO_DIR/node"
 MCP_ENTRY="$NODE_DIR/src/mcp.js"
+RULES_DIR="$REPO_DIR/.claude/rules"
 
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-log()  { echo -e "${GREEN}[octopus]${NC} $*"; }
-info() { echo -e "${CYAN}[octopus]${NC} $*"; }
-warn() { echo -e "${YELLOW}[octopus]${NC} $*"; }
-
-# ── Detect OS paths ───────────────────────────────────────────────────────────
-case "$(uname -s)" in
-  Darwin)
-    CLAUDE_DESKTOP_CFG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
-    CURSOR_CFG="$HOME/.cursor/mcp.json"
-    WINDSURF_CFG="$HOME/.codeium/windsurf/mcp_config.json"
-    CONTINUE_CFG="$HOME/.continue/config.json"
-    ;;
-  Linux)
-    CLAUDE_DESKTOP_CFG="$HOME/.config/Claude/claude_desktop_config.json"
-    CURSOR_CFG="$HOME/.config/cursor/mcp.json"
-    WINDSURF_CFG="$HOME/.codeium/windsurf/mcp_config.json"
-    CONTINUE_CFG="$HOME/.continue/config.json"
-    ;;
-  *)
-    warn "Unknown OS. Use install.ps1 on Windows."
+# ── Step 2: Node dependencies ─────────────────────────────────────────────────
+head "Step 1/5 — Node.js dependencies"
+if ! command -v node &>/dev/null; then
+    warn "Node.js not found. Install from https://nodejs.org (LTS) then re-run."
     exit 1
-    ;;
-esac
+fi
+log "Node $(node --version) / npm $(npm --version)"
+(cd "$NODE_DIR" && npm install --silent)
+log "Dependencies installed"
 
-# ── MCP config block ──────────────────────────────────────────────────────────
-mcp_block() {
-  cat <<EOF
-{
-  "command": "node",
-  "args": ["$MCP_ENTRY"],
-  "env": {
-    "SAFE_MODE": "false",
-    "LLM_PROVIDER": "anthropic"
-  }
-}
+# ── Step 3: Python dependencies ───────────────────────────────────────────────
+head "Step 2/5 — Python dependencies"
+PY_CMD=""
+for cmd in python3 python; do
+    if command -v "$cmd" &>/dev/null; then PY_CMD="$cmd"; break; fi
+done
+if [ -z "$PY_CMD" ]; then
+    warn "Python not found. Install Python 3.9+ then re-run."
+    exit 1
+fi
+log "$PY_CMD $($PY_CMD --version 2>&1)"
+$PY_CMD -m pip install -r "$REPO_DIR/python/requirements.txt" -q
+log "Python dependencies installed"
+
+# ── Step 4: Create .env ────────────────────────────────────────────────────────
+head "Step 3/5 — Configuration"
+ENV_FILE="$NODE_DIR/.env"
+if [ ! -f "$ENV_FILE" ]; then
+    # Detect Ollama
+    PROVIDER="anthropic"
+    MODEL=""
+    if curl -sf http://localhost:11434/api/tags --max-time 2 >/dev/null 2>&1; then
+        TAGS=$(curl -sf http://localhost:11434/api/tags --max-time 2 2>/dev/null || echo "")
+        GEMMA=$(echo "$TAGS" | $PY_CMD -c "import sys,json; d=json.load(sys.stdin); print(next((m['name'] for m in d.get('models',[]) if 'gemma4' in m['name']),''))" 2>/dev/null || echo "")
+        if [ -n "$GEMMA" ]; then
+            PROVIDER="ollama"; MODEL="$GEMMA"
+            log "Auto-configured for Gemma 4: $MODEL"
+        else
+            FIRST_MODEL=$(echo "$TAGS" | $PY_CMD -c "import sys,json; d=json.load(sys.stdin); m=d.get('models',[]); print(m[0]['name'] if m else '')" 2>/dev/null || echo "")
+            if [ -n "$FIRST_MODEL" ]; then
+                PROVIDER="ollama"; MODEL="$FIRST_MODEL"
+                log "Auto-configured for Ollama: $MODEL"
+            fi
+        fi
+    fi
+
+    cat > "$ENV_FILE" <<EOF
+# Octopus 2.0 — ECC Fusion Configuration
+MEMORY_SERVICE_URL=http://localhost:5000
+DATA_DIR=../data
+PORT=3001
+SAFE_MODE=false
+
+# ECC 2.0 Token Optimization
+MAX_THINKING_TOKENS=10000
+COMPACT_THRESHOLD=50
+COMPACT_REMINDER_INTERVAL=25
+
+# AgentShield
+AGENTSHIELD_MODE=advisory
+ECC_HOOK_PROFILE=standard
+
+# Project Constitution
+PROJECT_ROOT=$REPO_DIR
+ECC_RULES_PATH=$RULES_DIR
+
+# LLM Provider
+LLM_PROVIDER=$PROVIDER
+LLM_MODEL=$MODEL
+OLLAMA_BASE_URL=http://localhost:11434
+
+# API Keys (fill in your chosen provider)
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+GOOGLE_API_KEY=
+GITHUB_TOKEN=
 EOF
-}
+    log ".env created (LLM_PROVIDER=$PROVIDER)"
+else
+    log ".env already exists — skipping"
+fi
+
+# ── Step 5: ECC rules bootstrap ───────────────────────────────────────────────
+mkdir -p "$RULES_DIR"
+if [ ! -f "$RULES_DIR/node.md" ]; then
+    cat > "$RULES_DIR/node.md" <<'EOF'
+---
+description: Node.js standards (ECC-aligned, always-loaded)
+alwaysApply: true
+---
+- CommonJS only (no ESM unless .mjs)
+- const over let, never var
+- console.error for diagnostics — never console.log in MCP stdio paths
+- All PreToolUse hooks must complete in under 200ms
+EOF
+fi
+if [ ! -f "$RULES_DIR/security.md" ]; then
+    cat > "$RULES_DIR/security.md" <<'EOF'
+---
+description: Security guardrails (AgentShield-aligned, always-loaded)
+alwaysApply: true
+---
+- Never hardcode secrets — all credentials via environment variables
+- Validate agentName: /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/ before path construction
+- No eval(), new Function(), or __proto__ assignments
+- All database queries through the memory/repository layer
+- AGENTSHIELD_MODE=gate for production deployments
+EOF
+fi
+log "ECC rules bootstrapped (.claude/rules/)"
+
+# ── Step 6: Configure MCP clients ────────────────────────────────────────────
+head "Step 4/5 — MCP client configuration"
 
 inject_mcp() {
-  local cfg="$1"
-  local client="$2"
-  mkdir -p "$(dirname "$cfg")"
-
-  if [ ! -f "$cfg" ]; then
-    echo '{"mcpServers":{}}' > "$cfg"
-  fi
-
-  if command -v python3 &>/dev/null; then
-    python3 - "$cfg" "$MCP_ENTRY" <<'PYEOF'
+    local cfg="$1" client="$2"
+    mkdir -p "$(dirname "$cfg")"
+    [ -f "$cfg" ] || echo '{"mcpServers":{}}' > "$cfg"
+    $PY_CMD - "$cfg" "$MCP_ENTRY" "$REPO_DIR" "$RULES_DIR" <<'PYEOF'
 import sys, json
-cfg_path, mcp_path = sys.argv[1], sys.argv[2]
+cfg_path, mcp_path, root, rules = sys.argv[1:5]
 with open(cfg_path) as f:
     cfg = json.load(f)
-cfg.setdefault('mcpServers', {})['octopus'] = {
+cfg.setdefault('mcpServers', {})['octopus-2'] = {
     'command': 'node',
     'args': [mcp_path],
-    'env': {'SAFE_MODE': 'false', 'LLM_PROVIDER': 'anthropic'}
+    'env': {
+        'SAFE_MODE': 'false',
+        'MAX_THINKING_TOKENS': '10000',
+        'COMPACT_THRESHOLD': '50',
+        'AGENTSHIELD_MODE': 'advisory',
+        'ECC_HOOK_PROFILE': 'standard',
+        'PROJECT_ROOT': root,
+        'ECC_RULES_PATH': rules,
+        'MEMORY_SERVICE_URL': 'http://localhost:5000',
+        'LLM_PROVIDER': 'anthropic'
+    }
 }
 with open(cfg_path, 'w') as f:
     json.dump(cfg, f, indent=2)
 PYEOF
-    log "Configured Octopus MCP in $client → $cfg"
-  else
-    warn "python3 not found — manually add to $cfg:"
-    mcp_block
-  fi
+    log "$client configured → $cfg"
 }
 
-# ── Install npm deps ──────────────────────────────────────────────────────────
-log "Installing Node dependencies…"
-(cd "$NODE_DIR" && npm install --silent)
-
-# ── Install Python deps ───────────────────────────────────────────────────────
-log "Installing Python dependencies…"
-pip install -r "$REPO_DIR/python/requirements.txt" -q
-
-# ── Install agent-browser Chrome ─────────────────────────────────────────────
-if command -v agent-browser &>/dev/null 2>&1 || [ -f "$NODE_DIR/node_modules/.bin/agent-browser" ]; then
-  log "Installing Chrome for agent-browser…"
-  "$NODE_DIR/node_modules/.bin/agent-browser" install 2>/dev/null || true
-fi
-
-# ── Detect and configure clients ─────────────────────────────────────────────
 INSTALLED=0
+case "$(uname -s)" in
+    Darwin)
+        CLAUDE_CFG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+        CURSOR_CFG="$HOME/.cursor/mcp.json"
+        WIND_CFG="$HOME/.codeium/windsurf/mcp_config.json"
+        ;;
+    *)
+        CLAUDE_CFG="$HOME/.config/Claude/claude_desktop_config.json"
+        CURSOR_CFG="$HOME/.config/cursor/mcp.json"
+        WIND_CFG="$HOME/.codeium/windsurf/mcp_config.json"
+        ;;
+esac
 
-if [ -d "$HOME/Library/Application Support/Claude" ] || [ -d "$HOME/.config/Claude" ]; then
-  inject_mcp "$CLAUDE_DESKTOP_CFG" "Claude Desktop"
-  INSTALLED=$((INSTALLED+1))
-fi
-
-if [ -d "$HOME/.cursor" ] || [ -d "$HOME/.config/cursor" ]; then
-  inject_mcp "$CURSOR_CFG" "Cursor"
-  INSTALLED=$((INSTALLED+1))
-fi
-
-if [ -d "$HOME/.codeium/windsurf" ]; then
-  inject_mcp "$WINDSURF_CFG" "Windsurf"
-  INSTALLED=$((INSTALLED+1))
-fi
-
-if [ -d "$HOME/.continue" ]; then
-  inject_mcp "$CONTINUE_CFG" "Continue.dev"
-  INSTALLED=$((INSTALLED+1))
-fi
+[ -d "$(dirname "$(dirname "$CLAUDE_CFG")")" ] && inject_mcp "$CLAUDE_CFG" "Claude Desktop" && INSTALLED=$((INSTALLED+1)) || true
+[ -d "$HOME/.cursor" ] || [ -d "$HOME/.config/cursor" ] && inject_mcp "$CURSOR_CFG" "Cursor" && INSTALLED=$((INSTALLED+1)) || true
+[ -d "$HOME/.codeium/windsurf" ] && inject_mcp "$WIND_CFG" "Windsurf" && INSTALLED=$((INSTALLED+1)) || true
 
 if [ "$INSTALLED" -eq 0 ]; then
-  warn "No supported LLM client detected. Add manually to your MCP config:"
-  echo ""
-  echo '  "mcpServers": { "octopus": '"$(mcp_block)"' }'
-  echo ""
+    warn "No LLM client detected — add manually (see DEPLOYMENT.md)"
 fi
 
-# ── Print next steps ──────────────────────────────────────────────────────────
-echo ""
-log "Installation complete! ($INSTALLED client(s) configured)"
+# ── Done ──────────────────────────────────────────────────────────────────────
+head "Step 5/5 — Done"
+log "Octopus 2.0 installed ($INSTALLED client(s) configured)"
 echo ""
 info "Next steps:"
-echo "  1. Set API keys in $NODE_DIR/.env  (copy from .env.example)"
+echo "  1. Add API keys:    \$EDITOR $NODE_DIR/.env"
 echo "  2. Start services:  ./start_mcp.sh"
-echo "  3. Index your repo: python python/indexer/index_repo.py --root . --db ./data/octopus.db"
-echo "  4. Restart your LLM client — Octopus tools will appear automatically"
+echo "  3. Index your repo: $PY_CMD python/indexer/index_repo.py --root . --db ./data/octopus.db"
+echo "  4. Restart your LLM client — all 20 Octopus tools appear automatically"
 echo ""
-info "Tool adapters for direct API use:"
-echo "  GET http://localhost:3001/api/tools/openai    # OpenAI function calling"
-echo "  GET http://localhost:3001/api/tools/anthropic # Anthropic tool use"
-echo "  GET http://localhost:3001/api/tools/gemini    # Gemini function declarations"
+info "Local Gemma 4 (no API key needed):"
+echo "  ollama pull gemma4:e2b"
+echo "  Then set LLM_PROVIDER=ollama LLM_MODEL=gemma4:e2b in $NODE_DIR/.env"
+echo ""
+info "Full deployment guide: $REPO_DIR/DEPLOYMENT.md"
+echo ""
