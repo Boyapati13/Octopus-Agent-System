@@ -74,6 +74,11 @@ After `start_server.ps1` starts, open: **http://localhost:3001/dashboard**
 - [Quick Start](#quick-start)
 - [Web Dashboard](#web-dashboard)
 - [Octopus Agent System](#octopus-agent-system)
+  - [14 Specialist Agents](#14-specialist-agents)
+  - [Cortex Planning Patterns](#cortex-planning-patterns)
+  - [5-Layer Memory](#5-layer-memory)
+  - [AgentShield Security](#agentshield-security)
+  - [26 MCP Tools](#mcp-tool-catalogue--26-tools)
 - [OctoDeck Control Surface](#octodeck-control-surface)
 - [Configuration](#configuration)
 - [Headless Mode](#headless-mode)
@@ -82,6 +87,7 @@ After `start_server.ps1` starts, open: **http://localhost:3001/dashboard**
 - [Tool Plugins](#tool-plugins)
 - [Testing](#testing)
 - [Development](#development)
+- [Uninstall](#uninstall)
 - [Roadmap](#roadmap)
 - [Attribution](#attribution)
 
@@ -565,6 +571,209 @@ py -m pytest python/tests/ -q
 1. Create `tools/<name>/tool.json` + `tools/<name>/index.js`
 2. Restart the server — it auto-loads
 3. See [tools/README.md](tools/README.md)
+
+---
+
+## Uninstall
+
+### Quick uninstall (keep repo, remove registrations + global CLI)
+
+```powershell
+# Windows PowerShell
+$RepoDir = "C:\path\to\Octopus-Agent-System"   # ← your clone path
+
+# 1. Remove global CLI link
+Push-Location "$RepoDir\node"; npm unlink --silent; Pop-Location
+
+# 2. Remove from PATH (user-level)
+$p = [System.Environment]::GetEnvironmentVariable('PATH','User')
+$p = ($p -split ';' | Where-Object { $_ -ne $RepoDir }) -join ';'
+[System.Environment]::SetEnvironmentVariable('PATH', $p, 'User')
+
+# 3. Remove MCP registration from Claude Desktop
+$cfg = "$env:APPDATA\Claude\claude_desktop_config.json"
+if (Test-Path $cfg) {
+    $j = Get-Content $cfg -Raw | ConvertFrom-Json
+    $j.mcpServers.PSObject.Properties.Remove('octopus')
+    $j | ConvertTo-Json -Depth 10 | Out-File $cfg -Encoding utf8
+    Write-Host "Removed from Claude Desktop"
+}
+
+# 4. Remove from Cursor
+$cfg = "$env:APPDATA\Cursor\User\globalStorage\mcp.json"
+if (Test-Path $cfg) {
+    $j = Get-Content $cfg -Raw | ConvertFrom-Json
+    $j.mcpServers.PSObject.Properties.Remove('octopus')
+    $j | ConvertTo-Json -Depth 10 | Out-File $cfg -Encoding utf8
+    Write-Host "Removed from Cursor"
+}
+
+# 5. Remove API keys from OS Vault (Windows Credential Manager)
+$providers = @('anthropic','openai','google','nvidia','huggingface')
+foreach ($p in $providers) {
+    try {
+        [Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime] | Out-Null
+        $vault = New-Object Windows.Security.Credentials.PasswordVault
+        $cred = $vault.Retrieve("Octopus_Vault", $p)
+        $vault.Remove($cred)
+        Write-Host "Removed $p key from Vault"
+    } catch { /* not present */ }
+}
+
+Write-Host "Uninstall complete. Delete the repo folder to remove all files."
+```
+
+### Mac/Linux
+
+```bash
+# Remove global CLI link
+cd /path/to/Octopus-Agent-System/node && npm unlink
+
+# Remove MCP registration from Claude Desktop
+python3 - <<'EOF'
+import json, os
+cfg = os.path.expanduser("~/.config/Claude/claude_desktop_config.json")
+if os.path.exists(cfg):
+    data = json.load(open(cfg))
+    data.get("mcpServers", {}).pop("octopus", None)
+    json.dump(data, open(cfg, "w"), indent=2)
+    print("Removed from Claude Desktop")
+EOF
+
+# Remove API keys from macOS Keychain
+security delete-generic-password -s "Octopus_Vault" -a anthropic 2>/dev/null
+security delete-generic-password -s "Octopus_Vault" -a openai    2>/dev/null
+security delete-generic-password -s "Octopus_Vault" -a google    2>/dev/null
+security delete-generic-password -s "Octopus_Vault" -a nvidia    2>/dev/null
+
+# Delete the repo
+rm -rf /path/to/Octopus-Agent-System
+echo "Uninstall complete."
+```
+
+### What gets removed / left behind
+
+| Component | Uninstall removes? | Notes |
+|---|---|---|
+| `node_modules/` | No (in repo dir) | Delete repo folder to clean |
+| `node/.env` | No | Contains your local config |
+| `data/octopus.db` | No | Your agent memory (L1–L3) |
+| `octopus` CLI command | ✅ `npm unlink` | Removed from PATH |
+| MCP server entry | ✅ (see above) | Removed from each client |
+| OS Vault keys | ✅ (see above) | Wiped from Windows CM / macOS Keychain |
+| Python packages | No | `pip uninstall` manually if needed |
+
+> **To fully remove everything:** unregister (steps above), then delete the repo folder.
+> Your `.env` and `data/` directory with learned memory will be gone.
+
+---
+
+## Functions Reference
+
+### REST API — full endpoint list
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/health` | — | Server + chain status + cache stats |
+| GET | `/api/status` | — | Chain state, LLM provider, headless mode |
+| GET | `/api/agents` | — | List all 14 registered agents |
+| POST | `/api/tasks/plan` | — | Run Cortex; return planned agent chain |
+| POST | `/api/tasks/run` | — | Start full chain (events on WS `/ws`) |
+| POST | `/api/tasks/interrupt` | — | Stop the running chain |
+| POST | `/api/tasks/voice` | — | Voice path; emits `voice_summary` on WS |
+| POST | `/api/security/scan` | — | AgentShield scan: `{ target: "file or code" }` |
+| GET | `/api/memory/search?q=` | — | L1 structural memory search |
+| GET | `/api/memory/structural?q=` | — | Same (legacy alias) |
+| GET | `/api/memory/decisions` | — | L2 ADR log |
+| GET | `/api/memory/run` | — | Current run state |
+| POST | `/api/memory/compact` | — | Compact session to long-term memory |
+| GET | `/api/llm/provider` | — | Active LLM provider + model |
+| POST | `/api/llm/complete` | — | Direct LLM completion |
+| GET | `/api/tools/:format` | — | Tool declarations: `anthropic` `openai` `gemini` `mcp` |
+| GET | `/api/plugins` | — | List loaded tool plugins |
+| POST | `/api/plugins/call/:name` | — | Call a named tool plugin |
+| GET | `/api/skills` | — | Skill registry |
+| GET | `/dashboard` | — | Web dashboard (HTML) |
+| GET | `/` | — | Redirects to `/dashboard` |
+| WS | `/ws` | — | WebSocket event stream |
+
+### WebSocket events
+
+| Event | Payload | Fired when |
+|---|---|---|
+| `connected` | `{}` | WS connection opens |
+| `chain_start` | `{ task, plan: string[] }` | Chain begins |
+| `agent_start` | `{ agent, role }` | Agent spawned |
+| `agent_done` | `{ agent, approved, notes }` | Agent finished |
+| `gate_fail` | `{ agent, reason }` | Gate blocked the chain |
+| `chain_done` | `{ task, success, duration_ms }` | Chain complete |
+| `tool_call` | `{ tool, args }` | Tool called inside agent |
+| `compaction` | `{ session_tool_calls }` | Context compaction suggested |
+| `instinct_new` | `{ id, pattern, confidence, occurrences }` | Instinct learned |
+| `voice_summary` | `{ summary, success }` | Voice task TTS result |
+| `disconnected` | `{}` | WS connection closed |
+
+### MCP Tools (26) — grouped
+
+**Orchestration:** `octopus_plan_task` · `octopus_run_task_chain`
+
+**Memory:** `octopus_search_memory` · `octopus_get_decisions` · `octopus_compact_session`
+
+**Files & Shell:** `octopus_read_file` · `octopus_write_file` · `octopus_execute_command`
+
+**Agents & Security:** `octopus_create_agent` · `octopus_scan_security`
+
+**LLM:** `octopus_llm_complete`
+
+**Browser:** `octopus_browser_navigate` · `octopus_browser_snapshot` · `octopus_browser_interact`
+
+**Skills:** `octopus_skill_scout` · `octopus_skill_synthesize` · `octopus_skill_validate` · `octopus_skill_deploy` · `octopus_skill_retire` · `octopus_skill_list`
+
+**Auth + Diagnostics:** `octopus_login` · `octopus_vault_check` · `octopus_memory_status` · `octopus_task_routes`
+
+**Plugins:** `octopus_plugin_list` · `octopus_plugin_call`
+
+### CLI commands
+
+```
+/plan <task>           Cortex plans — shows agent chain, does not run
+/run  <task>           Full 14-agent pipeline with live output
+/agents                List all agents with roles + gate flag
+/models                Installed Ollama models
+/routes                Smart Task Router — which model per agent
+/provider              Show active provider/model
+/provider list         All providers + key status
+/provider set <p> [m]  Switch provider (writes to .env)
+/headless              Show current HEADLESS_MODE
+/headless on|off       Toggle headless mode (writes to .env)
+/vault                 Check OS Vault key status (all providers)
+/status                Health check: memory, Ollama, provider
+/dashboard             Open web UI in browser
+/update                Check GitHub for updates + apply
+/update-models         Re-pull all Ollama models
+/help                  Full command reference
+/exit                  Quit
+```
+
+Plain text (no slash) = run a task immediately.
+
+### Python memory service endpoints (:5000)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Service health |
+| GET | `/context/<agent>` | L5 context assembly for an agent |
+| GET | `/structural/search?q=` | L1 graph search |
+| POST | `/structural/impact` | Boundary impact analysis |
+| GET | `/decisions` | L2 ADR log |
+| POST | `/decisions` | Save an ADR |
+| GET | `/run` | Current run state |
+| POST | `/run` | Save run state |
+| POST | `/run/compact` | Compact session |
+| POST | `/writeback` | Agent findings → memory |
+| GET | `/instincts` | List instincts |
+| POST | `/instincts` | Save an instinct |
+| PATCH | `/instincts/<id>/evolve` | Elevate instinct to skill |
 
 ---
 
