@@ -35,6 +35,12 @@ const PROVIDERS = [
     hint:  'Generate a key at aistudio.google.com → Get API Key',
   },
   {
+    name:  'NVIDIA NIM (FREE — Llama · Mistral · Nemotron · 50+ models)',
+    value: 'nvidia',
+    url:   'https://build.nvidia.com/settings/api-key',
+    hint:  'Free at build.nvidia.com — sign up for NVIDIA Developer Program, generate nvapi-... key',
+  },
+  {
     name:  'Vertex AI / AWS Bedrock  (show setup instructions)',
     value: 'enterprise',
     url:   null,

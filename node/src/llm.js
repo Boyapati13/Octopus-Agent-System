@@ -8,6 +8,7 @@
  *   OCTOPUS_CALLER=openai   → openai    / gpt-4o
  *   OCTOPUS_CALLER=gemini   → google    / gemini-2.5-pro
  *   OCTOPUS_CALLER=ollama   → ollama    / gemma4:e2b  (local, no key needed)
+ *   OCTOPUS_CALLER=nvidia   → nvidia    / meta/llama-3.1-405b-instruct (free tier)
  *   OCTOPUS_CALLER=cursor   → uses LLM_PROVIDER/LLM_MODEL (no override)
  *   (unset)                 → uses LLM_PROVIDER/LLM_MODEL env vars
  *
@@ -29,10 +30,11 @@ const axios = require('axios');
 // OCTOPUS_CALLER is set in the MCP client's env block — MCP stdio has no built-in caller identity
 const CALLER = (process.env.OCTOPUS_CALLER || '').toLowerCase();
 const CALLER_PRESETS = {
-  claude:    { provider: 'anthropic', model: 'claude-sonnet-4-6' },
-  openai:    { provider: 'openai',    model: 'gpt-4o'            },
-  gemini:    { provider: 'google',    model: 'gemini-2.5-pro'    },
-  ollama:    { provider: 'ollama',    model: 'gemma4:e2b'        },
+  claude:    { provider: 'anthropic', model: 'claude-sonnet-4-6'          },
+  openai:    { provider: 'openai',    model: 'gpt-4o'                     },
+  gemini:    { provider: 'google',    model: 'gemini-2.5-pro'             },
+  ollama:    { provider: 'ollama',    model: 'gemma4:e2b'                 },
+  nvidia:    { provider: 'nvidia',    model: 'meta/llama-3.1-405b-instruct' },
   // cursor/windsurf/continue defer to LLM_PROVIDER/LLM_MODEL env vars
 };
 const preset = CALLER_PRESETS[CALLER] || null;
@@ -46,6 +48,7 @@ const MODEL = process.env.LLM_MODEL || (preset ? preset.model : {
   openai:    'gpt-4o',
   google:    'gemini-2.0-flash',
   ollama:    'llama3.2',
+  nvidia:    'meta/llama-3.1-405b-instruct',
 }[PROVIDER]) || 'claude-sonnet-4-6';
 
 if (CALLER && preset) {
@@ -61,6 +64,7 @@ const ENV_KEY_MAP    = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai:    'OPENAI_API_KEY',
   google:    'GOOGLE_API_KEY',
+  nvidia:    'NVIDIA_API_KEY',
 };
 
 /**
@@ -180,6 +184,31 @@ async function completeGoogle(prompt, opts = {}) {
   });
 }
 
+// NVIDIA NIM — OpenAI-compatible endpoint, free tier via build.nvidia.com
+// Free plan: 40 req/min, 50+ models including Llama, Mistral, GLM, Nemotron
+async function completeNvidia(prompt, opts = {}) {
+  const apiKey = await getSecureKey('nvidia');
+  return withRetry(async () => {
+    const res = await axios.post(
+      'https://integrate.api.nvidia.com/v1/chat/completions',
+      {
+        model: MODEL,
+        max_tokens: opts.maxTokens || 1024,
+        messages: [{ role: 'user', content: prompt }],
+        stream: false,
+      },
+      {
+        headers: {
+          Authorization:  `Bearer ${apiKey || ''}`,
+          'content-type': 'application/json',
+        },
+        timeout: opts.timeout || 60000,
+      }
+    );
+    return res.data.choices[0].message.content;
+  });
+}
+
 async function completeOllama(prompt, opts = {}) {
   const base  = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   // opts._model lets Sovereign Fallback override the module-level MODEL constant
@@ -199,6 +228,7 @@ const COMPLETERS = {
   openai:    completeOpenAI,
   google:    completeGoogle,
   ollama:    completeOllama,
+  nvidia:    completeNvidia,
 };
 
 const SOVEREIGN_MODEL = process.env.SOVEREIGN_FALLBACK_MODEL || 'gemma4:e2b';
