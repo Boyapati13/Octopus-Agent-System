@@ -43,7 +43,7 @@
       "family": "gemma4",
       "isCloud": false,
       "toolCalling": true,
-      "bestFor": "Default — fast, all agents, Sovereign Fallback"
+      "bestFor": "Default · Sovereign Fallback · fast, all agents · multimodal"
     },
     {
       "name": "glm-4.7-flash:latest",
@@ -53,7 +53,7 @@
       "family": "glm4moelite",
       "isCloud": false,
       "toolCalling": true,
-      "bestFor": "Highest quality local inference — all agents"
+      "bestFor": "Best non-Gemma local quality — all agents"
     },
     {
       "name": "qwen2.5-coder:7b",
@@ -96,10 +96,18 @@
     }
   },
   "pull_commands": [
-    "ollama pull gemma4:e2b         # Default Sovereign Fallback (~7 GB)",
-    "ollama pull gemma4:9b          # Complex planning (~9 GB)",
-    "ollama pull qwen2.5-coder:7b   # Coding tasks (~5 GB)",
-    "ollama pull glm-4.7-flash      # Best local quality (~19 GB)"
+    "# ── Gemma 4 (native function calling + multimodal) ──────────────────",
+    "ollama pull gemma4:e2b         # Default · 7.2 GB · text+image+audio · 128K ctx",
+    "ollama pull gemma4:e4b         # Step-up · 9.6 GB · text+image+audio · 128K ctx",
+    "ollama pull gemma4:26b         # MoE · 18 GB disk / 3.8B active · 256K ctx",
+    "ollama pull gemma4:31b         # Best · 20 GB · 85.2% MMLU Pro · 256K ctx",
+    "# ── Gemma 3 (vision, 140 languages) ────────────────────────────────",
+    "ollama pull gemma3:4b          # Vision · 3.3 GB · 128K ctx",
+    "ollama pull gemma3:12b         # Balanced · 8.1 GB · 128K ctx",
+    "ollama pull gemma3:27b         # Best Gemma 3 · 17 GB · 128K ctx",
+    "ollama pull gemma3:4b-it-qat   # QAT: 3x less memory than gemma3:4b",
+    "# ── Coding ──────────────────────────────────────────────────────────",
+    "ollama pull qwen2.5-coder:7b   # Forge + Reviewer · 4.7 GB"
   ],
   "tools": [
     "octopus_plan_task",

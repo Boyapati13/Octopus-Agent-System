@@ -64,13 +64,28 @@ function httpGet(url) {
   });
 }
 
-// Per-model metadata: tool-calling capability and best use-case
+// Per-model metadata: tool-calling capability, context window, and best use-case
+// Gemma 4 notes: native function-calling built-in, multimodal (text+image+audio on e2b/e4b)
 const MODEL_META = {
-  'gemma4:e2b':              { toolCalling: true,  bestFor: 'Default — fast, all agents, Sovereign Fallback' },
-  'gemma4:9b':               { toolCalling: true,  bestFor: 'Cortex planning, SecurityReviewer deep analysis' },
+  // ── Gemma 4 (April 2026 — native function calling, multimodal) ─────────────
+  'gemma4:e2b':           { toolCalling: true, ctx: '128K', modal: 'text+image+audio', bestFor: 'Default · Sovereign Fallback · fast, all agents · multimodal' },
+  'gemma4:e4b':           { toolCalling: true, ctx: '128K', modal: 'text+image+audio', bestFor: 'Edge/mobile · multimodal · step up from e2b (9.6 GB)' },
+  'gemma4:26b':           { toolCalling: true, ctx: '256K', modal: 'text+image',        bestFor: 'MoE — 3.8B active params, 18 GB disk · best for Cortex planning' },
+  'gemma4:31b':           { toolCalling: true, ctx: '256K', modal: 'text+image',        bestFor: 'Best local quality · 85.2% MMLU Pro · complex agent chains' },
+  'gemma4:31b-cloud':     { toolCalling: true, ctx: '256K', modal: 'text+image',        bestFor: 'Cloud Gemma 4 31B (via Ollama proxy)' },
+  // ── Gemma 3 (multimodal, 140 languages) ───────────────────────────────────
+  'gemma3:270m':          { toolCalling: false, ctx: '32K',  modal: 'text',            bestFor: 'Minimal footprint (292 MB) — simple chains only' },
+  'gemma3:1b':            { toolCalling: false, ctx: '32K',  modal: 'text',            bestFor: 'Tiny/fast — basic tasks (815 MB)' },
+  'gemma3:4b':            { toolCalling: true,  ctx: '128K', modal: 'text+image',      bestFor: 'Vision + text · fast iteration (3.3 GB)' },
+  'gemma3:12b':           { toolCalling: true,  ctx: '128K', modal: 'text+image',      bestFor: 'Balanced quality + vision (8.1 GB)' },
+  'gemma3:27b':           { toolCalling: true,  ctx: '128K', modal: 'text+image',      bestFor: 'Best Gemma 3 · vision · complex tasks (17 GB)' },
+  'gemma3:4b-it-qat':     { toolCalling: true,  ctx: '128K', modal: 'text+image',      bestFor: 'QAT — 3x lower memory than 4b, maintained quality' },
+  'gemma3:12b-it-qat':    { toolCalling: true,  ctx: '128K', modal: 'text+image',      bestFor: 'QAT — 12b quality at lower memory cost' },
+  'gemma3:27b-it-qat':    { toolCalling: true,  ctx: '128K', modal: 'text+image',      bestFor: 'QAT — BF16 quality at reduced memory' },
+  // ── Other local models ─────────────────────────────────────────────────────
   'qwen2.5-coder:7b':        { toolCalling: true,  bestFor: 'Code tasks — Forge, Reviewer, SandboxQA' },
   'qwen2.5-coder:1.5b-base': { toolCalling: false, bestFor: 'Fast iteration, simple chains (no tool calling)' },
-  'glm-4.7-flash:latest':    { toolCalling: true,  bestFor: 'Highest quality local inference — all agents' },
+  'glm-4.7-flash:latest':    { toolCalling: true,  bestFor: 'Best non-Gemma local quality — all agents' },
   'kimi-k2.6:cloud':         { toolCalling: true,  bestFor: 'Cloud — 1T param, best Cortex planning (via Ollama proxy)' },
   'nemotron-3-super:cloud':  { toolCalling: true,  bestFor: 'Cloud — Nvidia Nemotron (via Ollama proxy)' },
   'llama3.2':                { toolCalling: true,  bestFor: 'Minimal footprint, simple task chains' },
@@ -191,10 +206,12 @@ async function main() {
     recommended_model: recommendedModel,
     sovereign_fallback_model: 'gemma4:e2b',
     installed_models: ollamaModels.length > 0 ? ollamaModels : [
-      { name: 'gemma4:e2b',       paramSize: '5.1B',  toolCalling: true,  bestFor: 'Default — Sovereign Fallback, all agents' },
-      { name: 'gemma4:9b',        paramSize: '9B',    toolCalling: true,  bestFor: 'Cortex planning, deep analysis' },
-      { name: 'qwen2.5-coder:7b', paramSize: '7.6B',  toolCalling: true,  bestFor: 'Code tasks — Forge, Reviewer' },
-      { name: 'glm-4.7-flash',    paramSize: '29.9B', toolCalling: true,  bestFor: 'Highest local quality' },
+      { name: 'gemma4:e2b',  paramSize: '5.1B',  ctx: '128K', modal: 'text+image+audio', toolCalling: true,  bestFor: 'Default — Sovereign Fallback, all agents' },
+      { name: 'gemma4:e4b',  paramSize: '~4B',   ctx: '128K', modal: 'text+image+audio', toolCalling: true,  bestFor: 'Edge step-up' },
+      { name: 'gemma4:26b',  paramSize: '26B MoE (3.8B active)', ctx: '256K', modal: 'text+image', toolCalling: true, bestFor: 'Cortex planning — fast despite size' },
+      { name: 'gemma4:31b',  paramSize: '31B',   ctx: '256K', modal: 'text+image', toolCalling: true,  bestFor: 'Best quality local — 85.2% MMLU Pro' },
+      { name: 'gemma3:27b',  paramSize: '27B',   ctx: '128K', modal: 'text+image', toolCalling: true,  bestFor: 'Best Gemma 3, vision, 140 languages' },
+      { name: 'qwen2.5-coder:7b', paramSize: '7.6B', toolCalling: true,  bestFor: 'Code tasks — Forge, Reviewer' },
     ],
     env_snippets: {
       default:      { LLM_PROVIDER: 'ollama', LLM_MODEL: 'gemma4:e2b',         OCTOPUS_CALLER: 'ollama' },
@@ -208,10 +225,18 @@ async function main() {
       env: { SAFE_MODE: 'false', MEMORY_SERVICE_URL: 'http://localhost:5000', OCTOPUS_CALLER: 'ollama' },
     },
     pull_commands: [
-      'ollama pull gemma4:e2b         # Default Sovereign Fallback (~7 GB)',
-      'ollama pull gemma4:9b          # Complex planning (~9 GB)',
-      'ollama pull qwen2.5-coder:7b   # Coding tasks (~5 GB)',
-      'ollama pull glm-4.7-flash      # Best local quality (~19 GB)',
+      '# ── Gemma 4 (native function calling + multimodal) ──────────────────',
+      'ollama pull gemma4:e2b         # Default · 7.2 GB · text+image+audio · 128K ctx',
+      'ollama pull gemma4:e4b         # Step-up · 9.6 GB · text+image+audio · 128K ctx',
+      'ollama pull gemma4:26b         # MoE · 18 GB disk / 3.8B active · 256K ctx',
+      'ollama pull gemma4:31b         # Best · 20 GB · 85.2% MMLU Pro · 256K ctx',
+      '# ── Gemma 3 (vision, 140 languages) ────────────────────────────────',
+      'ollama pull gemma3:4b          # Vision · 3.3 GB · 128K ctx',
+      'ollama pull gemma3:12b         # Balanced · 8.1 GB · 128K ctx',
+      'ollama pull gemma3:27b         # Best Gemma 3 · 17 GB · 128K ctx',
+      'ollama pull gemma3:4b-it-qat   # QAT: 3x less memory than gemma3:4b',
+      '# ── Coding ──────────────────────────────────────────────────────────',
+      'ollama pull qwen2.5-coder:7b   # Forge + Reviewer · 4.7 GB',
     ],
     tools: TOOLS.map(t => t.name),
     toolCount: TOOLS.length,

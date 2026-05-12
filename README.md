@@ -436,16 +436,40 @@ All 13 surfaces update simultaneously from a single WebSocket event stream:
 | Anthropic Claude | `LLM_PROVIDER=anthropic` | claude-opus-4, claude-sonnet-4, claude-haiku-4 | `ANTHROPIC_API_KEY` |
 | OpenAI GPT-4o | `LLM_PROVIDER=openai` | gpt-4o, gpt-4o-mini | `OPENAI_API_KEY` |
 | Google Gemini | `LLM_PROVIDER=google` | gemini-2.0-flash, gemini-1.5-pro | `GOOGLE_API_KEY` |
-| Ollama (local) | `LLM_PROVIDER=ollama` | gemma4:e2b, gemma4:9b, llama3.2, qwen2.5-coder:7b | None |
+| Ollama (local) | `LLM_PROVIDER=ollama` | gemma4:e2b · gemma4:26b · gemma4:31b · gemma3:27b · qwen2.5-coder:7b | None |
+| NVIDIA NIM (free) | `LLM_PROVIDER=nvidia` | meta/llama-3.1-405b-instruct · mistral-nemo · nemotron | `NVIDIA_API_KEY` (free at build.nvidia.com) |
 
-### Ollama Model Guide
+### Gemma 4 — recommended (April 2026, native function calling + multimodal)
 
-| Model | VRAM | Best For |
-|---|---|---|
-| `gemma4:e2b` | ~3 GB | Day-to-day tasks, Forge, Scribe (default) |
-| `gemma4:9b` | ~8 GB | Complex Cortex planning, SecurityReviewer |
-| `llama3.2` | ~2 GB | Minimal footprint |
-| `qwen2.5-coder:7b` | ~5 GB | Code-heavy tasks |
+All Gemma 4 models have **native function-calling** built in and support multimodal input.
+
+| Model | Disk | Context | Modalities | Best for |
+|---|---|---|---|---|
+| **`gemma4:e2b`** | 7.2 GB | 128K | text · image · **audio** | **Default + Sovereign Fallback** |
+| `gemma4:e4b` | 9.6 GB | 128K | text · image · **audio** | Step-up, edge/mobile |
+| `gemma4:26b` | 18 GB | **256K** | text · image | MoE — 3.8B active params, fast Cortex planning |
+| `gemma4:31b` | 20 GB | **256K** | text · image | **Best local quality** — 85.2% MMLU Pro |
+
+### Gemma 3 — vision + 140 languages
+
+| Model | Disk | Context | Notes |
+|---|---|---|---|
+| `gemma3:4b` | 3.3 GB | 128K | Fast vision |
+| `gemma3:12b` | 8.1 GB | 128K | Balanced quality + vision |
+| `gemma3:27b` | 17 GB | 128K | Best Gemma 3, complex vision tasks |
+| `gemma3:4b-it-qat` | ~1 GB | 128K | 3× less memory than gemma3:4b, same quality |
+| `gemma3:12b-it-qat` | ~3 GB | 128K | BF16 quality at reduced memory |
+
+```bash
+# Pull recommended models
+ollama pull gemma4:e2b          # default — already on your machine
+ollama pull gemma4:26b          # MoE — 18 GB disk / 3.8B active / 256K ctx
+ollama pull gemma4:31b          # best — 20 GB / 256K ctx / 85.2% MMLU Pro
+ollama pull gemma3:4b-it-qat    # vision + 3× lower memory
+ollama pull qwen2.5-coder:7b    # coding tasks — already on your machine
+```
+
+After pulling: `cd node && npm run cross-link` regenerates `adapters/ollama-config.json` with your new models.
 
 ---
 
