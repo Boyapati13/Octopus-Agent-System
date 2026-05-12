@@ -20,7 +20,7 @@ const AGENT_PERMISSIONS = {
     'writeback', 'compactSession', 'getCacheStats',
   ],
   atlas: [
-    'searchStructural', 'getContext', 'structuralImpact',
+    'searchStructural', 'getContext', 'structuralImpact', 'writeback',
   ],
   architect: [
     'searchStructural', 'getContext', 'getDecisions', 'getInstincts',

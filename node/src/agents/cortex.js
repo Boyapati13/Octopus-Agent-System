@@ -100,7 +100,12 @@ Planning rules:
 
 JSON array:`;
 
-  const out = await complete(prompt, { maxTokens: 200, timeout: 15000, role });
+  // Local Ollama / custom_http models need much more time than cloud APIs.
+  const isLocal = ['ollama', 'custom_http'].includes(
+    (process.env.LLM_PROVIDER || 'anthropic').toLowerCase()
+  );
+  const planTimeout = isLocal ? 120000 : 20000;
+  const out = await complete(prompt, { maxTokens: 200, timeout: planTimeout, role });
   if (!out || typeof out !== 'string') throw new Error('LLM returned empty or non-string response');
   const match = out.match(/\[[\s\S]*?\]/);
   if (!match) throw new Error('No JSON array in LLM output');
