@@ -3,11 +3,15 @@
   "version": "1.0.0",
   "description": "Octopus agent orchestrator — talks to Python memory service via REST",
   "main": "src/index.js",
+  "bin": {
+    "octopus": "./src/cli.js"
+  },
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/cli.js",
     "serve": "node src/server.js",
     "mcp": "node src/mcp.js",
     "cross-link": "node src/cross-link.js",
+    "cli": "node src/cli.js",
     "test": "jest --runInBand --forceExit"
   },
   "dependencies": {

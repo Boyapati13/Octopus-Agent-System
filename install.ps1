@@ -225,19 +225,49 @@ if ($installed -eq 0) {
     Warn "No LLM client detected. Add manually (see DEPLOYMENT.md)."
 }
 
+# ── Step 7: Global CLI — npm link + PATH ─────────────────────────────────────
+Head "Step 5/6 — Global CLI setup"
+
+Push-Location $NodeDir
+try {
+    npm link --silent 2>$null
+    Log "octopus command linked globally (type 'octopus' from any terminal)"
+} catch {
+    Warn "npm link failed — run manually: cd $NodeDir && npm link"
+}
+Pop-Location
+
+# Also add project root to user PATH so octopus.ps1 is always available
+$currentPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User') ?? ''
+if ($currentPath -notlike "*$RepoDir*") {
+    [System.Environment]::SetEnvironmentVariable('PATH', "$RepoDir;$currentPath", 'User')
+    Log "Added $RepoDir to user PATH (restart terminal to take effect)"
+} else {
+    Log "Project root already in user PATH"
+}
+
 # ── Done ──────────────────────────────────────────────────────────────────────
-Head "Step 5/5 — Done"
+Head "Step 6/6 — Done"
 Log "Octopus 2.0 installed ($installed client(s) registered)"
 Write-Host ""
-Info "Zero-Key setup — 3 steps:"
-Write-Host "  1. Start services:  .\start_mcp.ps1"
-Write-Host "  2. Index your repo: $pyCmd python\indexer\index_repo.py --root . --db .\data\octopus.db"
-Write-Host "  3. In your AI chat: octopus_login"
-Write-Host "     → browser opens the API dashboard · paste your key · stored in Windows Vault"
+Info "Start the Octopus interactive CLI:"
+Write-Host "  octopus" -ForegroundColor Cyan
+Write-Host "  (or: .\octopus.ps1 from the project directory)"
 Write-Host ""
-Info "Local Gemma 4 (no API key, no cloud cost):"
-Write-Host "  ollama pull gemma4:e2b"
-Write-Host "  LLM_PROVIDER=ollama and LLM_MODEL=gemma4:e2b are set automatically if Ollama was detected."
+Info "What you get in the CLI:"
+Write-Host "  /plan <task>   — plan with Cortex, see the agent chain"
+Write-Host "  /run  <task>   — run the full 14-agent pipeline live"
+Write-Host "  /models        — see your Ollama models"
+Write-Host "  /routes        — see which model each agent uses"
+Write-Host "  /vault         — check API key status"
+Write-Host "  /update        — self-update from GitHub"
 Write-Host ""
-Info "Full deployment guide: $RepoDir\DEPLOYMENT.md"
+Info "Zero-Key auth — in the CLI or your AI chat:"
+Write-Host "  octopus_login  → browser opens, paste key once, stored in Windows Vault"
+Write-Host ""
+Info "Local Gemma 4 (no API key needed):"
+Write-Host "  ollama pull gemma4:e2b    # default — 7.2 GB"
+Write-Host "  ollama pull gemma4:26b    # planning — 18 GB, 3.8B active (MoE)"
+Write-Host ""
+Info "Full guide: $RepoDir\DEPLOYMENT.md"
 Write-Host ""

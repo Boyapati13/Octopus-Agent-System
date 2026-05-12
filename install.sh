@@ -235,19 +235,33 @@ CONTINUE_CFG="$HOME/.continue/config.json"
 
 [ "$INSTALLED" -eq 0 ] && warn "No LLM client detected — add manually (see DEPLOYMENT.md)" || true
 
+# ── Global CLI ─────────────────────────────────────────────────────────────────
+head "Step 5/6 — Global CLI setup"
+(cd "$NODE_DIR" && npm link --silent 2>/dev/null) && log "octopus command linked globally" || warn "npm link failed — run: cd $NODE_DIR && sudo npm link"
+chmod +x "$REPO_DIR/octopus.sh"
+if [ -d "$HOME/.local/bin" ]; then
+    ln -sf "$REPO_DIR/octopus.sh" "$HOME/.local/bin/octopus" && log "Symlinked: ~/.local/bin/octopus"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
-head "Step 5/5 — Done"
+head "Step 6/6 — Done"
 log "Octopus 2.0 installed ($INSTALLED client(s) registered)"
 echo ""
-info "Zero-Key setup — 3 steps:"
-echo "  1. Start services:   ./start_mcp.sh"
-echo "  2. Index your repo:  $PY_CMD python/indexer/index_repo.py --root . --db ./data/octopus.db"
-echo "  3. In your AI chat:  octopus_login  (choose anthropic / openai / google)"
-echo "     → browser opens the API dashboard, you paste the key, it's stored in the OS Vault."
+info "Start the Octopus interactive CLI:"
+echo "  octopus"
+echo "  (or: ./octopus.sh)"
+echo ""
+info "What you get:"
+echo "  /plan <task>   — plan with Cortex, see the agent chain"
+echo "  /run  <task>   — run the full 14-agent pipeline live"
+echo "  /models        — your Ollama models"
+echo "  /routes        — which model each agent uses"
+echo "  /vault         — API key status"
+echo "  /update        — self-update from GitHub"
 echo ""
 info "Local Gemma 4 (no API key, no cloud cost):"
-echo "  ollama pull gemma4:e2b"
-echo "  LLM_PROVIDER=ollama and LLM_MODEL=gemma4:e2b are already set if Ollama was detected."
+echo "  ollama pull gemma4:e2b     # default — 7.2 GB"
+echo "  ollama pull gemma4:26b     # planning — 18 GB, 3.8B active (MoE)"
 echo ""
-info "Full deployment guide: $REPO_DIR/DEPLOYMENT.md"
+info "Full guide: $REPO_DIR/DEPLOYMENT.md"
 echo ""
