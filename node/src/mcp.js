@@ -221,10 +221,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Open browser to the provider dashboard (best-effort; non-blocking)
         const DASHBOARD_URLS = {
-          anthropic: 'https://console.anthropic.com/settings/keys',
-          openai:    'https://platform.openai.com/api-keys',
-          google:    'https://aistudio.google.com/app/apikey',
-          nvidia:    'https://build.nvidia.com/settings/api-key',
+          anthropic:   'https://console.anthropic.com/settings/keys',
+          openai:      'https://platform.openai.com/api-keys',
+          google:      'https://aistudio.google.com/app/apikey',
+          nvidia:      'https://build.nvidia.com/settings/api-key',
+          huggingface: 'https://huggingface.co/settings/tokens',
         };
         if (DASHBOARD_URLS[provider]) {
           try {
@@ -290,7 +291,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'octopus_vault_check': {
-        const providers = ['anthropic', 'openai', 'google', 'nvidia'];
+        const providers = ['anthropic', 'openai', 'google', 'nvidia', 'huggingface'];
         const keyChecks = await Promise.all(
           providers.map(async p => {
             const key = await getSecureKey(p);

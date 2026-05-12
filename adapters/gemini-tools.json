@@ -413,12 +413,13 @@
             "properties": {
               "provider": {
                 "type": "STRING",
-                "description": "Provider to authorize: anthropic | openai | google | nvidia (free) | enterprise (Vertex AI/Bedrock)",
+                "description": "Provider to authorize: anthropic | openai | google | nvidia (free) | huggingface (free, Gemma) | enterprise",
                 "enum": [
                   "anthropic",
                   "openai",
                   "google",
                   "nvidia",
+                  "huggingface",
                   "enterprise"
                 ]
               }

@@ -246,8 +246,8 @@ const TOOLS = [
       properties: {
         provider: {
           type: 'string',
-          enum: ['anthropic', 'openai', 'google', 'nvidia', 'enterprise'],
-          description: 'Provider to authorize: anthropic | openai | google | nvidia (free) | enterprise (Vertex AI/Bedrock)',
+          enum: ['anthropic', 'openai', 'google', 'nvidia', 'huggingface', 'enterprise'],
+          description: 'Provider to authorize: anthropic | openai | google | nvidia (free) | huggingface (free, Gemma) | enterprise',
         },
       },
     },

@@ -34,7 +34,8 @@ const CALLER_PRESETS = {
   openai:    { provider: 'openai',    model: 'gpt-4o'                     },
   gemini:    { provider: 'google',    model: 'gemini-2.5-pro'             },
   ollama:    { provider: 'ollama',    model: 'gemma4:e2b'                 },
-  nvidia:    { provider: 'nvidia',    model: 'meta/llama-3.1-405b-instruct' },
+  nvidia:       { provider: 'nvidia',       model: 'meta/llama-3.1-405b-instruct'  },
+  huggingface:  { provider: 'huggingface', model: 'google/gemma-3-4b-it'          },
   // cursor/windsurf/continue defer to LLM_PROVIDER/LLM_MODEL env vars
 };
 const preset = CALLER_PRESETS[CALLER] || null;
@@ -44,11 +45,12 @@ const PROVIDER = preset
   : (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
 
 const MODEL = process.env.LLM_MODEL || (preset ? preset.model : {
-  anthropic: 'claude-sonnet-4-6',
-  openai:    'gpt-4o',
-  google:    'gemini-2.0-flash',
-  ollama:    'llama3.2',
-  nvidia:    'meta/llama-3.1-405b-instruct',
+  anthropic:    'claude-sonnet-4-6',
+  openai:       'gpt-4o',
+  google:       'gemini-2.0-flash',
+  ollama:       'llama3.2',
+  nvidia:       'meta/llama-3.1-405b-instruct',
+  huggingface:  'google/gemma-3-4b-it',
 }[PROVIDER]) || 'claude-sonnet-4-6';
 
 if (CALLER && preset) {
@@ -61,10 +63,11 @@ const MAX_RETRIES = 2;
 const VAULT_SERVICE  = 'Octopus_Vault';
 const SESSION_FILE   = path.join(os.homedir(), '.octopus', 'sessions.json');
 const ENV_KEY_MAP    = {
-  anthropic: 'ANTHROPIC_API_KEY',
-  openai:    'OPENAI_API_KEY',
-  google:    'GOOGLE_API_KEY',
-  nvidia:    'NVIDIA_API_KEY',
+  anthropic:   'ANTHROPIC_API_KEY',
+  openai:      'OPENAI_API_KEY',
+  google:      'GOOGLE_API_KEY',
+  nvidia:      'NVIDIA_API_KEY',
+  huggingface: 'HF_TOKEN',
 };
 
 /**
@@ -184,6 +187,33 @@ async function completeGoogle(prompt, opts = {}) {
   });
 }
 
+// Hugging Face Inference API — free tier, 50+ Gemma + other models
+// Sign up at huggingface.co → Settings → Access Tokens → New token (free)
+// Works with: google/gemma-3-4b-it, google/gemma-3-12b-it, google/gemma-2-9b-it, etc.
+async function completeHuggingFace(prompt, opts = {}) {
+  const apiKey = await getSecureKey('huggingface');
+  const model  = MODEL;
+  return withRetry(async () => {
+    const res = await axios.post(
+      `https://router.huggingface.co/hf-inference/models/${model}/v1/chat/completions`,
+      {
+        model,
+        messages:   [{ role: 'user', content: prompt }],
+        max_tokens: opts.maxTokens || 1024,
+        stream:     false,
+      },
+      {
+        headers: {
+          Authorization:  `Bearer ${apiKey || ''}`,
+          'content-type': 'application/json',
+        },
+        timeout: opts.timeout || 60000,
+      }
+    );
+    return res.data.choices[0].message.content;
+  });
+}
+
 // NVIDIA NIM — OpenAI-compatible endpoint, free tier via build.nvidia.com
 // Free plan: 40 req/min, 50+ models including Llama, Mistral, GLM, Nemotron
 async function completeNvidia(prompt, opts = {}) {
@@ -224,11 +254,12 @@ async function completeOllama(prompt, opts = {}) {
 }
 
 const COMPLETERS = {
-  anthropic: completeAnthropic,
-  openai:    completeOpenAI,
-  google:    completeGoogle,
-  ollama:    completeOllama,
-  nvidia:    completeNvidia,
+  anthropic:   completeAnthropic,
+  openai:      completeOpenAI,
+  google:      completeGoogle,
+  ollama:      completeOllama,
+  nvidia:      completeNvidia,
+  huggingface: completeHuggingFace,
 };
 
 const SOVEREIGN_MODEL = process.env.SOVEREIGN_FALLBACK_MODEL || 'gemma4:e2b';

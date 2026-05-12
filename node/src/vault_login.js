@@ -35,10 +35,16 @@ const PROVIDERS = [
     hint:  'Generate a key at aistudio.google.com → Get API Key',
   },
   {
-    name:  'NVIDIA NIM (FREE — Llama · Mistral · Nemotron · 50+ models)',
+    name:  'NVIDIA NIM  (FREE — Llama · Mistral · Nemotron · 50+ models)',
     value: 'nvidia',
     url:   'https://build.nvidia.com/settings/api-key',
-    hint:  'Free at build.nvidia.com — sign up for NVIDIA Developer Program, generate nvapi-... key',
+    hint:  'Free at build.nvidia.com — NVIDIA Developer Program, key starts with nvapi-',
+  },
+  {
+    name:  'Hugging Face (FREE — Gemma 3/4 · Llama · Mistral · 100k+ models)',
+    value: 'huggingface',
+    url:   'https://huggingface.co/settings/tokens',
+    hint:  'Free at huggingface.co → Settings → Access Tokens → New token (read)',
   },
   {
     name:  'Vertex AI / AWS Bedrock  (show setup instructions)',
