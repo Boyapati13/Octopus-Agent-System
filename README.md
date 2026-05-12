@@ -103,9 +103,17 @@ After `start_server.ps1` starts, open: **http://localhost:3001/dashboard**
 
 ### Web Dashboard (new)
 - **No hardware needed** — `GET /dashboard` at `http://localhost:3001/dashboard`
-- Live WebSocket event feed, agent timeline, gate status, chain elapsed timer
-- Task input bar, STOP button, one-click security scan
+- Project/session workspace with persistent conversation, answer, activity, approvals, and browser context
+- Three-pane operator UI: project list, visible answer/conversation/narration feed, and browser/tools/telemetry panel
+- Voice-first controls with follow-up listening, interrupt, and task routing hints
 - Auto-reconnect with exponential backoff
+
+### Project Workspace (updated)
+- `GET /api/projects` — list, create, and switch project/session workspaces
+- `POST /api/projects/:id/messages` — persist conversation messages by project
+- `POST /api/projects/:id/activity` — keep execution events separate from chat
+- `POST /api/projects/:id/answer` and `PATCH /api/projects/:id/browser-context` — keep the visible operator state in sync
+- `POST /api/tasks/run` and `POST /api/tasks/voice` accept `project_id` so execution stays scoped to the active workspace
 
 ### Voice Integration (new)
 - **POST /api/tasks/voice** — text-in / TTS-summary-out path
@@ -248,16 +256,19 @@ No Stream Deck+ needed. After `.\start_server.ps1`, open:
 **http://localhost:3001/dashboard**
 
 Features:
-- **Live chain state** — idle / running (with elapsed timer) / done / failed
-- **Agent timeline** — each agent with icon, role, approval, notes
-- **Gate panel** — Reviewer, SecurityReviewer, Probe, FactChecker, ReleaseKeeper
-- **Event log** — real-time WS events, color-coded by type, timestamps
-- **Task input** — type a prompt → RUN; STOP for interrupt; SCAN for security
-- **WebSocket auto-reconnect** with exponential backoff (2s → 30s)
+- **Project sidebar** — create and switch between operator workspaces without losing context
+- **Answer panel** — the current result stays visible at all times
+- **Conversation feed** — user, voice, and assistant messages are stored per project
+- **Progress narration** — task execution is summarized separately from chat
+- **Browser context** — URL, title, last action, and recent tabs stay visible while browsing
+- **Active tools and approvals** — the UI exposes tool state and blocked/risky actions explicitly
+- **Telemetry panel** — raw execution detail is kept separate from the main workspace
+- **Voice input** — text, speech, follow-up listening, and interrupt all share the same workspace state
+- **WebSocket auto-reconnect** with exponential backoff
 - Shows active LLM provider/model and headless mode status
 
 ```
-http://localhost:3001/dashboard   ← web dashboard
+http://localhost:3001/dashboard   ← operator workspace
 http://localhost:3001/api/status  ← JSON status (for monitoring)
 ws://localhost:3001/ws            ← raw WebSocket event stream
 ```
