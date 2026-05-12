@@ -34,7 +34,8 @@ const CALLER_PRESETS = {
   openai:       { provider: 'openai',      model: 'gpt-4o'                           },
   gemini:       { provider: 'google',      model: 'gemini-2.5-pro'                   },
   ollama:       { provider: 'ollama',      model: 'gemma4:e2b'                       },
-  nvidia:       { provider: 'nvidia',      model: 'meta/llama-3.1-405b-instruct'     },
+  nvidia:       { provider: 'nvidia',      model: 'meta/llama-3.1-405b-instruct'                },
+  nemotron:     { provider: 'nvidia',      model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' },
   huggingface:  { provider: 'huggingface', model: 'google/gemma-3-4b-it'             },
   custom:       { provider: 'custom_http', model: process.env.CUSTOM_HTTP_MODEL || 'default' },
   // cursor/windsurf/continue defer to LLM_PROVIDER/LLM_MODEL env vars
@@ -197,12 +198,55 @@ async function completeHuggingFace(prompt, opts = {}) {
 }
 
 // NVIDIA NIM — OpenAI-compatible, free trial at build.nvidia.com
-// Models: deepseek-ai/deepseek-v4-pro (1M ctx), moonshotai/kimi-k2-thinking,
-//         qwen/qwen2.5-coder-32b-instruct, stockmark/stockmark-2-100b-instruct, etc.
+// Reasoning models (nemotron-*-reasoning, kimi-k2-thinking, deepseek-*-thinking)
+// require stream:true and return chunks with delta.content.
+// Standard models work with stream:false.
+// Extra opts: opts.reasoningBudget (default 16384 for reasoning models)
+//             opts.enableThinking  (default true for reasoning models)
+const NVIDIA_REASONING_RE = /reasoning|thinking|r1|nemotron.*omni/i;
+
 async function completeNvidia(prompt, opts = {}) {
   const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('nvidia');
+  const isReasoning = NVIDIA_REASONING_RE.test(model);
+
   return withRetry(async () => {
+    if (isReasoning) {
+      // Reasoning models need SSE streaming — accumulate all chunks
+      const body = {
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: opts.maxTokens || 65536,
+        temperature: 0.6,
+        top_p: 0.95,
+        reasoning_budget: opts.reasoningBudget || 16384,
+        chat_template_kwargs: { enable_thinking: opts.enableThinking !== false },
+        stream: true,
+      };
+      const res = await axios.post(
+        'https://integrate.api.nvidia.com/v1/chat/completions',
+        body,
+        {
+          headers: { Authorization: `Bearer ${apiKey || ''}`, 'content-type': 'application/json', Accept: 'text/event-stream' },
+          timeout: opts.timeout || 120000,
+          responseType: 'text',
+        }
+      );
+      // Parse SSE stream — collect delta.content pieces, skip <think>…</think> tags
+      let fullText = '';
+      for (const line of String(res.data).split('\n')) {
+        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+        try {
+          const chunk = JSON.parse(line.slice(6));
+          const delta = chunk.choices?.[0]?.delta?.content;
+          if (delta) fullText += delta;
+        } catch { /* malformed chunk — skip */ }
+      }
+      // Strip <think>…</think> blocks from output (keep only the answer)
+      return fullText.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    }
+
+    // Standard non-reasoning NVIDIA models
     const res = await axios.post(
       'https://integrate.api.nvidia.com/v1/chat/completions',
       { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }], stream: false },

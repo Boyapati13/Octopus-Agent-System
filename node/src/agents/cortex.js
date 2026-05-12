@@ -100,11 +100,12 @@ Planning rules:
 
 JSON array:`;
 
-  // Local Ollama / custom_http models need much more time than cloud APIs.
-  const isLocal = ['ollama', 'custom_http'].includes(
-    (process.env.LLM_PROVIDER || 'anthropic').toLowerCase()
-  );
-  const planTimeout = isLocal ? 120000 : 20000;
+  // Local models and NVIDIA reasoning models need much more time than cloud APIs.
+  const provider = (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
+  const model    = (process.env.LLM_MODEL || '').toLowerCase();
+  const isSlowProvider = provider === 'ollama' || provider === 'custom_http' ||
+    (provider === 'nvidia' && /reasoning|thinking|r1|omni/i.test(model));
+  const planTimeout = isSlowProvider ? 120000 : 20000;
   const out = await complete(prompt, { maxTokens: 200, timeout: planTimeout, role });
   if (!out || typeof out !== 'string') throw new Error('LLM returned empty or non-string response');
   const match = out.match(/\[[\s\S]*?\]/);

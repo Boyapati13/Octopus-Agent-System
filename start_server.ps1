@@ -75,6 +75,7 @@ CUSTOM_HTTP_MODEL=
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 GOOGLE_API_KEY=
+NVIDIA_API_KEY=
 "@ | Out-File -FilePath $EnvFile -Encoding utf8
     OK ".env created"
 }
@@ -100,8 +101,7 @@ try {
         Start-Sleep -Seconds 4
         try {
             Invoke-WebRequest "http://localhost:11434/api/tags" -TimeoutSec 4 -UseBasicParsing -ErrorAction Stop | Out-Null
-            $ollamaOnline = $true
-            OK "Ollama started"
+            $ollamaOnline = $true; OK "Ollama started"
         } catch { WARN "Ollama did not start - cloud providers only" }
     } else {
         INFO "Ollama not installed - cloud providers only"
@@ -109,12 +109,12 @@ try {
 }
 
 # -- 4. Start Python memory service (port 5000) --------------------------------
-# IMPORTANT: do NOT set $env:PORT before this - Flask reads it and would steal the port
+# Do NOT set $env:PORT here - Flask reads it and would steal port 3001
 
 Write-Host ""
 INFO "Starting Python memory service on :5000..."
-$MemPy  = Join-Path $ScriptDir "python\services\memory_service.py"
-$MemDir = Join-Path $ScriptDir "python"
+$MemPy   = Join-Path $ScriptDir "python\services\memory_service.py"
+$MemDir  = Join-Path $ScriptDir "python"
 $MemProc = Start-Process -NoNewWindow -PassThru -FilePath $pyCmd -ArgumentList $MemPy -WorkingDirectory $MemDir
 
 Start-Sleep -Seconds 3
@@ -125,32 +125,23 @@ try {
     WARN "Memory service health check timed out. Check python/requirements.txt is installed."
 }
 
-# -- 5. Start REST + WebSocket server ------------------------------------------
-# Set PORT only here, after Python has already started, so Flask stays on 5000
+# -- 5. Start REST + WebSocket server (foreground, after Python is up) ---------
+# Set PORT only here so Python never sees it
 
 $env:PORT = "$Port"
-
-Write-Host ""
-OK "Starting Octopus API server on :$Port..."
-Write-Host ""
-Write-Host "  REST API  : http://localhost:$Port/api/health" -ForegroundColor Cyan
-Write-Host "  WebSocket : ws://localhost:$Port/ws"           -ForegroundColor Cyan
-Write-Host "  Dashboard : http://localhost:$Port/dashboard"  -ForegroundColor Cyan
-Write-Host ""
-Write-Host "  Press Ctrl+C to stop." -ForegroundColor DarkGray
-Write-Host ""
-
-# Start Node server in background job so we can poll health before opening browser
 $NodeScript = Join-Path $NodeDir "src\server.js"
-$nodeJob = Start-Job -ScriptBlock {
-    param($script, $port)
-    $env:PORT = $port
-    & node $script
-} -ArgumentList $NodeScript, "$Port"
 
-# Poll /api/health until ready (up to 15s)
+Write-Host ""
+INFO "Starting Octopus API server on :$Port..."
+
+# Start Node as a visible background process (not a PS Job - avoids stderr error handling)
+$NodeProc = Start-Process -FilePath "node" -ArgumentList $NodeScript `
+    -NoNewWindow -PassThru -WorkingDirectory $NodeDir
+
+# Poll /api/health until ready (up to 20 seconds)
 $ready = $false
-for ($i = 0; $i -lt 15; $i++) {
+INFO "Waiting for server to be ready..."
+for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Seconds 1
     try {
         $r = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
@@ -160,29 +151,28 @@ for ($i = 0; $i -lt 15; $i++) {
 
 if ($ready) {
     OK "Server ready on :$Port"
-    if (-not $NoBrowser) { Start-Process "http://localhost:$Port/dashboard" }
 } else {
-    WARN "Server did not respond in time - opening dashboard anyway"
-    if (-not $NoBrowser) { Start-Process "http://localhost:$Port/dashboard" }
+    WARN "Server health check timed out - it may still be starting"
 }
 
-# Keep the window alive and stream Node output
+Write-Host ""
+Write-Host "  REST API  : http://localhost:$Port/api/health" -ForegroundColor Cyan
+Write-Host "  WebSocket : ws://localhost:$Port/ws"           -ForegroundColor Cyan
+Write-Host "  Dashboard : http://localhost:$Port/dashboard"  -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  Press Ctrl+C to stop all services." -ForegroundColor DarkGray
+Write-Host ""
+
+if (-not $NoBrowser) { Start-Process "http://localhost:$Port/dashboard" }
+
+# Keep the window alive until Node exits or user presses Ctrl+C
 try {
-    Write-Host ""
-    Write-Host "  Server output:" -ForegroundColor DarkGray
-    while ($true) {
-        $output = Receive-Job -Job $nodeJob 2>&1
-        if ($output) { $output | ForEach-Object { Write-Host "  $_" } }
-        if ($nodeJob.State -eq 'Completed' -or $nodeJob.State -eq 'Failed') { break }
-        Start-Sleep -Milliseconds 500
-    }
+    $NodeProc.WaitForExit()
 } finally {
     Write-Host ""
-    INFO "Shutting down..."
-    Stop-Job -Job $nodeJob -ErrorAction SilentlyContinue
-    Remove-Job -Job $nodeJob -ErrorAction SilentlyContinue
+    INFO "Shutting down memory service..."
     if ($MemProc -and -not $MemProc.HasExited) {
         Stop-Process -Id $MemProc.Id -Force -ErrorAction SilentlyContinue
     }
-    INFO "Stopped."
+    INFO "All services stopped."
 }
