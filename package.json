@@ -1,0 +1,52 @@
+{
+  "name": "octodeck",
+  "version": "3.0.0",
+  "private": true,
+  "description": "OctoDeck — Physical AI control surface + Octopus multi-agent orchestration engine. 13 display surfaces. 14 specialist agents. One unified system.",
+  "scripts": {
+    "build": "pnpm --filter @agentdeck/shared build && pnpm --filter '!@agentdeck/shared' -r build",
+    "dev": "pnpm -r --parallel dev",
+    "demo": "node scripts/render-creature-simulator.mjs && npx --yes vite tools/creature-simulator",
+    "demo:build": "node scripts/render-creature-simulator.mjs && vite build tools/creature-simulator --base=/AgentDeck/demo/ --outDir ../../dist/demo --emptyOutDir && cp tools/creature-simulator/sim-data.js dist/demo/sim-data.js",
+    "clean": "pnpm -r clean",
+    "typecheck": "pnpm -r typecheck",
+    "generate-icons": "node scripts/generate-icons.mjs",
+    "generate-protocol": "bash scripts/generate-protocol.sh",
+    "package": "bash scripts/package-plugin.sh",
+    "setup": "bash scripts/install.sh",
+    "test": "vitest run",
+    "test:report": "bash scripts/test-report.sh",
+    "test:android": "bash scripts/test-report.sh --android",
+    "test:html": "pnpm vitest run --coverage && python3 scripts/generate-html-report.py && open coverage/test-report/index.html",
+    "d200h:preview": "node scripts/d200h-preview-dump.mjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "postinstall": "bash scripts/postinstall.sh"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.5.0",
+    "prettier": "^3.8.3",
+    "quicktype": "^23.2.6",
+    "sharp": "^0.34.5",
+    "ts-json-schema-generator": "^2.9.0",
+    "typescript-eslint": "^8.59.0",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "node-hid"
+    ]
+  }
+}

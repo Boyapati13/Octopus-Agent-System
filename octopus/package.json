@@ -1,0 +1,39 @@
+{
+  "name": "@octodeck/octopus",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Octopus Agent System — 14-agent self-evolving AI orchestration engine with 5-layer memory, AgentShield security, and ECC Fusion. MCP server backend for OctoDeck.",
+  "main": "./node/src/index.js",
+  "scripts": {
+    "start": "node node/src/index.js",
+    "mcp": "node node/src/mcp.js",
+    "serve": "node node/src/server.js",
+    "memory": "python python/services/memory_service.py",
+    "test": "cd node && npm test",
+    "test:python": "cd python && pytest",
+    "start:all": "bash start_mcp.sh",
+    "index": "python python/indexer/index_repo.py --root .. --db ./data/octopus.db"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.11"
+  },
+  "keywords": [
+    "multi-agent",
+    "mcp",
+    "ai-orchestration",
+    "agentshield",
+    "continuous-learning",
+    "llm",
+    "claude",
+    "openai",
+    "ollama"
+  ]
+}
