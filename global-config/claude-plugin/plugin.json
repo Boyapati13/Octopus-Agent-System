@@ -2,7 +2,7 @@
   "_note": "Claude Code uses MCP stdio. Register in ~/.claude/settings.json — see README.",
   "name": "octopus-2",
   "version": "2.0.2",
-  "description": "Octopus Sovereign Edition — 23 tools, Zero-Key auth",
+  "description": "Octopus Sovereign Edition — 24 tools, Zero-Key auth",
   "entrypoint": "C:\\Users\\Tenders\\Downloads\\octopus-software-full\\node\\src\\mcp.js",
   "transport": "stdio",
   "connection": {
@@ -32,7 +32,8 @@
     "octopus_browser_interact",
     "octopus_login",
     "octopus_vault_check",
-    "octopus_memory_status"
+    "octopus_memory_status",
+    "octopus_task_routes"
   ],
-  "toolCount": 23
+  "toolCount": 24
 }

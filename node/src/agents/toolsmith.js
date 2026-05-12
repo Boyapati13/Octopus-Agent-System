@@ -47,7 +47,7 @@ Requirements:
 
 Return ONLY valid JavaScript code, no markdown fences:`;
 
-  const code = await complete(prompt, { maxTokens: 800, timeout: 30000 });
+  const code = await complete(prompt, { maxTokens: 800, timeout: 30000, role });
 
   // Extract JSON schema for MCP registration
   const schemaPrompt = `Extract the MCP tool schema from this skill code as JSON only:
@@ -55,7 +55,7 @@ ${code}
 
 Return JSON: {"name":"...","description":"...","inputSchema":{"type":"object","properties":{},"required":[]}}`;
 
-  const schemaText = await complete(schemaPrompt, { maxTokens: 300, timeout: 15000 });
+  const schemaText = await complete(schemaPrompt, { maxTokens: 300, timeout: 15000, role });
 
   let mcpSchema;
   try {

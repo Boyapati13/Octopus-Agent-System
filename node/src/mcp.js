@@ -327,6 +327,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'octopus_task_routes': {
+        const taskRouter = require('./task_router');
+        const routes     = taskRouter.summarise();
+        const activeMode = (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              router_active: activeMode === 'router',
+              current_provider: activeMode,
+              enable_router: 'Set LLM_PROVIDER=router in node/.env to activate task routing',
+              routes: routes.map(r => ({
+                role:        r.role,
+                agents:      r.agents,
+                provider:    r.provider,
+                model:       r.model,
+                description: r.description,
+                overridden:  r.overridden,
+              })),
+            }, null, 2),
+          }],
+        };
+      }
+
       case 'octopus_memory_status': {
         const serviceUrl = process.env.MEMORY_SERVICE_URL || 'http://localhost:5000';
         try {

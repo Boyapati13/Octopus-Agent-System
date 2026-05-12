@@ -127,22 +127,17 @@ function withRetry(fn) {
   })();
 }
 
+// All completers support opts._model to allow per-call model overrides from the task router
+
 async function completeAnthropic(prompt, opts = {}) {
+  const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('anthropic');
   return withRetry(async () => {
     const res = await axios.post(
       'https://api.anthropic.com/v1/messages',
+      { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }] },
       {
-        model: MODEL,
-        max_tokens: opts.maxTokens || 1024,
-        messages: [{ role: 'user', content: prompt }],
-      },
-      {
-        headers: {
-          'x-api-key':         apiKey || '',
-          'anthropic-version': '2023-06-01',
-          'content-type':      'application/json',
-        },
+        headers: { 'x-api-key': apiKey || '', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
         timeout: opts.timeout || 30000,
       }
     );
@@ -151,89 +146,57 @@ async function completeAnthropic(prompt, opts = {}) {
 }
 
 async function completeOpenAI(prompt, opts = {}) {
+  const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('openai');
   return withRetry(async () => {
     const res = await axios.post(
       'https://api.openai.com/v1/chat/completions',
-      {
-        model: MODEL,
-        max_tokens: opts.maxTokens || 1024,
-        messages: [{ role: 'user', content: prompt }],
-      },
-      {
-        headers: {
-          Authorization:  `Bearer ${apiKey || ''}`,
-          'content-type': 'application/json',
-        },
-        timeout: opts.timeout || 30000,
-      }
+      { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }] },
+      { headers: { Authorization: `Bearer ${apiKey || ''}`, 'content-type': 'application/json' }, timeout: opts.timeout || 30000 }
     );
     return res.data.choices[0].message.content;
   });
 }
 
 async function completeGoogle(prompt, opts = {}) {
+  const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('google');
   return withRetry(async () => {
     const res = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey || ''}`,
-      {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: opts.maxTokens || 1024 },
-      },
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey || ''}`,
+      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: opts.maxTokens || 1024 } },
       { timeout: opts.timeout || 30000 }
     );
     return res.data.candidates[0].content.parts[0].text;
   });
 }
 
-// Hugging Face Inference API — free tier, 50+ Gemma + other models
-// Sign up at huggingface.co → Settings → Access Tokens → New token (free)
-// Works with: google/gemma-3-4b-it, google/gemma-3-12b-it, google/gemma-2-9b-it, etc.
+// Hugging Face Inference API — free tier, Gemma + 100k models
+// Sign up at huggingface.co → Settings → Access Tokens (read, free)
 async function completeHuggingFace(prompt, opts = {}) {
+  const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('huggingface');
-  const model  = MODEL;
   return withRetry(async () => {
     const res = await axios.post(
       `https://router.huggingface.co/hf-inference/models/${model}/v1/chat/completions`,
-      {
-        model,
-        messages:   [{ role: 'user', content: prompt }],
-        max_tokens: opts.maxTokens || 1024,
-        stream:     false,
-      },
-      {
-        headers: {
-          Authorization:  `Bearer ${apiKey || ''}`,
-          'content-type': 'application/json',
-        },
-        timeout: opts.timeout || 60000,
-      }
+      { model, messages: [{ role: 'user', content: prompt }], max_tokens: opts.maxTokens || 1024, stream: false },
+      { headers: { Authorization: `Bearer ${apiKey || ''}`, 'content-type': 'application/json' }, timeout: opts.timeout || 60000 }
     );
     return res.data.choices[0].message.content;
   });
 }
 
-// NVIDIA NIM — OpenAI-compatible endpoint, free tier via build.nvidia.com
-// Free plan: 40 req/min, 50+ models including Llama, Mistral, GLM, Nemotron
+// NVIDIA NIM — OpenAI-compatible, free trial at build.nvidia.com
+// Models: deepseek-ai/deepseek-v4-pro (1M ctx), moonshotai/kimi-k2-thinking,
+//         qwen/qwen2.5-coder-32b-instruct, stockmark/stockmark-2-100b-instruct, etc.
 async function completeNvidia(prompt, opts = {}) {
+  const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('nvidia');
   return withRetry(async () => {
     const res = await axios.post(
       'https://integrate.api.nvidia.com/v1/chat/completions',
-      {
-        model: MODEL,
-        max_tokens: opts.maxTokens || 1024,
-        messages: [{ role: 'user', content: prompt }],
-        stream: false,
-      },
-      {
-        headers: {
-          Authorization:  `Bearer ${apiKey || ''}`,
-          'content-type': 'application/json',
-        },
-        timeout: opts.timeout || 60000,
-      }
+      { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }], stream: false },
+      { headers: { Authorization: `Bearer ${apiKey || ''}`, 'content-type': 'application/json' }, timeout: opts.timeout || 60000 }
     );
     return res.data.choices[0].message.content;
   });
@@ -241,7 +204,6 @@ async function completeNvidia(prompt, opts = {}) {
 
 async function completeOllama(prompt, opts = {}) {
   const base  = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-  // opts._model lets Sovereign Fallback override the module-level MODEL constant
   const model = opts._model || MODEL;
   return withRetry(async () => {
     const res = await axios.post(
@@ -265,12 +227,28 @@ const COMPLETERS = {
 const SOVEREIGN_MODEL = process.env.SOVEREIGN_FALLBACK_MODEL || 'gemma4:e2b';
 
 async function complete(prompt, opts = {}) {
-  const fn = COMPLETERS[PROVIDER];
-  if (!fn) throw new Error(`Unknown LLM_PROVIDER "${PROVIDER}". Valid: ${Object.keys(COMPLETERS).join(', ')}`);
   const cappedOpts = { ...opts, maxTokens: Math.min(opts.maxTokens || 1024, MAX_THINKING_TOKENS) };
 
-  // Sovereign Fallback: if a cloud provider is active but no key is present,
-  // automatically route to local Ollama rather than failing with an auth error.
+  // ── Task Router: LLM_PROVIDER=router routes per agent role ───────────────
+  if (PROVIDER === 'router' && opts.role) {
+    const taskRouter = require('./task_router');
+    const route = taskRouter.getRoute(opts.role);
+    console.error(`[llm] router: ${opts.role} → ${route.provider}/${route.model}`);
+
+    const routedKey = route.provider !== 'ollama' ? await getSecureKey(route.provider) : 'local';
+    if (!routedKey) {
+      console.error(`[llm] No key for ${route.provider} — sovereign fallback to Ollama`);
+      return completeOllama(prompt, { ...cappedOpts, _model: SOVEREIGN_MODEL });
+    }
+    const routedFn = COMPLETERS[route.provider];
+    if (!routedFn) throw new Error(`Router: unknown provider "${route.provider}"`);
+    return routedFn(prompt, { ...cappedOpts, _model: route.model });
+  }
+
+  const fn = COMPLETERS[PROVIDER];
+  if (!fn) throw new Error(`Unknown LLM_PROVIDER "${PROVIDER}". Valid: ${Object.keys(COMPLETERS).concat('router').join(', ')}`);
+
+  // ── Sovereign Fallback: no cloud key → local Ollama ───────────────────────
   if (PROVIDER !== 'ollama') {
     const key = await getSecureKey(PROVIDER);
     if (!key) {

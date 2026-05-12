@@ -3,7 +3,7 @@
   "mcpVersion": "1.0",
   "name": "octopus-2",
   "version": "2.0.2",
-  "description": "Octopus Sovereign Edition — self-evolving AI agent system. 23 tools, Zero-Key auth, Sovereign Fallback to local Ollama.",
+  "description": "Octopus Sovereign Edition — self-evolving AI agent system. 24 tools, Zero-Key auth, Sovereign Fallback to local Ollama.",
   "homepage": "https://github.com/Boyapati13/Octopus-Agent-System",
   "server": {
     "transport": "stdio",
@@ -118,6 +118,10 @@
     {
       "name": "octopus_memory_status",
       "description": "Diagnostic: ping the Python memory service (port 5000) and return its health status. Use this to verify the service is running before running agent task chains."
+    },
+    {
+      "name": "octopus_task_routes",
+      "description": "Show the Smart Task Router configuration — which model and provider each agent uses. When LLM_PROVIDER=router, each agent automatically uses the best free model for its specific task (coding, planning, testing, security, finance, etc.)."
     }
   ],
   "prerequisite": "Python memory service must be running on port 5000."

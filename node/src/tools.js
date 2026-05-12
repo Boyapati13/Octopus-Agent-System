@@ -268,6 +268,14 @@ const TOOLS = [
       properties: {},
     },
   },
+  {
+    name: 'octopus_task_routes',
+    description: 'Show the Smart Task Router configuration — which model and provider each agent uses. When LLM_PROVIDER=router, each agent automatically uses the best free model for its specific task (coding, planning, testing, security, finance, etc.).',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 ];
 
 module.exports = { TOOLS };

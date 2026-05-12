@@ -132,7 +132,8 @@
     "octopus_browser_interact",
     "octopus_login",
     "octopus_vault_check",
-    "octopus_memory_status"
+    "octopus_memory_status",
+    "octopus_task_routes"
   ],
-  "toolCount": 23
+  "toolCount": 24
 }
