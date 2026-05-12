@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <img src="https://img.shields.io/badge/version-3.0.0-brightgreen.svg">
   <img src="https://img.shields.io/badge/agents-14%20specialist-blue.svg">
-  <img src="https://img.shields.io/badge/MCP%20tools-20-orange.svg">
+  <img src="https://img.shields.io/badge/MCP%20tools-23-orange.svg">
   <img src="https://img.shields.io/badge/AgentShield-102%20rules-red.svg">
   <img src="https://img.shields.io/badge/tests-746%20passing-brightgreen.svg">
   <img src="https://img.shields.io/badge/surfaces-13%20displays-purple.svg">
@@ -29,7 +29,7 @@
 
 Octopus Agent System v3.0 (OctoDeck Edition) is the merger of two open-source projects:
 
-- **Octopus Agent System** — 14 specialist AI agents, 20 MCP tools, 5-layer memory architecture, 102-rule security scanner (AgentShield), Continuous Learning v2 (Instincts), parallel QA execution, and a 4-provider LLM gateway (Claude · GPT-4o · Gemini · Ollama).
+- **Octopus Agent System** — 14 specialist AI agents, 23 MCP tools, 5-layer memory architecture, 102-rule security scanner (AgentShield), Continuous Learning v2 (Instincts), parallel QA execution, and a 4-provider LLM gateway (Claude · GPT-4o · Gemini · Ollama).
 - **AgentDeck** — a physical control surface that monitors and steers AI agent chains across **13 display surfaces simultaneously**: Elgato Stream Deck+, Android tablets/e-ink readers, Apple devices (iOS/iPadOS/macOS), ESP32 AMOLED/IPS modules, Pixoo64 LED matrix, TUI terminal dashboard, and more.
 
 <p align="center">
@@ -453,12 +453,12 @@ All 13 surfaces update simultaneously from a single WebSocket event stream:
 
 ```bash
 # Octopus (Node.js — Jest)
-cd octopus/node && npm test
-# → 63 tests: agents, MCP tools, memory bridge, marketplace, commands
+cd node && npm test
+# → 72 tests: agents, MCP tools, memory bridge, marketplace, commands, vault
 
 # Octopus (Python — pytest)
-cd octopus/python && pytest
-# → 4 suites: graph store, indexer, memory service, schema
+cd python && python -m pytest tests/
+# → 41 tests: graph store, indexer, memory service, schema
 
 # AgentDeck bridge (Vitest)
 pnpm test
@@ -472,7 +472,7 @@ pnpm test:android
 # Run via Xcode scheme: AgentDeckTests
 ```
 
-**Total: 746+ tests across 5 frameworks.**
+**Total: 841+ tests across 5 frameworks.**
 
 ---
 

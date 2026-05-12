@@ -77,7 +77,7 @@ if [ "$OS" = "Linux" ]; then
 fi
 
 (cd "$NODE_DIR" && npm install --silent)
-log "Dependencies installed (keytar, dotenv, and 21-tool MCP stack)"
+log "Dependencies installed (keytar, dotenv, and 23-tool MCP stack)"
 
 # ── Step 3: Python dependencies ───────────────────────────────────────────────
 head "Step 2/5 — Python dependencies"

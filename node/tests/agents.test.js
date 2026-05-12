@@ -19,6 +19,10 @@ const mockCtx = {
 
 beforeEach(() => {
   jest.resetAllMocks();
+  // Re-apply LLM mock after resetAllMocks() clears implementations
+  const llm = require('../src/llm');
+  llm.complete.mockRejectedValue(new Error('LLM mocked — using keyword fallback'));
+  llm.activeProvider.mockReturnValue({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
   memory.getContext.mockResolvedValue(mockCtx);
   memory.getRun.mockResolvedValue(mockCtx.run_state);
   memory.getDecisions.mockResolvedValue(mockCtx.recent_decisions);

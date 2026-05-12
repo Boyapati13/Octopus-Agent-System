@@ -22,6 +22,8 @@ from indexer.graph_builder import build_graph
 
 IGNORE_DIRS = {'.git', 'node_modules', 'dist', 'build', '__pycache__', '.venv', 'venv', 'data'}
 TEXT_EXTS = {'.py', '.js', '.ts', '.tsx', '.jsx', '.md', '.json', '.yaml', '.yml'}
+# Output files written by build_index itself — must not be re-indexed on subsequent runs
+SKIP_FILES = {'graph_index.json', 'structural_memory.json'}
 _JS_FN = re.compile(r'(?:export\s+)?(?:async\s+)?function\s+(\w+)')
 _JS_CLASS = re.compile(r'class\s+(\w+)')
 _JS_ARROW = re.compile(r'(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?\(')
@@ -61,7 +63,7 @@ def extract_generic_symbols(text: str):
 
 
 def should_skip(path: Path) -> bool:
-    return any(part in IGNORE_DIRS for part in path.parts)
+    return any(part in IGNORE_DIRS for part in path.parts) or path.name in SKIP_FILES
 
 
 def build_index(root: Path, db_path: str, force: bool = False):

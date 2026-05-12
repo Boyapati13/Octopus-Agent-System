@@ -14,6 +14,10 @@ const mockFiles = [{ path: 'src/auth.py', symbols: ['login'], summary: 'Auth', r
 
 beforeEach(() => {
   jest.resetAllMocks();
+  // Re-apply LLM mock after resetAllMocks() clears implementations
+  const llm = require('../src/llm');
+  llm.complete.mockRejectedValue(new Error('LLM mocked'));
+  llm.activeProvider.mockReturnValue({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
   memory.searchStructural.mockResolvedValue(mockFiles);
   memory.getContext.mockResolvedValue({
     relevant_files: mockFiles,

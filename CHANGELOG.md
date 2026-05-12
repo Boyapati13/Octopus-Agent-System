@@ -5,6 +5,34 @@ Format: [Semantic Versioning](https://semver.org) · Scribe agent standard.
 
 ---
 
+## [2.0.3] — 2026-05-12 — Bug Fixes & Test Hardening
+
+### 🐛 Bug Fixes
+
+- **`node/src/agents/cortex.js`** — Guard against `undefined`/non-string LLM
+  response before calling `.match()` in `llmPlan()`. Previously, if `complete()`
+  returned `undefined` (e.g. mock cleared by `jest.resetAllMocks()`), the agent
+  crashed with `TypeError: Cannot read properties of undefined (reading 'match')`
+  instead of falling back to keyword routing with a descriptive error message.
+- **`node/tests/agents.test.js`** — Re-apply LLM `mockRejectedValue` after each
+  `jest.resetAllMocks()` call in `beforeEach`. `resetAllMocks` clears all mock
+  implementations, causing `complete()` to return `undefined` in subsequent tests.
+- **`node/tests/commands.test.js`** — Same fix: re-apply LLM mock after reset.
+- **`python/indexer/index_repo.py`** — Fix incremental indexer re-indexing its
+  own output files (`graph_index.json`, `structural_memory.json`) on every second
+  run. Added `SKIP_FILES` set and updated `should_skip()` to exclude these
+  generated files. Previously `test_build_index_incremental` failed with
+  `assert 2 == 0`.
+- **`install.sh`** — Correct stale tool count from "21-tool MCP stack" to
+  "23-tool MCP stack" (MCP server has exposed 23 tools since v2.0).
+
+### ✅ Test Results (post-fix)
+- Node.js (Jest): **72 passing** (6 suites)
+- Python (pytest): **41 passing** (4 suites)
+- All 113 tests green, zero warnings about undefined values.
+
+---
+
 ## [2.0.2] — 2026-05-11 — Cross-Market Universal MCP
 
 ### Summary

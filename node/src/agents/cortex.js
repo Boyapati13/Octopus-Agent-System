@@ -101,6 +101,7 @@ Planning rules:
 JSON array:`;
 
   const out = await complete(prompt, { maxTokens: 200, timeout: 15000 });
+  if (!out || typeof out !== 'string') throw new Error('LLM returned empty or non-string response');
   const match = out.match(/\[[\s\S]*?\]/);
   if (!match) throw new Error('No JSON array in LLM output');
 
