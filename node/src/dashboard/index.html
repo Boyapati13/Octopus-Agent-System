@@ -1,1764 +1,252 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Octo Operator Workspace</title>
-  <meta name="description" content="Octo is a local-first operator workspace for projects, voice, browser work, and visible task execution."/>
-  <style>
-    :root {
-      --bg: #07111f;
-      --bg-alt: #0c1828;
-      --panel: rgba(10, 18, 31, 0.82);
-      --panel-strong: rgba(12, 22, 39, 0.96);
-      --border: rgba(148, 163, 184, 0.18);
-      --text: #e5eefb;
-      --muted: #9fb0c8;
-      --muted-strong: #7f93ab;
-      --blue: #66b3ff;
-      --teal: #4ee0c0;
-      --green: #6fe08d;
-      --amber: #f1c75b;
-      --orange: #ff9c64;
-      --red: #ff6b75;
-      --violet: #9d88ff;
-      --shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
-      --radius-xl: 24px;
-      --radius-lg: 18px;
-      --radius-md: 14px;
-      --radius-sm: 10px;
-      --mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-      --sans: "Segoe UI Variable Text", "Segoe UI", "Trebuchet MS", system-ui, sans-serif;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Octopus Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --primary-text: #2c3e50;
+            --secondary-text: #7f8c8d;
+            --accent-color: #3498db;
+            --white: #ffffff;
+            --drawer-width: 350px;
+        }
 
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body {
-      margin: 0;
-      color: var(--text);
-      font-family: var(--sans);
-      background:
-        radial-gradient(circle at top left, rgba(78, 224, 192, 0.16), transparent 26%),
-        radial-gradient(circle at top right, rgba(102, 179, 255, 0.18), transparent 24%),
-        linear-gradient(180deg, #050b14 0%, var(--bg) 32%, #070d18 100%);
-      overflow: hidden;
-    }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--primary-text);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
 
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-      background-size: 48px 48px;
-      mask-image: radial-gradient(circle at center, black 48%, transparent 100%);
-      pointer-events: none;
-      opacity: 0.24;
-    }
+        #main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            transition: margin-right 0.3s ease;
+        }
 
-    button, input, textarea, select { font: inherit; }
-    button { cursor: pointer; }
+        .conversation-container {
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+        }
 
-    .shell {
-      position: relative;
-      height: 100%;
-      display: grid;
-      grid-template-rows: auto 1fr;
-    }
+        h1 {
+            font-weight: 300;
+            font-size: 2.5rem;
+            margin-bottom: 40px;
+            color: var(--secondary-text);
+        }
 
-    .topbar {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 14px 18px;
-      background: linear-gradient(180deg, rgba(11, 20, 34, 0.96), rgba(11, 20, 34, 0.72));
-      border-bottom: 1px solid var(--border);
-      backdrop-filter: blur(18px);
-      z-index: 5;
-    }
+        #answer-display {
+            background: var(--white);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            min-height: 150px;
+            font-size: 1.2rem;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            text-align: left;
+        }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-width: 0;
-    }
+        #drawer {
+            width: var(--drawer-width);
+            background: var(--white);
+            border-left: 1px solid #ddd;
+            height: 100%;
+            position: fixed;
+            right: 0;
+            top: 0;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+        }
 
-    .brand-mark {
-      width: 42px;
-      height: 42px;
-      border-radius: 14px;
-      background: linear-gradient(135deg, rgba(78, 224, 192, 0.95), rgba(102, 179, 255, 0.85));
-      box-shadow: 0 14px 28px rgba(78, 224, 192, 0.24);
-      display: grid;
-      place-items: center;
-      color: #04111d;
-      font-weight: 900;
-      letter-spacing: 0.05em;
-      flex: 0 0 auto;
-    }
+        #drawer.open {
+            transform: translateX(0);
+        }
 
-    .brand-copy { min-width: 0; }
-    .brand-title {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 18px;
-      font-weight: 800;
-      line-height: 1.1;
-      letter-spacing: 0.02em;
-    }
+        .drawer-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-    .brand-subtitle {
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 3px;
-    }
+        .drawer-content {
+            padding: 20px;
+            overflow-y: auto;
+            flex-grow: 1;
+            font-size: 0.9rem;
+        }
 
-    .status-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-left: auto;
-      justify-content: flex-end;
-    }
+        #toggle-drawer {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 110;
+        }
 
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.04);
-      color: var(--text);
-      font-size: 12px;
-      white-space: nowrap;
-    }
+        .status-indicator {
+            font-size: 0.8rem;
+            color: var(--secondary-text);
+            margin-top: 10px;
+        }
 
-    .pill strong { font-weight: 700; }
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--muted-strong);
-      box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.03);
-    }
-    .dot.ok { background: var(--green); }
-    .dot.warn { background: var(--amber); }
-    .dot.bad { background: var(--red); }
-    .dot.live { background: var(--teal); animation: pulse 1.5s infinite; }
+        /* Mock UI for items in drawer */
+        .detail-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #f9f9f9;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: var(--accent-color);
+            display: block;
+            margin-bottom: 5px;
+        }
 
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.2); opacity: 0.55; }
-    }
+        .pulse {
+            animation: pulsate 2s infinite;
+        }
 
-    .workspace {
-      min-height: 0;
-      padding: 16px;
-      display: grid;
-      grid-template-columns: 290px minmax(0, 1.55fr) 340px;
-      gap: 16px;
-    }
-
-    .column {
-      min-height: 0;
-      display: grid;
-      gap: 16px;
-      align-content: start;
-    }
-
-    .center {
-      grid-template-rows: auto auto auto auto 1fr;
-    }
-
-    .panel {
-      min-width: 0;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(18px);
-      overflow: hidden;
-    }
-
-    .panel-head {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .panel-title {
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-
-    .panel-body { padding: 16px; }
-
-    .project-list {
-      display: grid;
-      gap: 10px;
-      margin-top: 12px;
-    }
-
-    .project-card {
-      padding: 14px;
-      border-radius: 18px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      background: rgba(255, 255, 255, 0.03);
-      display: grid;
-      gap: 8px;
-      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
-      text-align: left;
-      color: var(--text);
-    }
-
-    .project-card:hover { transform: translateY(-1px); border-color: rgba(102, 179, 255, 0.32); }
-    .project-card.active {
-      border-color: rgba(78, 224, 192, 0.48);
-      background: linear-gradient(180deg, rgba(78, 224, 192, 0.12), rgba(255, 255, 255, 0.03));
-    }
-
-    .project-name {
-      font-weight: 750;
-      font-size: 14px;
-      line-height: 1.2;
-    }
-
-    .project-meta {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .project-subline {
-      color: var(--muted-strong);
-      font-size: 12px;
-      line-height: 1.5;
-    }
-
-    .stack { display: grid; gap: 10px; }
-    .chip-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-
-    .chip {
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(255, 255, 255, 0.03);
-      color: var(--text);
-      padding: 8px 11px;
-      border-radius: 999px;
-      font-size: 12px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      transition: border-color 120ms ease, background 120ms ease;
-    }
-
-    .chip.active {
-      border-color: rgba(78, 224, 192, 0.44);
-      background: rgba(78, 224, 192, 0.14);
-    }
-
-    .hero {
-      padding: 18px;
-      background: linear-gradient(180deg, rgba(102, 179, 255, 0.12), rgba(255, 255, 255, 0.03));
-      border-radius: var(--radius-xl);
-      border: 1px solid rgba(102, 179, 255, 0.22);
-    }
-
-    .hero-top {
-      display: flex;
-      align-items: start;
-      justify-content: space-between;
-      gap: 16px;
-      flex-wrap: wrap;
-    }
-
-    .hero h1 {
-      margin: 0;
-      font-size: clamp(20px, 2.3vw, 30px);
-      line-height: 1.15;
-      letter-spacing: -0.03em;
-    }
-
-    .hero-copy {
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.55;
-      max-width: 70ch;
-    }
-
-    .answer-value {
-      margin-top: 14px;
-      font-size: 17px;
-      line-height: 1.65;
-      white-space: pre-wrap;
-      font-weight: 500;
-    }
-
-    .answer-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .message-list, .activity-list, .log-list, .narration-list, .approval-list {
-      display: grid;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .message {
-      display: grid;
-      gap: 6px;
-      padding: 14px;
-      border-radius: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      background: rgba(255, 255, 255, 0.025);
-    }
-
-    .message.user { border-color: rgba(102, 179, 255, 0.2); background: rgba(102, 179, 255, 0.06); }
-    .message.assistant { border-color: rgba(78, 224, 192, 0.18); background: rgba(78, 224, 192, 0.05); }
-    .message.system { border-color: rgba(255, 255, 255, 0.07); }
-
-    .message-head, .activity-head, .log-head, .approval-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-
-    .message-role {
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.09em;
-      color: var(--muted-strong);
-      font-weight: 800;
-    }
-
-    .message-text {
-      line-height: 1.65;
-      color: var(--text);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-
-    .muted { color: var(--muted); }
-    .mono { font-family: var(--mono); }
-
-    .composer { display: grid; gap: 12px; }
-    .composer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-
-    .composer-input {
-      flex: 1 1 320px;
-      min-width: 0;
-      resize: vertical;
-      min-height: 56px;
-      max-height: 180px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(7, 14, 25, 0.9);
-      color: var(--text);
-      outline: none;
-    }
-
-    .composer-input:focus { border-color: rgba(102, 179, 255, 0.55); box-shadow: 0 0 0 4px rgba(102, 179, 255, 0.1); }
-
-    .btn {
-      border: 0;
-      border-radius: 14px;
-      padding: 12px 14px;
-      font-weight: 750;
-      color: #031018;
-      background: linear-gradient(135deg, var(--teal), var(--blue));
-      transition: transform 120ms ease, opacity 120ms ease, filter 120ms ease;
-      box-shadow: 0 14px 26px rgba(102, 179, 255, 0.18);
-    }
-
-    .btn:hover { transform: translateY(-1px); filter: brightness(1.04); }
-    .btn.secondary { color: var(--text); background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: none; }
-    .btn.danger { color: white; background: linear-gradient(135deg, #ff7f7f, #ff515e); }
-    .btn.tiny { padding: 8px 11px; border-radius: 999px; font-size: 12px; }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-    .route-box {
-      display: grid;
-      gap: 8px;
-      padding: 12px 14px;
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .route-title {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      align-items: center;
-      font-size: 12px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.09em;
-      font-weight: 800;
-    }
-
-    .route-value {
-      font-size: 14px;
-      line-height: 1.55;
-      color: var(--text);
-    }
-
-    .activity-item, .log-item, .approval-item, .narration-item {
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      background: rgba(255, 255, 255, 0.03);
-      display: grid;
-      gap: 6px;
-    }
-
-    .activity-item.note { border-color: rgba(78, 224, 192, 0.18); }
-    .activity-item.warn { border-color: rgba(241, 199, 91, 0.25); }
-    .activity-item.error, .approval-item.blocked { border-color: rgba(255, 107, 117, 0.34); }
-
-    .timestamp { color: var(--muted-strong); font-size: 11px; font-family: var(--mono); }
-    .item-title { font-size: 13px; font-weight: 700; }
-    .item-body { color: var(--muted); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-
-    .browser-grid { display: grid; gap: 10px; }
-    .kv { display: grid; gap: 4px; }
-    .kv-label {
-      color: var(--muted-strong);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-size: 10px;
-      font-weight: 800;
-    }
-    .kv-value {
-      color: var(--text);
-      font-size: 13px;
-      line-height: 1.55;
-      word-break: break-word;
-    }
-
-    .tools-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-
-    .tool-pill {
-      padding: 8px 11px;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(255, 255, 255, 0.03);
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .tool-pill.active { color: var(--text); border-color: rgba(78, 224, 192, 0.34); background: rgba(78, 224, 192, 0.12); }
-
-    .scroll {
-      max-height: 100%;
-      overflow: auto;
-      padding-right: 4px;
-    }
-
-    .scroll::-webkit-scrollbar { width: 10px; }
-    .scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 999px; }
-
-    .panel.compact .panel-body { padding-top: 14px; }
-    .stacked { display: grid; gap: 12px; }
-
-    .footer-note { color: var(--muted-strong); font-size: 11px; line-height: 1.5; }
-
-    @media (max-width: 1280px) {
-      body { overflow: auto; }
-      .workspace {
-        grid-template-columns: 1fr;
-        overflow: visible;
-      }
-      .column { overflow: visible; }
-      .topbar { position: sticky; top: 0; }
-    }
-
-    @media (max-width: 720px) {
-      .topbar { align-items: start; flex-direction: column; }
-      .status-row { margin-left: 0; justify-content: flex-start; }
-      .workspace { padding: 12px; gap: 12px; }
-      .panel { border-radius: 18px; }
-    }
-  </style>
+        @keyframes pulsate {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+    </style>
 </head>
 <body>
-  <div class="shell">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark">O</div>
-        <div class="brand-copy">
-          <div class="brand-title">Octo <span class="muted">Operator Workspace</span></div>
-          <div class="brand-subtitle">Persistent daemon, project sessions, browser/voice/operator actions, visible progress.</div>
+
+    <div id="main-content">
+        <div class="conversation-container">
+            <h1>Octopus</h1>
+            <div id="answer-display">
+                Waiting for input...
+            </div>
+            <div id="status" class="status-indicator">System Idle</div>
         </div>
-      </div>
-      <div class="status-row">
-        <div class="pill"><span class="dot live" id="ws-dot"></span><span id="ws-label">Connecting…</span></div>
-        <div class="pill"><span class="dot" id="daemon-dot"></span><span id="daemon-label">Daemon</span></div>
-        <div class="pill"><span class="dot" id="voice-dot"></span><span id="voice-label">Voice idle</span></div>
-        <div class="pill"><span class="dot" id="headless-dot"></span><span id="provider-label">—</span></div>
-        <div class="pill"><strong id="active-project-pill">No project</strong></div>
-      </div>
-    </header>
-
-    <div class="workspace">
-      <aside class="column left scroll" id="left-column">
-        <section class="panel compact">
-          <div class="panel-head">
-            <div class="panel-title">Projects</div>
-            <button class="btn tiny secondary" id="new-project-btn">New</button>
-          </div>
-          <div class="panel-body">
-            <div class="stack">
-              <div class="footer-note">Projects keep the conversation, answer, browser context, artifacts, and activity together.</div>
-              <div class="project-list" id="project-list"></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Pinned Tools</div></div>
-          <div class="panel-body">
-            <div class="chip-grid" id="pinned-tools"></div>
-          </div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Mode</div></div>
-          <div class="panel-body">
-            <div class="stack">
-              <div class="route-box">
-                <div class="route-title"><span>Active mode</span><span class="mono" id="mode-label">operator</span></div>
-                <div class="route-value" id="mode-description">The workspace starts in operator mode and can be re-routed by task intent.</div>
-              </div>
-              <div class="chip-grid" id="mode-chips"></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Global Status</div></div>
-          <div class="panel-body stacked">
-            <div class="kv"><div class="kv-label">Current task</div><div class="kv-value mono" id="status-task">Idle</div></div>
-            <div class="kv"><div class="kv-label">Router hint</div><div class="kv-value" id="status-route">Waiting for input</div></div>
-            <div class="kv"><div class="kv-label">Live status</div><div class="kv-value" id="status-live">Connected to daemon once available.</div></div>
-          </div>
-        </section>
-      </aside>
-
-      <main class="column center scroll">
-        <section class="hero">
-          <div class="hero-top">
-            <div>
-              <div class="answer-status"><span class="dot" id="answer-dot"></span><span id="answer-status">Ready</span></div>
-              <h1 id="answer-title">Answer panel always visible.</h1>
-              <div class="hero-copy">Octo keeps project state, visible progress narration, task routing, and final answers in one place. The daemon still drives execution; the workspace simply makes it legible.</div>
-            </div>
-            <div class="pill"><span class="dot" id="task-dot"></span><span id="task-state">Idle</span></div>
-          </div>
-          <div class="answer-value" id="answer-value">No answer yet. Run a task or speak a request.</div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Conversation</div></div>
-          <div class="panel-body conversation">
-            <div class="message-list scroll" id="message-list"></div>
-          </div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Progress Narration</div></div>
-          <div class="panel-body">
-            <div class="narration-list scroll" id="narration-list"></div>
-          </div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Composer</div></div>
-          <div class="panel-body composer">
-            <div class="composer-row">
-              <textarea class="composer-input" id="task-input" placeholder="Ask Octo to research, browse, execute, draft, or inspect a project…"></textarea>
-            </div>
-            <div class="composer-row">
-              <button class="btn" id="run-btn">Run task</button>
-              <button class="btn secondary" id="voice-btn">Voice input</button>
-              <button class="btn secondary" id="stop-btn" disabled>Stop</button>
-              <button class="btn secondary" id="route-btn">Auto route</button>
-              <button class="btn danger" id="interrupt-btn">Interrupt</button>
-            </div>
-            <div class="route-box">
-              <div class="route-title"><span>Router decision</span><span class="mono" id="route-key">direct answer</span></div>
-              <div class="route-value" id="route-detail">Type a task to see how Octo classifies it across answer, browser, terminal, Python, workflow, or trading paths.</div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head">
-            <div class="panel-title">Activity Feed</div>
-            <button class="btn tiny secondary" id="clear-activity-btn">Clear</button>
-          </div>
-          <div class="panel-body">
-            <div class="activity-list scroll" id="activity-list"></div>
-          </div>
-        </section>
-      </main>
-
-      <aside class="column right scroll">
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Browser Context</div></div>
-          <div class="panel-body browser-grid" id="browser-panel"></div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Active Tools</div></div>
-          <div class="panel-body">
-            <div class="tools-grid" id="active-tools"></div>
-          </div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Approvals</div></div>
-          <div class="panel-body">
-            <div class="approval-list scroll" id="approval-list"></div>
-          </div>
-        </section>
-
-        <section class="panel compact">
-          <div class="panel-head"><div class="panel-title">Telemetry</div></div>
-          <div class="panel-body">
-            <div class="log-list scroll" id="log-list"></div>
-          </div>
-        </section>
-      </aside>
     </div>
-  </div>
 
-  <script>
-    const API = '';
-    const STORAGE_KEY = 'octo.operator.workspace.v1';
-    const MAX_LOG_ITEMS = 140;
-    const ROUTE_RULES = [
-      { key: 'direct answer', label: 'Direct answer', description: 'Summaries, clarifications, and reasoning that do not need external tools.', test: task => /^(what|why|how|summarize|explain|draft|write|review|help)/i.test(task) },
-      { key: 'web research', label: 'Web research', description: 'Search the web, compare sources, and gather evidence.', test: task => /\b(search|research|news|web|sources?|compare)\b/i.test(task) },
-      { key: 'browser interaction', label: 'Browser interaction', description: 'Open, inspect, click, read, or summarize browser state.', test: task => /\b(browser|tab|page|website|url|click|inspect|open site)\b/i.test(task) },
-      { key: 'filesystem action', label: 'Filesystem action', description: 'Read, write, move, inspect, or diff project files.', test: task => /\b(file|files|folder|directory|read|write|edit|diff|tree)\b/i.test(task) },
-      { key: 'terminal command', label: 'Terminal command', description: 'Run shell commands, scripts, installs, or repo tooling.', test: task => /\b(terminal|shell|command|pnpm|npm|node|bash|powershell|run tests?)\b/i.test(task) },
-      { key: 'python execution', label: 'Python execution', description: 'Notebook-style analysis, scripts, or Python task runs.', test: task => /\bpython|notebook|pandas|numpy|matplotlib|dataframe\b/i.test(task) },
-      { key: 'business workflow', label: 'Business workflow', description: 'Tenders, bids, docs, operations, and client-facing execution.', test: task => /\b(tender|proposal|client|workflow|ops|business|invoice|document)\b/i.test(task) },
-      { key: 'iot workflow', label: 'IoT workflow', description: 'Device control, sensors, automations, and site operations.', test: task => /\b(iot|sensor|device|home assistant|automation)\b/i.test(task) },
-      { key: 'trading workflow', label: 'Trading workflow', description: 'Market data, MT5, orders, strategies, and trade ops.', test: task => /\b(trading|mt5|forex|market|order|strategy|chart)\b/i.test(task) },
-    ];
-
-    const TOOL_SET = ['Browser', 'Terminal', 'Filesystem', 'Clipboard', 'Screenshots', 'Desktop', 'Voice', 'Memory', 'Python', 'Approvals'];
-
-    const ACTIVITY_TITLES = {
-      chain_start: 'Task started',
-      agent_start: 'Agent started',
-      agent_done: 'Agent completed',
-      gate_fail: 'Approval blocked',
-      chain_done: 'Chain finished',
-      compaction: 'Context compaction',
-      instinct_new: 'New instinct',
-      voice_summary: 'Voice summary',
-      browser_search_started: 'Browser search started',
-      browser_search_results: 'Browser search results',
-      browser_page_opened: 'Browser page opened',
-      browser_page_read: 'Browser page read',
-      browser_context_updated: 'Browser context updated',
-      desktop_action_started: 'Desktop action started',
-      desktop_action_done: 'Desktop action done',
-      screenshot_captured: 'Screenshot captured',
-      filesystem_action_done: 'Filesystem action done',
-      task_started: 'Task queued',
-      voice_task_started: 'Voice task started',
-      note: 'Note',
-    };
-
-    const state = {
-      ws: null,
-      connected: false,
-      reconnectDelay: 1500,
-      healthTimer: null,
-      voice: {
-        listening: false,
-        speaking: false,
-        followUpListening: true,
-        recognizer: null,
-      },
-      provider: { provider: '—', model: '—' },
-      activeProjectId: null,
-      projects: new Map(),
-      activeTask: '',
-      route: 'direct answer',
-      routeDescription: 'Waiting for a task.',
-      activity: [],
-      logs: [],
-      narration: [],
-      browserContext: {
-        url: '—',
-        title: '—',
-        last_action: 'Waiting for browser work',
-        status: 'idle',
-        recent_tabs: [],
-      },
-      activeTools: new Set(['Browser', 'Terminal', 'Memory', 'Voice']),
-      approvals: [],
-      currentAnswer: 'No answer yet. Run a task or speak a request.',
-      currentAnswerStatus: 'idle',
-      currentTaskStatus: 'idle',
-    };
-
-    function apiFetch(url, options = {}) {
-      return fetch(url, {
-        headers: { 'Content-Type': 'application/json' },
-        ...options,
-      }).then(async response => {
-        if (!response.ok) {
-          const body = await safeJson(response);
-          const message = body && body.error ? body.error : response.statusText;
-          throw new Error(message);
-        }
-        return safeJson(response);
-      });
-    }
-
-    async function safeJson(response) {
-      const text = await response.text();
-      if (!text) return {};
-      try { return JSON.parse(text); } catch { return { raw: text }; }
-    }
-
-    function clone(value) {
-      return JSON.parse(JSON.stringify(value));
-    }
-
-    function nowLabel() {
-      return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    }
-
-    function stableId(prefix) {
-      return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-    }
-
-    function loadPersistedState() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed.projects)) {
-          parsed.projects.forEach(project => state.projects.set(project.id, project));
-        }
-        if (parsed.activeProjectId) state.activeProjectId = parsed.activeProjectId;
-      } catch {
-        // Ignore corrupt local state.
-      }
-    }
-
-    function persistState() {
-      const snapshot = {
-        activeProjectId: state.activeProjectId,
-        projects: [...state.projects.values()],
-      };
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-      } catch {
-        // Ignore storage quota issues.
-      }
-    }
-
-    function defaultProject(title = 'Octo Workspace') {
-      return {
-        id: stableId('project'),
-        title,
-        created_at: new Date().toISOString(),
-        last_active: new Date().toISOString(),
-        messages: [],
-        answer: '',
-        answer_status: 'idle',
-        status: 'idle',
-        browser_context: clone(state.browserContext),
-        artifacts: [],
-        activity_feed: [],
-        approvals: [],
-        pinned_tools: ['Browser', 'Terminal', 'Memory', 'Voice'],
-        active_mode: 'operator',
-      };
-    }
-
-    function normalizeProject(raw) {
-      const project = clone(defaultProject(raw && raw.title ? raw.title : 'Octo Workspace'));
-      Object.assign(project, raw || {});
-      project.messages = Array.isArray(project.messages) ? project.messages : [];
-      project.activity_feed = Array.isArray(project.activity_feed) ? project.activity_feed : [];
-      project.approvals = Array.isArray(project.approvals) ? project.approvals : [];
-      project.pinned_tools = Array.isArray(project.pinned_tools) && project.pinned_tools.length ? project.pinned_tools : ['Browser', 'Terminal', 'Memory', 'Voice'];
-      project.browser_context = Object.assign(clone(defaultProject().browser_context), raw && raw.browser_context ? raw.browser_context : {});
-      project.messages = project.messages.slice(-200);
-      project.activity_feed = project.activity_feed.slice(0, 200);
-      project.approvals = project.approvals.slice(0, 50);
-      return project;
-    }
-
-    function upsertProject(raw) {
-      const project = normalizeProject(raw);
-      const existing = state.projects.get(project.id) || {};
-      state.projects.set(project.id, {
-        ...existing,
-        ...project,
-        browser_context: {
-          ...(existing.browser_context || {}),
-          ...(project.browser_context || {}),
-        },
-      });
-      return state.projects.get(project.id);
-    }
-
-    function ensureActiveProject() {
-      if (!state.activeProjectId || !state.projects.has(state.activeProjectId)) {
-        const fallback = defaultProject();
-        state.projects.set(fallback.id, fallback);
-        state.activeProjectId = fallback.id;
-      }
-      return state.projects.get(state.activeProjectId);
-    }
-
-    function createProject(title) {
-      const projectTitle = title || 'Untitled project';
-      apiFetch(`${API}/api/projects`, { method: 'POST', body: JSON.stringify({ title: projectTitle }) })
-        .then(result => {
-          if (result && result.project) {
-            state.projects.set(result.project.id, normalizeProject(result.project));
-            state.activeProjectId = result.project.id;
-            persistState();
-            renderEverything();
-            return result.project;
-          }
-          throw new Error('Project creation failed');
-        })
-        .catch(() => {
-          const fallback = normalizeProject({ title: projectTitle });
-          state.projects.set(fallback.id, fallback);
-          state.activeProjectId = fallback.id;
-          persistState();
-          renderEverything();
-          return fallback;
-        });
-    }
-
-    function setActiveProject(id) {
-      if (!state.projects.has(id)) return;
-      state.activeProjectId = id;
-      const project = ensureActiveProject();
-      if (project && project.active_mode) setActiveMode(project.active_mode, false);
-      persistState();
-      renderEverything();
-    }
-
-    function activeProject() {
-      return ensureActiveProject();
-    }
-
-    function dedupeById(existing, incoming) {
-      const seen = new Set(existing.map(item => item.id));
-      const next = [...existing];
-      incoming.forEach(item => {
-        if (!item) return;
-        if (item.id && seen.has(item.id)) return;
-        next.push(item);
-        if (item.id) seen.add(item.id);
-      });
-      return next;
-    }
-
-    function mergeProjectRemote(remote) {
-      if (!remote) return;
-      const incoming = normalizeProject(remote);
-      const current = state.projects.get(incoming.id) || defaultProject(incoming.title);
-      const merged = {
-        ...current,
-        ...incoming,
-        messages: dedupeById(current.messages || [], incoming.messages || []).slice(-200),
-        activity_feed: dedupeById(current.activity_feed || [], incoming.activity_feed || []).slice(0, 200),
-        approvals: dedupeById(current.approvals || [], incoming.approvals || []).slice(0, 50),
-        browser_context: {
-          ...(current.browser_context || {}),
-          ...(incoming.browser_context || {}),
-        },
-      };
-      state.projects.set(merged.id, merged);
-      if (!state.activeProjectId) state.activeProjectId = merged.id;
-      persistState();
-    }
-
-    function inferRoute(task) {
-      const text = String(task || '').trim();
-      if (!text) return ROUTE_RULES[0];
-      return ROUTE_RULES.find(rule => rule.test(text)) || ROUTE_RULES[0];
-    }
-
-    function setRoute(task) {
-      const route = inferRoute(task);
-      state.route = route.key;
-      state.routeDescription = route.description;
-      document.getElementById('route-key').textContent = route.label.toLowerCase();
-      document.getElementById('route-detail').textContent = route.description;
-      document.getElementById('status-route').textContent = `${route.label}: ${route.description}`;
-      document.getElementById('mode-label').textContent = route.key.replace(/\s+/g, ' ');
-      document.getElementById('mode-description').textContent = route.description;
-      setActiveMode(route.key, false);
-      renderModeChips();
-    }
-
-    function setActiveMode(mode, persist = true) {
-      const project = activeProject();
-      project.active_mode = mode || 'operator';
-      if (persist) {
-        persistState();
-        apiFetch(`${API}/api/projects/${project.id}`, { method: 'PATCH', body: JSON.stringify({ active_mode: project.active_mode }) }).catch(() => {});
-      }
-      renderModeChips();
-    }
-
-    async function appendProjectMessage(projectId, role, text, meta = {}) {
-      const project = state.projects.get(projectId) || activeProject();
-      let message = null;
-      try {
-        const result = await apiFetch(`${API}/api/projects/${project.id}/messages`, {
-          method: 'POST',
-          body: JSON.stringify({ role, text, meta }),
-        });
-        message = result && result.message ? result.message : null;
-      } catch {
-        message = {
-          id: stableId('message'),
-          role,
-          text,
-          meta,
-          created_at: new Date().toISOString(),
-        };
-      }
-      project.messages = project.messages || [];
-      if (message) project.messages.push(message);
-      project.messages = project.messages.slice(-200);
-      state.projects.set(project.id, project);
-      persistState();
-      renderConversation();
-      return message;
-    }
-
-    async function appendProjectActivity(projectId, type, payload = {}, sync = true) {
-      const project = state.projects.get(projectId) || activeProject();
-      let activity = null;
-      if (sync) {
-        try {
-          const result = await apiFetch(`${API}/api/projects/${project.id}/activity`, {
-            method: 'POST',
-            body: JSON.stringify({ type, payload }),
-          });
-          activity = result && result.activity ? result.activity : null;
-        } catch {
-          activity = {
-            id: stableId('activity'),
-            type,
-            payload,
-            created_at: new Date().toISOString(),
-          };
-        }
-      } else {
-        activity = {
-          id: stableId('activity'),
-          type,
-          payload,
-          created_at: new Date().toISOString(),
-        };
-      }
-      project.activity_feed = project.activity_feed || [];
-      if (activity) project.activity_feed.unshift(activity);
-      project.activity_feed = project.activity_feed.slice(0, 200);
-      state.projects.set(project.id, project);
-      persistState();
-      renderActivity();
-      renderTelemetry();
-      return activity;
-    }
-
-    function setProjectAnswer(projectId, text, status = 'idle') {
-      const project = state.projects.get(projectId) || activeProject();
-      project.answer = text;
-      project.answer_status = status;
-      state.currentAnswer = text;
-      state.currentAnswerStatus = status;
-      state.projects.set(project.id, project);
-      persistState();
-      apiFetch(`${API}/api/projects/${project.id}/answer`, {
-        method: 'POST',
-        body: JSON.stringify({ text, status }),
-      }).catch(() => {});
-      renderAnswer();
-      return text;
-    }
-
-    function updateProjectBrowserContext(projectId, patch = {}) {
-      const project = state.projects.get(projectId) || activeProject();
-      project.browser_context = {
-        ...(project.browser_context || clone(state.browserContext)),
-        ...patch,
-      };
-      if (Array.isArray(project.browser_context.recent_tabs)) {
-        project.browser_context.recent_tabs = project.browser_context.recent_tabs.slice(0, 8);
-      }
-      state.browserContext = project.browser_context;
-      state.projects.set(project.id, project);
-      persistState();
-      apiFetch(`${API}/api/projects/${project.id}/browser-context`, {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
-      }).catch(() => {});
-      renderBrowserContext();
-      return project.browser_context;
-    }
-
-    function addNarration(text, type = 'note') {
-      const item = {
-        id: stableId('narration'),
-        text,
-        type,
-        created_at: new Date().toISOString(),
-      };
-      state.narration.unshift(item);
-      state.narration = state.narration.slice(0, 24);
-      renderNarration();
-      return item;
-    }
-
-    function pushTelemetry(type, detail) {
-      state.logs.unshift({ id: stableId('log'), type, detail, created_at: new Date().toISOString() });
-      state.logs = state.logs.slice(0, MAX_LOG_ITEMS);
-      renderTelemetry();
-    }
-
-    function setVoiceStatus(listening, speaking) {
-      state.voice.listening = listening;
-      state.voice.speaking = speaking;
-      document.getElementById('voice-label').textContent = speaking ? 'Speaking' : (listening ? 'Listening' : 'Voice idle');
-      document.getElementById('voice-dot').className = `dot ${speaking ? 'live' : listening ? 'ok' : ''}`.trim();
-      document.getElementById('stop-btn').disabled = !listening && !speaking && state.currentTaskStatus !== 'running';
-      document.getElementById('voice-btn').textContent = listening ? 'Stop voice' : 'Voice input';
-    }
-
-    function stopSpeech() {
-      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-      if (state.voice.recognizer) {
-        try { state.voice.recognizer.stop(); } catch {}
-      }
-      setVoiceStatus(false, false);
-    }
-
-    function speakText(text) {
-      if (!text || !('speechSynthesis' in window)) return;
-      stopSpeech();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.onstart = () => setVoiceStatus(state.voice.listening, true);
-      utterance.onend = () => {
-        setVoiceStatus(state.voice.followUpListening, false);
-        if (state.voice.followUpListening) {
-          window.setTimeout(() => startVoiceInput(), 350);
-        }
-      };
-      window.speechSynthesis.speak(utterance);
-    }
-
-    function startVoiceInput() {
-      const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!Recognition) {
-        pushTelemetry('error', 'Voice recognition is not supported in this browser.');
-        return;
-      }
-
-      if (state.voice.listening) {
-        stopSpeech();
-        return;
-      }
-
-      const recognition = new Recognition();
-      recognition.lang = 'en-US';
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
-
-      let transcript = '';
-
-      recognition.onstart = () => {
-        state.voice.recognizer = recognition;
-        setVoiceStatus(true, false);
-        pushTelemetry('voice', 'Listening for a voice command.');
-      };
-
-      recognition.onresult = event => {
-        transcript = Array.from(event.results).map(result => result[0].transcript).join(' ').trim();
-      };
-
-      recognition.onerror = event => {
-        pushTelemetry('error', `Voice error: ${event.error || 'unknown'}`);
-        setVoiceStatus(false, false);
-      };
-
-      recognition.onend = () => {
-        state.voice.recognizer = null;
-        setVoiceStatus(false, false);
-        if (transcript) {
-          submitTask(transcript, true);
-        }
-      };
-
-      recognition.start();
-    }
-
-    function clearTelemetry() {
-      state.logs = [];
-      renderTelemetry();
-    }
-
-    function clearNarration() {
-      state.narration = [];
-      renderNarration();
-    }
-
-    function renderProjects() {
-      const list = document.getElementById('project-list');
-      const projects = [...state.projects.values()].sort((a, b) => new Date(b.last_active) - new Date(a.last_active));
-      list.innerHTML = '';
-      if (!projects.length) {
-        const empty = document.createElement('div');
-        empty.className = 'footer-note';
-        empty.textContent = 'No projects yet. Create one to begin.';
-        list.appendChild(empty);
-        return;
-      }
-
-      projects.forEach(project => {
-        const card = document.createElement('button');
-        card.type = 'button';
-        card.className = `project-card ${project.id === state.activeProjectId ? 'active' : ''}`;
-        card.innerHTML = `
-          <div class="project-name">${escapeHtml(project.title)}</div>
-          <div class="project-subline">${escapeHtml((project.answer || 'No answer yet').slice(0, 90))}</div>
-          <div class="project-meta">
-            <span>${escapeHtml(project.status || 'idle')}</span>
-            <span>${project.messages.length} msgs</span>
-            <span>${project.activity_feed.length} events</span>
-          </div>
-        `;
-        card.addEventListener('click', () => setActiveProject(project.id));
-        list.appendChild(card);
-      });
-    }
-
-    function renderPinnedTools() {
-      const project = activeProject();
-      const container = document.getElementById('pinned-tools');
-      const tools = project.pinned_tools && project.pinned_tools.length ? project.pinned_tools : ['Browser', 'Terminal', 'Memory', 'Voice'];
-      container.innerHTML = '';
-      tools.forEach(tool => {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = `chip ${state.activeTools.has(tool) ? 'active' : ''}`;
-        chip.textContent = tool;
-        chip.addEventListener('click', () => {
-          if (state.activeTools.has(tool)) state.activeTools.delete(tool); else state.activeTools.add(tool);
-          renderActiveTools();
-        });
-        container.appendChild(chip);
-      });
-    }
-
-    function renderModeChips() {
-      const container = document.getElementById('mode-chips');
-      const modes = ['operator', 'research', 'browser', 'coding', 'voice', 'trading', 'iot'];
-      container.innerHTML = '';
-      modes.forEach(mode => {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = `chip ${activeProject().active_mode === mode ? 'active' : ''}`;
-        chip.textContent = mode;
-        chip.addEventListener('click', () => setActiveMode(mode));
-        container.appendChild(chip);
-      });
-    }
-
-    function renderAnswer() {
-      const project = activeProject();
-      document.getElementById('answer-title').textContent = project.answer_status === 'running' ? 'Working on the current task.' : 'Answer panel always visible.';
-      document.getElementById('answer-value').textContent = project.answer || state.currentAnswer || 'No answer yet. Run a task or speak a request.';
-      document.getElementById('answer-status').textContent = project.answer_status === 'running' ? 'Running' : project.answer_status === 'failed' ? 'Attention required' : project.answer_status === 'done' ? 'Done' : 'Ready';
-      document.getElementById('answer-dot').className = `dot ${project.answer_status === 'running' ? 'live' : project.answer_status === 'failed' ? 'bad' : project.answer_status === 'done' ? 'ok' : ''}`.trim();
-      document.getElementById('task-dot').className = `dot ${project.status === 'running' ? 'live' : project.status === 'failed' ? 'bad' : project.status === 'done' ? 'ok' : ''}`.trim();
-      document.getElementById('task-state').textContent = project.status === 'running' ? 'Running' : project.status === 'failed' ? 'Failed' : project.status === 'done' ? 'Done' : 'Idle';
-      document.getElementById('status-task').textContent = state.activeTask || 'Idle';
-      document.getElementById('active-project-pill').textContent = project.title;
-      document.getElementById('status-live').textContent = `${project.title} is ${project.status || 'idle'} and last active at ${new Date(project.last_active).toLocaleString()}`;
-      state.currentAnswerStatus = project.answer_status || 'idle';
-      state.currentTaskStatus = project.status || 'idle';
-      document.getElementById('run-btn').disabled = state.currentTaskStatus === 'running';
-      document.getElementById('interrupt-btn').disabled = state.currentTaskStatus !== 'running';
-      document.getElementById('stop-btn').disabled = !state.voice.listening && !state.voice.speaking && state.currentTaskStatus !== 'running';
-      document.getElementById('daemon-label').textContent = `Project ${project.id.slice(0, 11)}`;
-      document.getElementById('daemon-dot').className = 'dot ok';
-    }
-
-    function renderConversation() {
-      const list = document.getElementById('message-list');
-      const project = activeProject();
-      const messages = project.messages || [];
-      list.innerHTML = '';
-      if (!messages.length) {
-        const empty = document.createElement('div');
-        empty.className = 'footer-note';
-        empty.textContent = 'No messages yet. Start with a task, voice request, or a direct note.';
-        list.appendChild(empty);
-        return;
-      }
-
-      messages.slice(-100).forEach(message => {
-        const item = document.createElement('div');
-        item.className = `message ${message.role || 'system'}`;
-        item.innerHTML = `
-          <div class="message-head">
-            <span class="message-role">${escapeHtml(message.role || 'system')}</span>
-            <span class="timestamp">${escapeHtml(formatTime(message.created_at))}</span>
-          </div>
-          <div class="message-text">${escapeHtml(message.text || '')}</div>
-        `;
-        list.appendChild(item);
-      });
-    }
-
-    function renderNarration() {
-      const list = document.getElementById('narration-list');
-      list.innerHTML = '';
-      if (!state.narration.length) {
-        const empty = document.createElement('div');
-        empty.className = 'footer-note';
-        empty.textContent = 'Progress narration will appear here as Octo routes the task and reaches for tools.';
-        list.appendChild(empty);
-        return;
-      }
-      state.narration.forEach(item => {
-        const node = document.createElement('div');
-        node.className = 'narration-item';
-        node.innerHTML = `
-          <div class="message-head">
-            <span class="message-role">${escapeHtml(item.type)}</span>
-            <span class="timestamp">${escapeHtml(formatTime(item.created_at))}</span>
-          </div>
-          <div class="item-body">${escapeHtml(item.text)}</div>
-        `;
-        list.appendChild(node);
-      });
-    }
-
-    function renderActivity() {
-      const list = document.getElementById('activity-list');
-      const project = activeProject();
-      list.innerHTML = '';
-      const items = project.activity_feed || [];
-      if (!items.length) {
-        const empty = document.createElement('div');
-        empty.className = 'footer-note';
-        empty.textContent = 'No activity yet. Task events will show here separately from chat.';
-        list.appendChild(empty);
-        return;
-      }
-      items.slice(0, 80).forEach(activity => {
-        const node = document.createElement('div');
-        node.className = `activity-item ${activity.type === 'gate_fail' ? 'error' : activity.type.includes('browser') ? 'note' : ''}`.trim();
-        const title = ACTIVITY_TITLES[activity.type] || activity.type;
-        node.innerHTML = `
-          <div class="message-head">
-            <span class="item-title">${escapeHtml(title)}</span>
-            <span class="timestamp">${escapeHtml(formatTime(activity.created_at))}</span>
-          </div>
-          <div class="item-body">${escapeHtml(summarizePayload(activity.payload))}</div>
-        `;
-        list.appendChild(node);
-      });
-    }
-
-    function renderBrowserContext() {
-      const project = activeProject();
-      const browser = project.browser_context || clone(state.browserContext);
-      state.browserContext = browser;
-      const container = document.getElementById('browser-panel');
-      const recentTabs = Array.isArray(browser.recent_tabs) && browser.recent_tabs.length ? browser.recent_tabs : ['No recent tabs'];
-      container.innerHTML = `
-        <div class="kv"><div class="kv-label">Current URL</div><div class="kv-value mono">${escapeHtml(browser.url || '—')}</div></div>
-        <div class="kv"><div class="kv-label">Page title</div><div class="kv-value">${escapeHtml(browser.title || '—')}</div></div>
-        <div class="kv"><div class="kv-label">Last browser action</div><div class="kv-value">${escapeHtml(browser.last_action || 'Waiting for browser context')}</div></div>
-        <div class="kv"><div class="kv-label">Browser status</div><div class="kv-value">${escapeHtml(browser.status || 'idle')}</div></div>
-        <div class="kv"><div class="kv-label">Recent tabs</div><div class="kv-value">${recentTabs.map(tab => `<div>${escapeHtml(String(tab))}</div>`).join('')}</div></div>
-      `;
-    }
-
-    function renderActiveTools() {
-      const container = document.getElementById('active-tools');
-      container.innerHTML = '';
-      TOOL_SET.forEach(tool => {
-        const pill = document.createElement('div');
-        pill.className = `tool-pill ${state.activeTools.has(tool) ? 'active' : ''}`;
-        pill.textContent = tool;
-        container.appendChild(pill);
-      });
-    }
-
-    function renderApprovals() {
-      const project = activeProject();
-      const list = document.getElementById('approval-list');
-      list.innerHTML = '';
-      const approvals = project.approvals || [];
-      if (!approvals.length) {
-        const empty = document.createElement('div');
-        empty.className = 'footer-note';
-        empty.textContent = 'No approvals needed yet. Risky actions should surface here once backend authority gating expands.';
-        list.appendChild(empty);
-        return;
-      }
-      approvals.slice(0, 40).forEach(approval => {
-        const node = document.createElement('div');
-        node.className = `approval-item ${approval.status === 'blocked' ? 'blocked' : ''}`;
-        node.innerHTML = `
-          <div class="message-head">
-            <span class="item-title">${escapeHtml(approval.type || 'approval')}</span>
-            <span class="timestamp">${escapeHtml(formatTime(approval.created_at))}</span>
-          </div>
-          <div class="item-body">${escapeHtml(approval.reason || approval.note || approval.status || '')}</div>
-        `;
-        list.appendChild(node);
-      });
-    }
-
-    function renderTelemetry() {
-      const list = document.getElementById('log-list');
-      list.innerHTML = '';
-      if (!state.logs.length) {
-        const empty = document.createElement('div');
-        empty.className = 'footer-note';
-        empty.textContent = 'Telemetry stays here so technical detail can be collapsed away from the main answer path.';
-        list.appendChild(empty);
-        return;
-      }
-      state.logs.slice(0, 120).forEach(entry => {
-        const node = document.createElement('div');
-        node.className = `log-item ${entry.type}`;
-        node.innerHTML = `
-          <div class="message-head">
-            <span class="item-title">${escapeHtml(entry.type)}</span>
-            <span class="timestamp">${escapeHtml(formatTime(entry.created_at))}</span>
-          </div>
-          <div class="item-body">${escapeHtml(entry.detail)}</div>
-        `;
-        list.appendChild(node);
-      });
-    }
-
-    function renderEverything() {
-      renderProjects();
-      renderPinnedTools();
-      renderModeChips();
-      renderAnswer();
-      renderConversation();
-      renderNarration();
-      renderActivity();
-      renderBrowserContext();
-      renderActiveTools();
-      renderApprovals();
-      renderTelemetry();
-    }
-
-    function formatTime(value) {
-      if (!value) return nowLabel();
-      try { return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch { return nowLabel(); }
-    }
-
-    function summarizePayload(payload) {
-      if (!payload || typeof payload !== 'object') return String(payload || '');
-      return payload.summary || payload.reason || payload.text || payload.task || payload.note || payload.action || JSON.stringify(payload);
-    }
-
-    function escapeHtml(value) {
-      return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    async function loadProjects() {
-      try {
-        const result = await apiFetch(`${API}/api/projects`);
-        state.projects = new Map();
-        (result.projects || []).forEach(project => mergeProjectRemote(project));
-        if (result.active_project_id) state.activeProjectId = result.active_project_id;
-      } catch {
-        if (!state.projects.size) {
-          const fallback = defaultProject();
-          state.projects.set(fallback.id, fallback);
-          state.activeProjectId = fallback.id;
-        }
-      }
-      ensureActiveProject();
-      persistState();
-      renderEverything();
-    }
-
-    async function refreshStatus() {
-      try {
-        const status = await apiFetch(`${API}/api/status`);
-        if (status.llm) {
-          state.provider = status.llm;
-          document.getElementById('provider-label').textContent = `${status.llm.provider || '—'} / ${status.llm.model || '—'}`;
-        }
-        state.connected = true;
-        document.getElementById('ws-dot').className = 'dot live';
-        document.getElementById('ws-label').textContent = 'Connected';
-        document.getElementById('headless-dot').className = status.headless_mode ? 'dot warn' : 'dot ok';
-        document.getElementById('headless-dot').nextElementSibling.textContent = status.headless_mode ? 'Headless mode' : 'Interactive mode';
-        if (status.active_project_id && state.projects.has(status.active_project_id)) {
-          state.activeProjectId = status.active_project_id;
-        }
-        if (Array.isArray(status.projects)) {
-          status.projects.forEach(project => mergeProjectRemote(project));
-        }
-        renderEverything();
-      } catch {
-        state.connected = false;
-        document.getElementById('ws-dot').className = 'dot bad';
-        document.getElementById('ws-label').textContent = 'Offline';
-      }
-    }
-
-    function connectWS() {
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const socket = new WebSocket(`${proto}://${location.host}/ws`);
-      state.ws = socket;
-      document.getElementById('ws-dot').className = 'dot live';
-      document.getElementById('ws-label').textContent = 'Connecting…';
-
-      socket.onopen = () => {
-        state.connected = true;
-        state.reconnectDelay = 1500;
-        document.getElementById('ws-dot').className = 'dot ok';
-        document.getElementById('ws-label').textContent = 'Connected';
-        pushTelemetry('connected', 'WebSocket connected');
-        refreshStatus();
-      };
-
-      socket.onmessage = event => {
-        try {
-          const parsed = JSON.parse(event.data);
-          handleWsEvent(parsed);
-        } catch {
-          pushTelemetry('error', 'Malformed WebSocket payload.');
-        }
-      };
-
-      socket.onclose = () => {
-        state.connected = false;
-        document.getElementById('ws-dot').className = 'dot bad';
-        document.getElementById('ws-label').textContent = `Reconnecting in ${Math.round(state.reconnectDelay / 1000)}s`;
-        setTimeout(connectWS, state.reconnectDelay);
-        state.reconnectDelay = Math.min(state.reconnectDelay * 1.6, 12000);
-      };
-
-      socket.onerror = () => socket.close();
-    }
-
-    function handleWsEvent(ev) {
-      const data = ev.data || {};
-      if (data.project && data.project.id) mergeProjectRemote(data.project);
-      const projectId = data.project_id || state.activeProjectId;
-
-      switch (ev.type) {
-        case 'connected':
-          pushTelemetry('connected', 'Daemon stream attached');
-          break;
-        case 'project_updated':
-          if (data.project) {
-            mergeProjectRemote(data.project);
-            if (data.project.id === state.activeProjectId) {
-              state.currentAnswer = data.project.answer || state.currentAnswer;
-              state.currentAnswerStatus = data.project.answer_status || state.currentAnswerStatus;
-              state.currentTaskStatus = data.project.status || state.currentTaskStatus;
+    <button id="toggle-drawer">☰</button>
+
+    <div id="drawer">
+        <div class="drawer-header">
+            <h3>Details</h3>
+            <button onclick="toggleDrawer()">✕</button>
+        </div>
+        <div class="drawer-content" id="drawer-logs">
+            <div class="detail-item">
+                <span class="detail-label">Session ID</span>
+                <span id="session-id">Not started</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Events</span>
+                <div id="event-log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const answerDisplay = document.getElementById('answer-display');
+        const statusDisplay = document.getElementById('status');
+        const drawer = document.getElementById('drawer');
+        const eventLog = document.getElementById('event-log');
+        const toggleBtn = document.getElementById('toggle-drawer');
+
+        function speak(text) {
+            if (!window.speechSynthesis) return;
+            
+            // Cancel any current speech
+            window.speechSynthesis.cancel();
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            
+            // Find a nice voice if possible
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                // Prefer a natural sounding one if available
+                utterance.voice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural')) || voices[0];
             }
-          }
-          break;
-        case 'chain_start':
-          state.activeTask = data.task || state.activeTask;
-          if (projectId) {
-            const project = state.projects.get(projectId) || activeProject();
-            project.status = 'running';
-            state.projects.set(project.id, project);
-          }
-          addNarration('Opening task context', 'task');
-          addNarration('Preparing workspace and routing the task', 'task');
-          pushTelemetry('chain_start', data.task || 'Task started');
-          setProjectAnswer(projectId, 'Working…', 'running');
-          break;
-        case 'agent_start':
-          state.activeTools.add('Memory');
-          state.activeTools.add(data.agent === 'navigator' ? 'Browser' : 'Terminal');
-          if (data.agent === 'navigator') addNarration('Opening browser context', 'browser');
-          else if (data.agent === 'probe') addNarration('Checking current task state', 'analysis');
-          else addNarration(`Running ${data.agent || 'agent'}`, 'agent');
-          appendProjectActivity(projectId, 'agent_start', data, false);
-          pushTelemetry('agent_start', `${data.agent || 'agent'} started`);
-          renderActiveTools();
-          break;
-        case 'agent_done':
-          appendProjectActivity(projectId, 'agent_done', data, false);
-          if (data.approved === false) {
-            state.projects.get(projectId).approvals.unshift({
-              id: stableId('approval'),
-              type: 'agent_done',
-              status: 'blocked',
-              reason: (data.notes || []).join('; ') || 'Agent not approved',
-              created_at: new Date().toISOString(),
+
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function toggleDrawer() {
+            drawer.classList.toggle('open');
+        }
+
+        toggleBtn.addEventListener('click', toggleDrawer);
+
+        function logEvent(name, data) {
+            const div = document.createElement('div');
+            div.className = 'detail-item';
+            div.innerHTML = `<span class="detail-label">${name}</span><span>${JSON.stringify(data).substring(0, 100)}...</span>`;
+            eventLog.prepend(div);
+        }
+
+        // Simulating the websocket/event system
+        function handleMessage(event) {
+            const { type, payload } = event;
+            logEvent(type, payload);
+
+            if (type === 'chain_start') {
+                statusDisplay.innerText = 'Processing...';
+                statusDisplay.classList.add('pulse');
+            } else if (type === 'chain_done') {
+                statusDisplay.innerText = 'Completed';
+                statusDisplay.classList.remove('pulse');
+                
+                const answer = payload.output || payload.answer || "Task completed.";
+                answerDisplay.innerText = answer;
+                speak(answer);
+            } else if (type === 'partial_completion') {
+                answerDisplay.innerText = payload.text;
+            }
+        }
+
+        // Placeholder for WebSocket or similar event listener
+        // Example: 
+        // const socket = new WebSocket('ws://localhost:3000');
+        // socket.onmessage = (e) => handleMessage(JSON.parse(e.data));
+
+        // Mock event for testing
+        setTimeout(() => {
+            handleMessage({ 
+                type: 'chain_done', 
+                payload: { answer: "Hello! I am your Octopus assistant. How can I help you today?" } 
             });
-          }
-          addNarration(`${data.agent || 'Agent'} completed`, data.approved === false ? 'warning' : 'done');
-          pushTelemetry('agent_done', `${data.agent || 'agent'} completed`);
-          break;
-        case 'gate_fail':
-          appendProjectActivity(projectId, 'gate_fail', data, false);
-          state.projects.get(projectId).approvals.unshift({
-            id: stableId('approval'),
-            type: 'gate_fail',
-            status: 'blocked',
-            reason: data.reason || 'Blocked',
-            created_at: new Date().toISOString(),
-          });
-          addNarration(`Approval blocked: ${data.reason || 'risk detected'}`, 'warning');
-          pushTelemetry('gate_fail', data.reason || 'Blocked');
-          break;
-        case 'compaction':
-          appendProjectActivity(projectId, 'compaction', data, false);
-          addNarration('Context compaction requested', 'analysis');
-          pushTelemetry('compaction', `Session tool calls: ${data.session_tool_calls || '—'}`);
-          break;
-        case 'instinct_new':
-          appendProjectActivity(projectId, 'instinct_new', data, false);
-          addNarration(`New instinct: ${data.pattern || 'pattern captured'}`, 'analysis');
-          pushTelemetry('instinct_new', data.pattern || 'Instinct captured');
-          break;
-        case 'voice_summary':
-          setProjectAnswer(projectId, data.summary || '', data.success ? 'done' : 'failed');
-          pushTelemetry('voice_summary', data.summary || 'Voice summary');
-          addNarration('Drafting response', 'voice');
-          speakText(data.summary || '');
-          break;
-        case 'browser_search_started':
-        case 'browser_search_results':
-        case 'browser_page_opened':
-        case 'browser_page_read':
-        case 'browser_context_updated':
-        case 'desktop_action_started':
-        case 'desktop_action_done':
-        case 'screenshot_captured':
-        case 'filesystem_action_done':
-          appendProjectActivity(projectId, ev.type, data, false);
-          updateProjectBrowserContext(projectId, {
-            last_action: summarizePayload(data),
-            status: ev.type.includes('done') ? 'idle' : 'active',
-            url: data.url || state.browserContext.url,
-            title: data.title || state.browserContext.title,
-            recent_tabs: data.recent_tabs || state.browserContext.recent_tabs,
-          });
-          addNarration(humaniseBrowserEvent(ev.type), 'browser');
-          pushTelemetry(ev.type, summarizePayload(data));
-          if (data.url || data.title) {
-            state.activeTools.add('Browser');
-            renderActiveTools();
-          }
-          break;
-        case 'chain_done':
-          if (projectId && state.projects.has(projectId)) {
-            const project = state.projects.get(projectId);
-            project.status = data.success === false ? 'failed' : 'done';
-            state.projects.set(project.id, project);
-          }
-          state.activeTask = '';
-          if (data.interrupted) addNarration('Task interrupted', 'warning');
-          else addNarration(data.success === false ? 'Task failed' : 'Task completed', data.success === false ? 'warning' : 'done');
-          pushTelemetry('chain_done', data.success === false ? 'Task failed' : 'Task complete');
-          break;
-        default:
-          if (ev.type) {
-            appendProjectActivity(projectId, ev.type, data, false);
-            pushTelemetry(ev.type, summarizePayload(data));
-          }
-          break;
-      }
+        }, 2000);
 
-      renderEverything();
-    }
+        // Required to load voices
+        window.speechSynthesis.onvoiceschanged = () => {
+            console.log("Voices loaded");
+        };
 
-    function humaniseBrowserEvent(type) {
-      switch (type) {
-        case 'browser_search_started': return 'Searching browser context';
-        case 'browser_search_results': return 'Reading browser results';
-        case 'browser_page_opened': return 'Opening page';
-        case 'browser_page_read': return 'Reading page contents';
-        case 'browser_context_updated': return 'Refreshing browser context';
-        case 'desktop_action_started': return 'Starting desktop action';
-        case 'desktop_action_done': return 'Desktop action complete';
-        case 'screenshot_captured': return 'Screenshot captured';
-        case 'filesystem_action_done': return 'Filesystem action complete';
-        default: return 'Updating operator context';
-      }
-    }
-
-    function summarizePayload(payload) {
-      if (!payload || typeof payload !== 'object') return String(payload || '');
-      return payload.summary || payload.reason || payload.text || payload.task || payload.note || payload.action || JSON.stringify(payload);
-    }
-
-    async function submitTask(text, viaVoice = false) {
-      const task = String(text || document.getElementById('task-input').value || '').trim();
-      if (!task) return;
-      document.getElementById('task-input').value = '';
-      setRoute(task);
-      const project = activeProject();
-      await appendProjectMessage(project.id, viaVoice ? 'voice' : 'user', task, { source: viaVoice ? 'task.voice' : 'task.run', route: state.route });
-      setProjectAnswer(project.id, 'Working…', 'running');
-      addNarration('Routing task', 'task');
-      pushTelemetry('task', `${viaVoice ? 'Voice' : 'Text'} task submitted`);
-
-      try {
-        const endpoint = viaVoice ? '/api/tasks/voice' : '/api/tasks/run';
-        const body = viaVoice ? { text: task, project_id: project.id } : { task, project_id: project.id };
-        const result = await apiFetch(`${API}${endpoint}`, { method: 'POST', body: JSON.stringify(body) });
-        if (result && result.project_id && state.projects.has(result.project_id)) {
-          state.activeProjectId = result.project_id;
-        }
-        if (viaVoice) setVoiceStatus(false, false);
-        document.getElementById('status-task').textContent = task;
-        document.getElementById('status-route').textContent = `${state.route}: ${state.routeDescription}`;
-        renderEverything();
-      } catch (error) {
-        setProjectAnswer(project.id, `Task failed: ${error.message}`, 'failed');
-        pushTelemetry('error', error.message);
-      }
-    }
-
-    async function interruptTask() {
-      try {
-        stopSpeech();
-        await apiFetch(`${API}/api/tasks/interrupt`, { method: 'POST', body: JSON.stringify({}) });
-        addNarration('Interrupt requested', 'warning');
-        pushTelemetry('interrupt', 'Interrupt requested');
-      } catch (error) {
-        pushTelemetry('error', error.message);
-      }
-    }
-
-    async function scanSecurity() {
-      const target = window.prompt('Scan target (file path or code snippet):');
-      if (!target) return;
-      appendProjectActivity(activeProject().id, 'security_scan_requested', { target });
-      addNarration(`Checking security target: ${target}`, 'analysis');
-      try {
-        const result = await apiFetch(`${API}/api/security/scan`, {
-          method: 'POST',
-          body: JSON.stringify({ target }),
-        });
-        const findings = Array.isArray(result.findings) ? result.findings : [];
-        pushTelemetry('security_scan', `${findings.length} findings, ${result.critical || 0} critical`);
-        setProjectAnswer(activeProject().id, `Security scan complete: ${findings.length} finding(s).`, findings.length ? 'failed' : 'done');
-        if (findings.length) {
-          findings.slice(0, 5).forEach(finding => appendProjectActivity(activeProject().id, 'gate_fail', { reason: summarizePayload(finding) }));
-        }
-      } catch (error) {
-        pushTelemetry('error', error.message);
-      }
-    }
-
-    function clearActivity() {
-      const project = activeProject();
-      project.activity_feed = [];
-      state.projects.set(project.id, project);
-      persistState();
-      renderActivity();
-    }
-
-    function wireControls() {
-      document.getElementById('new-project-btn').addEventListener('click', () => {
-        const title = window.prompt('Project title?', 'Untitled project');
-        if (title === null) return;
-        createProject(title || 'Untitled project');
-      });
-      document.getElementById('run-btn').addEventListener('click', () => submitTask(document.getElementById('task-input').value, false));
-      document.getElementById('voice-btn').addEventListener('click', () => startVoiceInput());
-      document.getElementById('stop-btn').addEventListener('click', () => stopSpeech());
-      document.getElementById('route-btn').addEventListener('click', () => {
-        const task = document.getElementById('task-input').value.trim();
-        if (!task) return;
-        setRoute(task);
-        addNarration(`Routing hint: ${state.route}`, 'analysis');
-      });
-      document.getElementById('interrupt-btn').addEventListener('click', interruptTask);
-      document.getElementById('clear-activity-btn').addEventListener('click', clearActivity);
-      document.getElementById('task-input').addEventListener('keydown', event => {
-        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-          event.preventDefault();
-          submitTask(document.getElementById('task-input').value, false);
-        }
-      });
-    }
-
-    async function bootstrap() {
-      loadPersistedState();
-      if (!state.projects.size) {
-        const project = defaultProject();
-        state.projects.set(project.id, project);
-        state.activeProjectId = project.id;
-      }
-      wireControls();
-      renderEverything();
-      await loadProjects();
-      connectWS();
-      refreshStatus();
-      state.healthTimer = window.setInterval(refreshStatus, 10000);
-      document.getElementById('task-input').focus();
-      setVoiceStatus(false, false);
-      addNarration('Workspace ready', 'task');
-    }
-
-    bootstrap();
-  </script>
+    </script>
 </body>
 </html>

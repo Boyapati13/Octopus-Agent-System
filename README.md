@@ -103,9 +103,9 @@ After `start_server.ps1` starts, open: **http://localhost:3001/dashboard**
 
 ### Web Dashboard (new)
 - **No hardware needed** — `GET /dashboard` at `http://localhost:3001/dashboard`
-- Project/session workspace with persistent conversation, answer, activity, approvals, and browser context
-- Three-pane operator UI: project list, visible answer/conversation/narration feed, and browser/tools/telemetry panel
-- Voice-first controls with follow-up listening, interrupt, and task routing hints
+- Calm workspace focused on answer + conversation, with secondary details in a collapsible drawer
+- Voice output for final answers (browser TTS via `speechSynthesis`) on task completion events
+- Lightweight event/detail panel for session visibility without monitoring-console clutter
 - Auto-reconnect with exponential backoff
 
 ### Project Workspace (updated)
@@ -256,16 +256,13 @@ No Stream Deck+ needed. After `.\start_server.ps1`, open:
 **http://localhost:3001/dashboard**
 
 Features:
-- **Project sidebar** — create and switch between operator workspaces without losing context
-- **Answer panel** — the current result stays visible at all times
-- **Conversation feed** — user, voice, and assistant messages are stored per project
-- **Progress narration** — task execution is summarized separately from chat
-- **Browser context** — URL, title, last action, and recent tabs stay visible while browsing
-- **Active tools and approvals** — the UI exposes tool state and blocked/risky actions explicitly
-- **Telemetry panel** — raw execution detail is kept separate from the main workspace
-- **Voice input** — text, speech, follow-up listening, and interrupt all share the same workspace state
+- **Focused main view** — answer area + conversation are primary, with reduced UI noise
+- **Details drawer** — browser/session event context lives in a right-side collapsible panel
+- **Voice answers** — when a `chain_done` event is received, the final answer is spoken aloud
+- **Voice input ready** — browser ASR path can trigger voice task submission
+- **Clean status surface** — simplified status and event visibility for day-to-day use
 - **WebSocket auto-reconnect** with exponential backoff
-- Shows active LLM provider/model and headless mode status
+- Runs directly in the browser with no Stream Deck dependency
 
 ```
 http://localhost:3001/dashboard   ← operator workspace
