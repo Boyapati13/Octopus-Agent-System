@@ -9,32 +9,61 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <img src="https://img.shields.io/badge/version-3.0.0-brightgreen.svg">
   <img src="https://img.shields.io/badge/agents-14%20specialist-blue.svg">
-  <img src="https://img.shields.io/badge/MCP%20tools-23-orange.svg">
+  <img src="https://img.shields.io/badge/MCP%20tools-26-orange.svg">
   <img src="https://img.shields.io/badge/AgentShield-102%20rules-red.svg">
-  <img src="https://img.shields.io/badge/tests-113%20passing-brightgreen.svg">
+  <img src="https://img.shields.io/badge/tests-141%20passing-brightgreen.svg">
   <img src="https://img.shields.io/badge/surfaces-13%20displays-purple.svg">
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/node-%3E%3D18-green.svg">
   <img src="https://img.shields.io/badge/python-%3E%3D3.11-yellow.svg">
-  <img src="https://img.shields.io/badge/LLM-Claude%20%7C%20GPT--4o%20%7C%20Gemini%20%7C%20Ollama-blueviolet.svg">
+  <img src="https://img.shields.io/badge/LLM-Claude%20%7C%20GPT--4o%20%7C%20Gemini%20%7C%20Ollama%20%7C%20JAX%2FGemma-blueviolet.svg">
   <img src="https://img.shields.io/badge/MCP-stdio%20server-black.svg">
   <img src="https://img.shields.io/badge/Stream%20Deck%2B-8%20keys%20%2B%204%20encoders-black.svg?logo=elgato">
 </p>
 
 ---
 
-> **A self-evolving, continuously-learning multi-agent AI orchestration system — now with a physical 13-surface control dashboard.**
+> **A self-evolving, continuously-learning multi-agent AI orchestration system — with a physical 13-surface control dashboard, live web UI, voice input, and a JAX/Gemma custom backend.**
 
-Octopus Agent System v3.0 (OctoDeck Edition) is the merger of two open-source projects:
+---
 
-- **Octopus Agent System** — 14 specialist AI agents, 23 MCP tools, 5-layer memory architecture, 102-rule security scanner (AgentShield), Continuous Learning v2 (Instincts), parallel QA execution, and a 4-provider LLM gateway (Claude · GPT-4o · Gemini · Ollama).
-- **AgentDeck** — a physical control surface that monitors and steers AI agent chains across **13 display surfaces simultaneously**: Elgato Stream Deck+, Android tablets/e-ink readers, Apple devices (iOS/iPadOS/macOS), ESP32 AMOLED/IPS modules, Pixoo64 LED matrix, TUI terminal dashboard, and more.
+## Install — one command
 
-<p align="center">
-  <img src="assets/AgentDeck_SNS_Collage.png" width="720" alt="13 surfaces showing live Octopus agent chain progress">
-</p>
+```powershell
+# Windows — PowerShell (also works from GitHub raw URL)
+.\install.ps1
+
+# Remote one-liner:
+powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercontent.com/Boyapati13/Octopus-Agent-System/master/install.ps1)"
+```
+
+```bash
+# Mac / Linux
+./install.sh
+```
+
+The installer:
+- Checks Node.js ≥ 18 and Python ≥ 3.11
+- Installs all npm + pip dependencies
+- Creates `node/.env` auto-configured for Ollama if detected, else Anthropic
+- Registers the MCP server with Claude Desktop, Claude Code, Cursor, Windsurf, Continue
+- Links the `octopus` CLI globally
+
+---
+
+## Start
+
+```powershell
+# Start REST API + WebSocket + memory service + open dashboard
+.\start_server.ps1
+
+# Start MCP stdio server only (for Claude Desktop / Cursor)
+.\start_mcp.ps1
+```
+
+After `start_server.ps1` starts, open: **http://localhost:3001/dashboard**
 
 ---
 
@@ -43,17 +72,14 @@ Octopus Agent System v3.0 (OctoDeck Edition) is the merger of two open-source pr
 - [What's New in v3.0](#whats-new-in-v30)
 - [Architecture](#architecture)
 - [Quick Start](#quick-start)
+- [Web Dashboard](#web-dashboard)
 - [Octopus Agent System](#octopus-agent-system)
-  - [14 Specialist Agents](#14-specialist-agents)
-  - [Cortex Planning Patterns](#cortex-planning-patterns)
-  - [5-Layer Memory](#5-layer-memory)
-  - [AgentShield Security](#agentshield-security)
-  - [MCP Tool Catalogue](#mcp-tool-catalogue)
-  - [Continuous Learning (Instincts)](#continuous-learning-instincts)
 - [OctoDeck Control Surface](#octodeck-control-surface)
-  - [Stream Deck+ Layout](#stream-deck-layout)
-  - [13 Display Surfaces](#13-display-surfaces)
 - [Configuration](#configuration)
+- [Headless Mode](#headless-mode)
+- [Voice Input](#voice-input)
+- [LLM Providers](#llm-providers)
+- [Tool Plugins](#tool-plugins)
 - [Testing](#testing)
 - [Development](#development)
 - [Roadmap](#roadmap)
@@ -63,19 +89,54 @@ Octopus Agent System v3.0 (OctoDeck Edition) is the merger of two open-source pr
 
 ## What's New in v3.0
 
-### OctoDeck Fusion (this release)
-- **AgentDeck integration** — every Octopus agent chain is now visible and controllable across 13 physical/digital display surfaces in real-time
-- **OctopusAdapter** — a new `AgentAdapter` implementation plugs Octopus into the AgentDeck bridge: PLAN / RUN / STOP / SHIELD controls on Stream Deck+
-- **APME → Instincts loop** — AgentDeck's session performance evaluations automatically generate instinct candidates, posted back to Octopus Continuous Learning. Chains get smarter after every session.
-- **OctopusDeckLayout** — 8 dedicated keys for PLAN · RUN · STOP · AGENTS · SECURITY · MEMORY · INSTINCTS · SHIELD + 4 encoder wheels (Task / Agent / Memory / LLM Provider)
+### OctoDeck Fusion
+- **AgentDeck integration** — every Octopus agent chain visible and controllable across 13 surfaces
+- **OctopusAdapter** — PLAN / RUN / STOP / SHIELD controls on Stream Deck+
+- **APME → Instincts loop** — AgentDeck session evaluations auto-generate instinct candidates
+- **OctopusDeckLayout** — 8 dedicated keys + 4 encoder wheels
 
-### Octopus v2.0 (ECC Fusion, included)
-- **~75% QA speedup** — `Promise.allSettled` parallel gate execution
-- **~60% token cost reduction** — `MAX_THINKING_TOKENS` cap + Strategic Compaction
-- **195+ ECC skills** — pre-vetted, primary source before npm/PyPI/GitHub
-- **AgentShield** — 102-rule static scanner (secrets · permissions · hook injection · MCP risk · code quality)
-- **Continuous Learning v2** — instinct extraction, confidence lifecycle, automatic skill elevation at ≥ 0.8
-- **Ollama/Gemma 4** — full local inference, no cloud dependency required
+### Web Dashboard (new)
+- **No hardware needed** — `GET /dashboard` at `http://localhost:3001/dashboard`
+- Live WebSocket event feed, agent timeline, gate status, chain elapsed timer
+- Task input bar, STOP button, one-click security scan
+- Auto-reconnect with exponential backoff
+
+### Voice Integration (new)
+- **POST /api/tasks/voice** — text-in / TTS-summary-out path
+- `OctopusAdapter.supportsVoiceInput = true` — voice-tagged prompts route to voice endpoint
+- End-to-end flow: wake word → ASR → AgentDeck → Octopus → `voice_summary` WS event → TTS
+- See [docs/quickstart-voice.md](docs/quickstart-voice.md)
+
+### Headless Mode (new)
+- `HEADLESS_MODE=true` — external LLM (Claude Desktop, Cursor) is the planner
+- Octopus becomes the tool/safety layer; AgentShield and all gates remain active
+- Toggle at runtime: `/headless on` in the CLI
+- See [docs/quickstart-headless.md](docs/quickstart-headless.md)
+
+### JAX/Gemma Custom Backend (new)
+- `LLM_PROVIDER=custom_http` — any OpenAI-compatible server
+- Reference FastAPI server in `examples/jax-gemma-http/`
+- Works with vLLM, LM Studio, llamafile, text-generation-webui
+- See [docs/quickstart-jax-gemma.md](docs/quickstart-jax-gemma.md)
+
+### Tool Plugin System (new)
+- `tools/<name>/tool.json` + `tools/<name>/index.js` — auto-loaded on startup
+- `GET /api/plugins` · `POST /api/plugins/call/:name` · `octopus_plugin_call` MCP tool
+- Built-in plugins: `hello_world` (example), `http_fetch` (SSRF-guarded safe fetch)
+- See [tools/README.md](tools/README.md)
+
+### Jarvis CLI (upgraded)
+- `/provider list` · `/provider set <p> [model]` — switch LLM without editing .env
+- `/headless on|off` — toggle headless mode
+- `/dashboard` — open web UI in browser
+- All changes written to `.env` instantly
+
+### Octopus v2.0 (included)
+- ~75% QA speedup via parallel `Promise.allSettled` gates
+- ~60% token cost reduction via `MAX_THINKING_TOKENS` + Strategic Compaction
+- 102-rule AgentShield scanner
+- Continuous Learning v2 (Instincts)
+- 4-tier Zero-Key cascade (OS Vault → CLI Session → env → .env)
 
 ---
 
@@ -86,147 +147,113 @@ Octopus Agent System v3.0 (OctoDeck Edition) is the merger of two open-source pr
 │                   Octopus Agent System — OctoDeck Edition            │
 │                                                                      │
 │  ┌──────────────────────┐    ┌─────────────────────────────────────┐ │
-│  │   octopus/node/      │    │       bridge/ (AgentDeck)           │ │
-│  │                      │◄───│  OctopusAdapter   ← NEW             │ │
-│  │  Cortex (planner)    │    │  OctopusClient    ← NEW             │ │
-│  │  Atlas               │    │  OctopusDeckLayout← NEW             │ │
-│  │  Architect           │    │  ApmOctopusBridge ← NEW             │ │
-│  │  Forge               │    │  StateMachine + APME                │ │
-│  │  Reviewer ─────────┐ │    └───────────────┬─────────────────────┘ │
-│  │  SecurityReviewer  │ │    ┌───────────────▼─────────────────────┐ │
-│  │  Probe  ─── QA ───►│─────►    13 Display Surfaces               │ │
-│  │  FactChecker       │ │    │  Stream Deck+  Android  Apple       │ │
-│  │  + 6 more agents   │ │    │  ESP32  Pixoo64  TUI  + 7 more     │ │
-│  │                    │ │    └─────────────────────────────────────┘ │
-│  │  AgentShield 102✓  │ │                                            │
-│  │  Instincts (learn) │ │    ┌─────────────────────────────────────┐ │
-│  │  5-layer memory    │◄────►   octopus/python/ (Flask :5000)      │ │
-│  │  REST API :3001    │ │    │  L1 graph · L2 ADRs · L3 sessions   │ │
-│  └──────────────────────┘    └─────────────────────────────────────┘ │
-│                                                                      │
-│  LLM Gateway:  Anthropic Claude · OpenAI GPT-4o · Google Gemini     │
-│                Ollama / Gemma 4 (local, no API key needed)           │
+│  │   node/src/          │    │       bridge/ (AgentDeck)           │ │
+│  │                      │◄───│  OctopusAdapter   WebSocket client  │ │
+│  │  Cortex (planner)    │    │  OctopusDeckLayout 8 keys+4 encoders│ │
+│  │  14 specialist agents│    │  ApmOctopusBridge  APME→Instincts   │ │
+│  │  REST API  :3001     │    └───────────────┬─────────────────────┘ │
+│  │  WS  ws://:3001/ws   │    ┌───────────────▼─────────────────────┐ │
+│  │  Dashboard /dashboard│    │    13 Display Surfaces               │ │
+│  │  AgentShield 102✓    │    │  Stream Deck+  TUI  Android  Apple  │ │
+│  │  Instincts (learn)   │    │  ESP32  Pixoo64  Web Dashboard       │ │
+│  │  Tool plugins        │    └─────────────────────────────────────┘ │
+│  │  MCP stdio  26 tools │    ┌─────────────────────────────────────┐ │
+│  └──────────────────────┘◄───►   python/ (Flask :5000)             │ │
+│                               │  L1 graph · L2 ADRs · L3 sessions  │ │
+│  LLM Gateway:                 │  Instincts · Context Builder        │ │
+│  Anthropic · OpenAI · Google  └─────────────────────────────────────┘ │
+│  Ollama · NVIDIA · HuggingFace                                       │
+│  custom_http (JAX/Gemma, vLLM, LM Studio, llamafile)                 │
 └──────────────────────────────────────────────────────────────────────┘
-```
-
-### Monorepo Layout
-
-```
-octopus-agent-system/
-│
-├── octopus/                        ← Core Octopus engine
-│   ├── node/src/
-│   │   ├── agents/                 ← 14 specialist agent modules
-│   │   │   ├── cortex.js           ← Planner (TDD/security/research routing)
-│   │   │   ├── forge.js            ← Implementation
-│   │   │   ├── reviewer.js         ← Code quality gate
-│   │   │   ├── securityReviewer.js ← OWASP + AgentShield gate
-│   │   │   ├── probe.js            ← Test coverage gate
-│   │   │   ├── factChecker.js      ← Grounding gate
-│   │   │   └── ... 8 more
-│   │   ├── skills/
-│   │   │   └── agentshield.js      ← 102-rule static scanner
-│   │   ├── runner.js               ← Parallel QA (Promise.allSettled)
-│   │   ├── instincts.js            ← Continuous Learning v2
-│   │   ├── llm.js                  ← 4-provider LLM gateway
-│   │   ├── mcp.js                  ← MCP stdio server (20 tools)
-│   │   └── server.js               ← REST API (:3001)
-│   ├── python/
-│   │   ├── memory/                 ← L1 graph store, L2 ADRs, schema
-│   │   └── services/               ← Flask memory REST API (:5000)
-│   ├── OCTOPUS.md                  ← Developer constitution
-│   ├── SKILL.md                    ← Trigger guide + tool reference
-│   └── start_mcp.sh / .ps1        ← Full-stack startup
-│
-├── bridge/src/
-│   ├── adapters/
-│   │   ├── octopus-adapter.ts      ← NEW: Octopus ↔ AgentDeck bridge
-│   │   ├── claude-code.ts          ← Claude Code (existing)
-│   │   └── codex-cli.ts, ...       ← Other adapters (existing)
-│   └── octopus/
-│       ├── octopus-client.ts       ← NEW: HTTP+WS client (:3001/:5000)
-│       ├── octopus-deck-layout.ts  ← NEW: 8-key + 4-encoder layout
-│       └── apme-octopus-bridge.ts  ← NEW: APME → Instincts feedback
-│
-├── plugin/                         ← Stream Deck+ SDK v2 plugin
-├── android/                        ← Jetpack Compose (Android 10+)
-├── apple/                          ← SwiftUI (iOS 17+ / macOS 14+)
-├── esp32/                          ← PlatformIO firmware (LVGL)
-├── shared/                         ← TypeScript protocol types
-├── hooks/                          ← Claude Code hook installer
-└── docs/                           ← Architecture, device, protocol docs
 ```
 
 ---
 
 ## Quick Start
 
-### Option A — Octopus only (no hardware needed)
-
-```bash
-git clone https://github.com/Boyapati13/Octopus-Agent-System.git
-cd Octopus-Agent-System/octopus
-
-# Install Node dependencies
-cd node && npm install && cd ..
-
-# Install Python dependencies
-pip install -r python/requirements.txt --break-system-packages
-
-# Configure
-cp node/.env.example node/.env
-# Edit node/.env — set LLM_PROVIDER, add API key (or use Ollama)
-
-# Start everything
-./start_mcp.sh       # Mac/Linux
-# .\start_mcp.ps1   # Windows
-```
-
-Add to Claude Desktop / Cursor / Windsurf `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "octopus": {
-      "command": "node",
-      "args": ["/path/to/octopus/node/src/mcp.js"]
-    }
-  }
-}
-```
-
-All 20 Octopus MCP tools now appear in your LLM client.
-
-### Option B — Full OctoDeck (Octopus + 13 surfaces)
+### Option A — Local only (no hardware, no API key)
 
 ```bash
 git clone https://github.com/Boyapati13/Octopus-Agent-System.git
 cd Octopus-Agent-System
 
-# Install all packages (requires Node.js ≥ 22, pnpm)
-pnpm install && pnpm build
+# Install Ollama: https://ollama.ai
+ollama pull gemma4:e2b          # 7.2 GB — fast, no API key needed
 
+# Install + start
+.\install.ps1                   # Windows
+./install.sh                    # Mac/Linux
+.\start_server.ps1              # starts everything + opens dashboard
+```
+
+→ Dashboard opens at **http://localhost:3001/dashboard**
+
+See [docs/quickstart-local.md](docs/quickstart-local.md) for full steps.
+
+### Option B — Full OctoDeck (Octopus + 13 surfaces + Stream Deck+)
+
+```bash
 # Terminal 1 — Octopus backend
-./octopus/start_mcp.sh
+.\start_server.ps1
 
 # Terminal 2 — AgentDeck bridge + surfaces
 agentdeck octopus
 ```
 
-### Local LLM (No API Key Required)
+### Option C — Headless (Claude Desktop as planner, Octopus as tools)
 
-```bash
-# Install Ollama: https://ollama.ai
-ollama pull gemma4:e2b    # ~3 GB — fast, most tasks
-ollama pull gemma4:9b     # ~8 GB — complex planning
+```json
+{
+  "mcpServers": {
+    "octopus": {
+      "command": "node",
+      "args": ["/path/to/octopus/node/src/mcp.js"],
+      "env": { "HEADLESS_MODE": "true", "SAFE_MODE": "false" }
+    }
+  }
+}
 ```
 
-`octopus/node/.env`:
+See [docs/quickstart-headless.md](docs/quickstart-headless.md).
+
+### Option D — JAX/Gemma custom backend
+
+```bash
+cd examples/jax-gemma-http
+pip install -r requirements.txt
+python server.py --model google/gemma-3-4b-it --port 8080
+```
+
+`node/.env`:
 ```env
-LLM_PROVIDER=ollama
-LLM_MODEL=gemma4:e2b
-OLLAMA_BASE_URL=http://localhost:11434
-SAFE_MODE=false
-AGENTSHIELD_MODE=advisory
+LLM_PROVIDER=custom_http
+CUSTOM_HTTP_URL=http://localhost:8080
+CUSTOM_HTTP_MODEL=google/gemma-3-4b-it
+```
+
+See [docs/quickstart-jax-gemma.md](docs/quickstart-jax-gemma.md).
+
+---
+
+## Web Dashboard
+
+No Stream Deck+ needed. After `.\start_server.ps1`, open:
+
+**http://localhost:3001/dashboard**
+
+Features:
+- **Live chain state** — idle / running (with elapsed timer) / done / failed
+- **Agent timeline** — each agent with icon, role, approval, notes
+- **Gate panel** — Reviewer, SecurityReviewer, Probe, FactChecker, ReleaseKeeper
+- **Event log** — real-time WS events, color-coded by type, timestamps
+- **Task input** — type a prompt → RUN; STOP for interrupt; SCAN for security
+- **WebSocket auto-reconnect** with exponential backoff (2s → 30s)
+- Shows active LLM provider/model and headless mode status
+
+```
+http://localhost:3001/dashboard   ← web dashboard
+http://localhost:3001/api/status  ← JSON status (for monitoring)
+ws://localhost:3001/ws            ← raw WebSocket event stream
 ```
 
 ---
@@ -237,119 +264,64 @@ AGENTSHIELD_MODE=advisory
 
 | Agent | Role | Gate | Description |
 |---|---|---|---|
-| **Cortex** | Planner | ✅ | LLM-driven task decomposition. Routes to TDD / security / research-first patterns by keyword |
-| **Atlas** | Memory | | Searches L1 structural memory — files, symbols, relationships |
-| **Architect** | Design | | Boundary impact analysis before any implementation |
-| **Forge** | Implementation | | Scoped edit plans, instinct-aware coding |
-| **FactChecker** | Grounding | ✅ | Parallel QA gate — catches hallucinations and unsupported claims |
-| **Reviewer** | Quality | ✅ | Parallel QA gate — code quality, style, maintainability |
-| **SecurityReviewer** | Security | ✅ | OWASP Top 10 + 3-layer AgentShield pipeline |
-| **Probe** | Testing | ✅ | Parallel QA gate — enforces 80% coverage minimum |
+| **Cortex** | Planner | ✅ | LLM-driven task decomposition; TDD / security / research routing |
+| **Atlas** | Memory | | L1 structural graph search |
+| **Architect** | Design | | Boundary impact analysis |
+| **Forge** | Implementation | | Scoped edit plans, instinct-aware |
+| **FactChecker** | Grounding | ✅ | Parallel QA gate — catches hallucinations |
+| **Reviewer** | Quality | ✅ | Parallel QA gate — code quality |
+| **SecurityReviewer** | Security | ✅ | OWASP Top 10 + 3-layer AgentShield |
+| **Probe** | Testing | ✅ | Parallel QA gate — 80% coverage minimum |
 | **Scribe** | Docs | | Documentation, changelog, ADR generation |
-| **ReleaseKeeper** | Release | ✅ | Final gate before any release or deployment |
-| **Navigator** | Browser | | `navigate` / `snapshot` / `interact` automation |
-| **MarketScout** | Skills | | ECC library (195+ skills) → npm → PyPI → GitHub |
-| **Toolsmith** | Synthesis | | LLM-generates novel skills for unknown tasks |
-| **SandboxQA** | Validation | ✅ | Isolated skill validation with 3× self-correction loop |
+| **ReleaseKeeper** | Release | ✅ | Final gate before any release |
+| **Navigator** | Browser | | `navigate` / `snapshot` / `interact` |
+| **MarketScout** | Skills | | ECC library → npm → PyPI → GitHub |
+| **Toolsmith** | Synthesis | | LLM-generates novel skills |
+| **SandboxQA** | Validation | ✅ | Isolated skill validation, 3× self-correct |
 
 ### Cortex Planning Patterns
 
-Cortex automatically selects the optimal agent chain based on task keywords:
-
 ```
 Default:         Atlas → Architect → Forge → [Reviewer ‖ SecurityReviewer ‖ Probe ‖ FactChecker] → Scribe → ReleaseKeeper
-TDD-first:       Atlas → Probe (write tests first) → Forge → [QA gates] → Scribe
+TDD-first:       Atlas → Probe → Forge → [QA gates] → Scribe
 Security-first:  Atlas → SecurityReviewer → Forge → [QA gates] → Scribe
 Research-first:  Atlas → FactChecker → Architect → Forge → [QA gates] → Scribe
 ```
 
-The `[QA gates]` stage runs **in parallel** via `Promise.allSettled` — ~75% faster than sequential.
+The `[QA gates]` stage runs **in parallel** via `Promise.allSettled` (~75% faster).
 
 ### 5-Layer Memory
 
 ```
-L5  Task Context Profile   Ephemeral, per-call
-    │  OCTOPUS.md constitution (immutable)
-    │  ECC rules (.claude/rules/*.md)
-    │  Instincts (confidence ≥ 0.7, top 10)
-    │  L1 structural facts
-    │  L2 architectural decisions
-    └  L3 session context
-
-L4  Prompt Cache            Redis (or in-memory fallback)   Session-scoped
-L3  Run State               SQLite                          Session-scoped
-L2  Decision Memory (ADRs)  SQLite append-only              Project lifetime
-L1  Structural Memory       SQLite + NetworkX graph         Project lifetime
+L5  Task Context Profile  — ephemeral, per-agent call
+L4  Prompt Cache          — Redis / in-memory fallback
+L3  Run State             — SQLite, session-scoped
+L2  Decision Memory       — SQLite append-only (ADRs)
+L1  Structural Memory     — SQLite + NetworkX graph
 ```
 
-L5 context is assembled fresh on every agent invocation. The OCTOPUS.md constitution is always first, overriding any learned pattern or LLM tendency.
+### AgentShield — 3 Layers
 
-### AgentShield Security
-
-Three independent security layers, ordered by cost:
-
-| Layer | Component | Cost | Mechanism |
+| Layer | Component | Cost | What it catches |
 |---|---|---|---|
-| 1 | PreToolUse hook | Zero tokens (sync) | Pattern match — blocks `rm -rf /`, `DROP DATABASE`, fork bombs before any LLM cost |
-| 2 | SecurityReviewer agent | LLM call | OWASP Top 10 quick scan + AgentShield 5-category pass |
-| 3 | AgentShield gate | Zero tokens (static) | 102-rule static scanner in advisory or gate mode |
+| 1 | PreToolUse hook | Zero tokens | `rm -rf`, `DROP DATABASE`, fork bombs |
+| 2 | SecurityReviewer | LLM call | OWASP Top 10, secrets, injections |
+| 3 | AgentShield gate | Zero tokens | 102-rule static scanner |
 
-**AgentShield rule categories:**
+### MCP Tool Catalogue — 26 Tools
 
-| Code | Category | Rules | Catches |
-|---|---|---|---|
-| AS-S | Secrets | 14 | API keys, private keys, hardcoded credentials |
-| AS-P | Permissions | 20 | `SAFE_MODE=false`, `new Function()`, `eval()`, `__proto__` |
-| AS-H | Hook Injection | 15 | `$()` in hooks, unescaped `execSync` |
-| AS-M | MCP Risk | 15 | `autoApprove: true`, raw shell transport |
-| AS-A | Agent Config | 15 | Path traversal in `agentName`, unconditional `approved: true` |
-| AS-Q | Code Quality | 23 | `console.log`, `var`, `any`, empty catch, `innerHTML=` |
-
-### MCP Tool Catalogue
-
-All 20 tools are available over MCP stdio and REST API (:3001):
-
-| Category | Tool | Description |
-|---|---|---|
-| Orchestration | `octopus_plan_task` | Cortex decomposes a task into an agent execution plan |
-| Orchestration | `octopus_run_task_chain` | Full chain: plan → agents → gates → instinct extraction |
-| Memory | `octopus_search_memory` | L1 structural graph search (files, symbols, summaries) |
-| Memory | `octopus_get_decisions` | L2 architectural decision log (ADRs) |
-| Memory | `octopus_compact_session` | Promote run state to long-term memory |
-| Files | `octopus_read_file` | Read workspace file |
-| Files | `octopus_write_file` | Write + auto-format workspace file |
-| Files | `octopus_execute_command` | Run shell commands in workspace |
-| Agents | `octopus_create_agent` | Hot-reload a new specialist agent |
-| Agents | `octopus_scan_security` | OWASP + AgentShield file scan |
-| LLM | `octopus_llm_complete` | Send prompt to active LLM provider |
-| Browser | `octopus_browser_navigate` | Open URL + capture accessibility snapshot |
-| Browser | `octopus_browser_snapshot` | Snapshot active browser page |
-| Browser | `octopus_browser_interact` | Click / fill / eval on page |
-| Skills | `octopus_skill_scout` | Search ECC library → npm → PyPI → GitHub |
-| Skills | `octopus_skill_synthesize` | Toolsmith LLM synthesis of novel skill |
-| Skills | `octopus_skill_validate` | SandboxQA isolated validation (3× self-correct) |
-| Skills | `octopus_skill_deploy` | Deploy validated skill to active registry |
-| Skills | `octopus_skill_retire` | Retire a skill from the registry |
-| Skills | `octopus_skill_list` | List all active skills |
-
-### Continuous Learning (Instincts)
-
-Every completed agent chain feeds Octopus's self-improvement loop:
-
-```
-Agent session completes
-        ↓
-extractCandidates()   — confidence-weighted pattern scoring
-        ↓
-cluster()             — word-overlap similarity grouping
-        ↓
-persistInstinct()     — SQLite instincts table
-        ↓
-confidence ≥ 0.7     → injected into L5 context for 6 agents
-confidence ≥ 0.8     → elevated to active skill via MarketScout
-```
-
-**OctoDeck adds a second learning input:** AgentDeck's APME (Agent Performance Evaluation) module evaluates session quality using category-specific rubrics. Low-scoring categories auto-generate instinct candidates posted to `/instincts` — so performance measurement directly drives skill improvement.
+| Category | Tool |
+|---|---|
+| Orchestration | `octopus_plan_task` · `octopus_run_task_chain` |
+| Memory | `octopus_search_memory` · `octopus_get_decisions` · `octopus_compact_session` |
+| Files | `octopus_read_file` · `octopus_write_file` · `octopus_execute_command` |
+| Agents | `octopus_create_agent` · `octopus_scan_security` |
+| LLM | `octopus_llm_complete` |
+| Browser | `octopus_browser_navigate` · `octopus_browser_snapshot` · `octopus_browser_interact` |
+| Skills | `octopus_skill_scout` · `octopus_skill_synthesize` · `octopus_skill_validate` · `octopus_skill_deploy` · `octopus_skill_retire` · `octopus_skill_list` |
+| Auth | `octopus_login` · `octopus_vault_check` |
+| Diagnostics | `octopus_memory_status` · `octopus_task_routes` |
+| Plugins | `octopus_plugin_list` · `octopus_plugin_call` |
 
 ---
 
@@ -360,229 +332,250 @@ confidence ≥ 0.8     → elevated to active skill via MarketScout
 ```
 ┌─────────┬─────────┬─────────┬─────────┐
 │  PLAN   │   RUN   │  STOP   │ AGENTS  │
-│   🔵    │   🟡    │   🔴    │   🟢    │
-│ Blue=   │ Amber=  │ Red=    │ Green=  │
-│planning │running  │stop     │gate pass│
+│ Blue    │ Amber   │ Red     │ Green   │
 ├─────────┼─────────┼─────────┼─────────┤
 │SECURITY │ MEMORY  │INSTINCT │ SHIELD  │
-│   🟠    │   🔵    │   🟣    │   🔴    │
-│ OWASP   │ L1 mem  │ learn   │ 102-rule│
-│ scan    │ search  │ pulse   │ scanner │
+│ Orange  │ Blue    │ Purple  │ Red     │
 └─────────┴─────────┴─────────┴─────────┘
 
 LCD Touch Strip — 4 Encoder Wheels:
   E1  Task Prompt   rotate=scroll history  press=send to Octopus
   E2  Agent Focus   rotate=cycle agents    press=view agent details
-  E3  Memory Query  rotate=browse context  press=L1 memory search
+  E3  Memory Query  rotate=browse context  press=L1 search
   E4  LLM Provider  rotate=switch provider (Claude / GPT-4o / Gemini / Ollama)
 ```
 
-**Key behaviors at a glance:**
-
-- **PLAN** → calls `octopus_plan_task`; full agent chain shown on LCD strip before running
-- **RUN** → calls `octopus_run_task_chain`; turns amber for chain duration
-- **STOP** → sends interrupt to running chain; only active during live run
-- **AGENTS** → green flash on gate pass, red flash + reason text on gate fail
-- **SECURITY** → runs `octopus_scan_security` on current file, results on all surfaces
-- **MEMORY** → searches L1 structural memory, results scroll on LCD strip
-- **INSTINCTS** → pulses purple when new instinct is learned; confidence on LCD
-- **SHIELD** → shows current AgentShield mode (none / advisory / gate); press to cycle
-
 ### 13 Display Surfaces
 
-All 13 surfaces update simultaneously from a single WebSocket event stream:
-
-| Surface | Octopus Features |
-|---|---|
-| **Stream Deck+** | Full PLAN/RUN/STOP/SHIELD control; agent name on LCD strip |
-| **Ulanzi D200H** | Chain status + key control |
-| **Android tablet** | Live agent timeline card with gate pass/fail history |
-| **Android e-ink** | Grayscale-optimised chain status (Crema / Onyx / Kobo) |
-| **iOS / iPadOS** | SwiftUI real-time agent updates + control |
-| **macOS SwiftUI** | In-process daemon, no Node.js dependency |
-| **TUI terminal** | Agent swimlane view — one row per agent, live progress |
-| **ESP32 AMOLED** | Current agent name + progress bar |
-| **ESP32 IPS** | Chain status display |
-| **Ulanzi TC001 LED** | Status strip — amber=running, green=done, red=fail |
-| **Pixoo64 LED matrix** | Octopus creature pulses once per active agent |
-| **iTerm2 badges** | Current agent name in tab title and badge |
-| **Wake word** | Offline voice → Octopus task prompt |
+Stream Deck+ · Ulanzi D200H · Android tablet · Android e-ink · iOS/iPadOS · macOS SwiftUI · TUI terminal · ESP32 AMOLED · ESP32 IPS · Ulanzi TC001 LED · Pixoo64 LED matrix · iTerm2 badges · Wake word / voice
 
 ---
 
 ## Configuration
 
-### Octopus (`octopus/node/.env`)
+### `node/.env` key variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_PROVIDER` | `anthropic` | `anthropic` · `openai` · `google` · `ollama` |
-| `LLM_MODEL` | provider default | Override model — e.g. `gemma4:e2b`, `gpt-4o-mini` |
-| `MAX_THINKING_TOKENS` | `10000` | Token cap per LLM call (~60% cost reduction) |
-| `COMPACT_THRESHOLD` | `50` | Tool calls before strategic compaction |
+| `LLM_PROVIDER` | `anthropic` | `anthropic` · `openai` · `google` · `ollama` · `nvidia` · `huggingface` · `custom_http` · `router` |
+| `LLM_MODEL` | provider default | Override model |
+| `HEADLESS_MODE` | `false` | `true` = external LLM is planner |
 | `SAFE_MODE` | `true` | `false` to enable file writes + shell commands |
 | `AGENTSHIELD_MODE` | `advisory` | `none` · `advisory` · `gate` (blocking) |
-| `ECC_HOOK_PROFILE` | `standard` | `minimal` · `standard` · `strict` |
-| `ECC_RULES_PATH` | `.claude/rules` | Always-loaded ECC guardrail directory |
-| `PROJECT_ROOT` | `.` | Workspace root for file tools |
+| `SOVEREIGN_FALLBACK_MODEL` | `gemma4:e2b` | Local fallback when cloud key missing |
+| `CUSTOM_HTTP_URL` | — | Base URL for `LLM_PROVIDER=custom_http` |
+| `CUSTOM_HTTP_MODEL` | — | Model name for custom HTTP backend |
+| `MAX_THINKING_TOKENS` | `10000` | Token cap per LLM call |
 | `MEMORY_SERVICE_URL` | `http://localhost:5000` | Python memory service |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `OCTOPUS_WEBHOOK_URL` | — | Slack/Discord webhook on chain completion |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server |
 
-### LLM Providers
+---
 
-| Provider | Setting | Models | Key Required |
-|---|---|---|---|
-| Anthropic Claude | `LLM_PROVIDER=anthropic` | claude-opus-4, claude-sonnet-4, claude-haiku-4 | `ANTHROPIC_API_KEY` |
-| OpenAI GPT-4o | `LLM_PROVIDER=openai` | gpt-4o, gpt-4o-mini | `OPENAI_API_KEY` |
-| Google Gemini | `LLM_PROVIDER=google` | gemini-2.0-flash, gemini-1.5-pro | `GOOGLE_API_KEY` |
-| Ollama (local) | `LLM_PROVIDER=ollama` | gemma4:e2b · gemma4:26b · gemma4:31b · gemma3:27b · qwen2.5-coder:7b | None |
-| NVIDIA NIM (free) | `LLM_PROVIDER=nvidia` | meta/llama-3.1-405b-instruct · mistral-nemo · nemotron | `NVIDIA_API_KEY` (free at build.nvidia.com) |
+## Headless Mode
 
-### Gemma 4 — recommended (April 2026, native function calling + multimodal)
+External LLM as planner, Octopus as tools:
 
-All Gemma 4 models have **native function-calling** built in and support multimodal input.
-
-| Model | Disk | Context | Modalities | Best for |
-|---|---|---|---|---|
-| **`gemma4:e2b`** | 7.2 GB | 128K | text · image · **audio** | **Default + Sovereign Fallback** |
-| `gemma4:e4b` | 9.6 GB | 128K | text · image · **audio** | Step-up, edge/mobile |
-| `gemma4:26b` | 18 GB | **256K** | text · image | MoE — 3.8B active params, fast Cortex planning |
-| `gemma4:31b` | 20 GB | **256K** | text · image | **Best local quality** — 85.2% MMLU Pro |
-
-### Gemma 3 — vision + 140 languages
-
-| Model | Disk | Context | Notes |
-|---|---|---|---|
-| `gemma3:4b` | 3.3 GB | 128K | Fast vision |
-| `gemma3:12b` | 8.1 GB | 128K | Balanced quality + vision |
-| `gemma3:27b` | 17 GB | 128K | Best Gemma 3, complex vision tasks |
-| `gemma3:4b-it-qat` | ~1 GB | 128K | 3× less memory than gemma3:4b, same quality |
-| `gemma3:12b-it-qat` | ~3 GB | 128K | BF16 quality at reduced memory |
-
-```bash
-# Pull recommended models
-ollama pull gemma4:e2b          # default — already on your machine
-ollama pull gemma4:26b          # MoE — 18 GB disk / 3.8B active / 256K ctx
-ollama pull gemma4:31b          # best — 20 GB / 256K ctx / 85.2% MMLU Pro
-ollama pull gemma3:4b-it-qat    # vision + 3× lower memory
-ollama pull qwen2.5-coder:7b    # coding tasks — already on your machine
+```env
+HEADLESS_MODE=true
+SAFE_MODE=false
 ```
 
-After pulling: `cd node && npm run cross-link` regenerates `adapters/ollama-config.json` with your new models.
+Toggle at runtime:
+```
+❯ /headless on
+❯ /headless off
+```
+
+Claude Desktop `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "octopus": {
+      "command": "node",
+      "args": ["/path/to/octopus/node/src/mcp.js"],
+      "env": { "HEADLESS_MODE": "true", "SAFE_MODE": "false" }
+    }
+  }
+}
+```
+
+Full guide: [docs/quickstart-headless.md](docs/quickstart-headless.md)
+
+---
+
+## Voice Input
+
+```
+Wake word / push-to-talk → ASR → AgentDeck → OctopusAdapter
+  → POST /api/tasks/voice { text }
+  → Chain runs
+  → WS event: voice_summary { summary, success }
+  → TTS: speak summary
+```
+
+```bash
+# Test without hardware
+curl -X POST http://localhost:3001/api/tasks/voice \
+  -H "Content-Type: application/json" \
+  -d '{"text": "summarize the last architectural decision"}'
+```
+
+Full guide: [docs/quickstart-voice.md](docs/quickstart-voice.md)
+
+---
+
+## LLM Providers
+
+| Provider | Setting | Models | Key |
+|---|---|---|---|
+| Anthropic Claude | `anthropic` | claude-sonnet-4-6, claude-opus-4-7, claude-haiku-4-5 | `ANTHROPIC_API_KEY` |
+| OpenAI | `openai` | gpt-4o, gpt-4o-mini | `OPENAI_API_KEY` |
+| Google Gemini | `google` | gemini-2.0-flash, gemini-2.5-pro | `GOOGLE_API_KEY` |
+| Ollama (local) | `ollama` | gemma4:e2b, gemma4:26b, gemma4:31b, gemma3:27b | None |
+| NVIDIA NIM | `nvidia` | meta/llama-3.1-405b-instruct, kimi-k2, deepseek-v4-pro | `NVIDIA_API_KEY` (free) |
+| HuggingFace | `huggingface` | google/gemma-3-4b-it, gemma-3-27b-it | `HF_TOKEN` (free) |
+| Custom HTTP | `custom_http` | any | `CUSTOM_HTTP_URL` |
+| Smart Router | `router` | best per agent role | varies |
+
+**Sovereign Fallback:** when the selected cloud provider has no key, Octopus automatically routes to local Ollama (`SOVEREIGN_FALLBACK_MODEL`, default `gemma4:e2b`) and logs the reason clearly.
+
+### Gemma 4 (recommended for local)
+
+```bash
+ollama pull gemma4:e2b    # 7.2 GB — default, native function-calling + audio
+ollama pull gemma4:26b    # 18 GB  — MoE, fast planning, 256K context
+ollama pull gemma4:31b    # 20 GB  — best local quality, 85.2% MMLU Pro
+```
+
+### JAX/Gemma backend
+
+```bash
+cd examples/jax-gemma-http
+pip install -r requirements.txt
+python server.py --model google/gemma-3-4b-it
+```
+
+```env
+LLM_PROVIDER=custom_http
+CUSTOM_HTTP_URL=http://localhost:8080
+CUSTOM_HTTP_MODEL=google/gemma-3-4b-it
+```
+
+Also works with: vLLM, LM Studio, llamafile, text-generation-webui (any OpenAI-compatible server).
+
+---
+
+## Tool Plugins
+
+Add custom tools without modifying core code:
+
+```
+tools/
+  my-tool/
+    tool.json    ← manifest (name, description, schema, safety_tier)
+    index.js     ← handler: module.exports = async (input) => result
+```
+
+```bash
+# After adding a plugin, restart the server — it auto-loads
+GET  /api/plugins             # list all plugins
+POST /api/plugins/call/:name  # call a plugin
+# Also available as MCP tools: octopus_plugin_list, octopus_plugin_call
+```
+
+Built-in: `hello_world` (example), `http_fetch` (SSRF-guarded). See [tools/README.md](tools/README.md).
 
 ---
 
 ## Testing
 
-### Currently runnable (113 tests, all green)
+### Currently passing — 141 tests total
 
 ```bash
-# Node.js — Jest  (72 tests)
+# Node.js — Jest (100 tests)
 cd node && npm test
 ```
 ```
-Test Suites: 6 passed, 6 total   |   Tests: 72 passed
-  agents.test.js              32   14 agents: contract + run() · SecurityReviewer · ReleaseKeeper
-  agents_marketplace.test.js  16   Navigator · MarketScout · Toolsmith · SandboxQA
-  commands.test.js             6   REST API: health · agents · onboard · plan · run · 404
-  mcp.test.js                  6   MCP server: 23 tools · SAFE_MODE guards · concurrent calls
-  memory.test.js               3   5-layer structural memory bridge
-  vault_fallback.test.js       9   Zero-Key 4-tier cascade · Ollama routing · Sovereign Fallback
+Test Suites: 8 passed, 8 total
+Tests: 100 passed
+
+  agents.test.js          32   14 agent contracts + SecurityReviewer + ReleaseKeeper
+  agents_marketplace.test.js 16  Navigator · MarketScout · Toolsmith · SandboxQA
+  commands.test.js         6   REST API: health · agents · onboard · plan · run · 404
+  mcp.test.js              6   MCP server: 26 tools · SAFE_MODE guards · concurrent calls
+  memory.test.js           3   5-layer memory bridge
+  vault_fallback.test.js   9   Zero-Key cascade · Ollama routing · Sovereign Fallback
+  octodeck.test.js        15   AgentDeck API: tasks/plan · tasks/run · tasks/interrupt
+                               memory/search · security/scan · voice · status · plugins
+  phase2to6.test.js       13   Dashboard · HEADLESS_MODE · custom_http · tool plugins · 404
 ```
 
 ```bash
-# Python — pytest  (41 tests)
+# Python — pytest (41 tests)
 py -m pytest python/tests/ -q          # Windows
 python3 -m pytest python/tests/ -q    # Mac/Linux
 ```
 ```
 41 passed in ~22s
-  test_graph_store.py     11   node upsert · edge queries · relevance scoring · boundary impact
-  test_indexer.py         13   symbol extraction · skip rules · incremental indexer
-  test_memory_service.py   9   health · search · decisions · compact · context assembly
+  test_graph_store.py     11   node upsert · edge queries · relevance scoring
+  test_indexer.py         13   symbol extraction · incremental indexer
+  test_memory_service.py   9   health · search · decisions · compact · context
   test_schema.py           8   decision CRUD · run state · upsert semantics
 ```
 
 > **Expected console output during Node tests (not failures):**
-> `[cortex] LLM planning failed — using keyword fallback` — no real LLM in tests; fallback is by design.
+> `[cortex] LLM planning failed — using keyword fallback` — no real LLM in tests.
 > `AgentShield scan skipped — hook guard active` — deduplication guard fires correctly.
-
-### Coming with full OctoDeck setup
-
-```bash
-pnpm test          # AgentDeck bridge — Vitest (bridge / plugin / shared / hooks)
-pnpm test:android  # Android — JUnit + Robolectric
-# Xcode → AgentDeckTests scheme for Apple (iOS/iPadOS/macOS)
-```
-These require the full AgentDeck monorepo packages (`shared`, `plugin`, `hooks`, `setup`) which are not yet included in this repo.
 
 ---
 
 ## Development
 
 ```bash
-# Install all dependencies
-pnpm install
+# Start the REST+WS server + memory service
+.\start_server.ps1         # Windows
+./start_mcp.sh             # Mac/Linux (starts MCP + memory)
 
-# Build all packages
-pnpm build
+# CLI
+node node/src/cli.js
+❯ /plan add authentication         # plan only
+❯ /run  add authentication         # full chain
+❯ /provider set ollama gemma4:e2b  # switch model
+❯ /headless on                     # toggle headless
+❯ /dashboard                       # open web UI
+❯ /vault                           # check API keys
 
-# Watch mode (bridge + plugin + shared)
-pnpm -r --parallel dev
+# Build bridge TypeScript (optional — for AgentDeck integration)
+cd bridge && npm install && npm run build
 
-# Start Octopus MCP server
-cd octopus && npm run mcp
-
-# Start Octopus REST API (:3001)
-cd octopus && npm run serve
-
-# Start Python memory service (:5000)
-py octopus/python/services/memory_service.py     # Windows
-# python3 octopus/python/services/memory_service.py  # Mac/Linux
-
-# Start AgentDeck bridge in Octopus mode
-agentdeck octopus
-
-# Creature simulator demo
-pnpm demo
+# Tests
+cd node && npm test
+py -m pytest python/tests/ -q
 ```
 
-### Adding a New Agent
+### Adding a new agent
 
-1. Create `octopus/node/src/agents/yourAgent.js` following existing agent pattern
-2. Register in `octopus/node/src/agents/index.js`
-3. Optionally add a key slot in `bridge/src/octopus/octopus-deck-layout.ts`
-4. Add test cases to `octopus/node/tests/agents.test.js`
+1. `node/src/agents/yourAgent.js` — follow existing pattern
+2. Register in `node/src/agents/index.js`
+3. Optionally add a key in `bridge/src/octopus/octopus-deck-layout.ts`
+4. Add tests in `node/tests/agents.test.js`
 
-### Adding a Display Surface
+### Adding a tool plugin
 
-Follow the AgentDeck device adapter pattern in `bridge/src/modules/`. The `OctopusAdapter` emits standard `AdapterEvent` frames (`spinner_start`, `tool_action`, `status_line`, `idle`) — any surface that handles these will render Octopus state without modification.
+1. Create `tools/<name>/tool.json` + `tools/<name>/index.js`
+2. Restart the server — it auto-loads
+3. See [tools/README.md](tools/README.md)
 
 ---
 
 ## Roadmap
 
-- [ ] Voice → Octopus task via offline wake word (Porcupine / microWakeWord on ESP32)
-- [ ] Instinct confidence bar on Pixoo64 LED rows
-- [ ] Multi-chain view — parallel Octopus chains on separate Stream Deck key rows
-- [ ] APME rubrics tuned for Octopus metrics (gate failure rate, instinct graduation rate, chain latency)
+- [ ] Voice → Octopus via offline wake word (Porcupine / microWakeWord on ESP32)
+- [ ] Multi-chain view — parallel chains on separate Stream Deck key rows
+- [ ] Ollama model hot-swap via E4 encoder without restart
+- [ ] TUI agent swimlane — one row per agent, live token counters
 - [ ] AgentShield findings pushed to Apple/Android notification surfaces
-- [ ] Ollama model hot-swap via E4 encoder without Octopus restart
-- [ ] TUI agent swimlane — one row per agent, live token counters + timing
-
----
-
-## Attribution
-
-| Component | License | Source |
-|---|---|---|
-| Octopus Agent System (`octopus/`) | Apache 2.0 | [Boyapati13/Octopus-Agent-System](https://github.com/Boyapati13/Octopus-Agent-System) |
-| AgentDeck (bridge, plugin, android, apple, esp32...) | MIT | [puritysb/AgentDeck](https://github.com/puritysb/AgentDeck) |
-| ECC Skills integration | Apache 2.0 | [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) |
-| Brand icons | MIT | [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) |
-
-**Independent project. Not affiliated with Anthropic, OpenAI, Google, Elgato, DIVOOM, or Ulanzi.**
+- [ ] Instinct confidence bar on Pixoo64 LED rows
 
 ---
 
@@ -590,13 +583,25 @@ Follow the AgentDeck device adapter pattern in `bridge/src/modules/`. The `Octop
 
 | Doc | Content |
 |---|---|
-| [octopus/OCTOPUS.md](octopus/OCTOPUS.md) | Developer constitution — injected into every agent's L5 context |
-| [octopus/SKILL.md](octopus/SKILL.md) | MCP tool trigger guide, memory layer reference |
-| [docs/octopus-integration.md](docs/octopus-integration.md) | OctoDeck integration — event flow, new files, APME→Instincts mapping |
-| [docs/architecture.md](docs/architecture.md) | BridgeCore, PtyAdapter, Gateway protocol |
-| [docs/apme-pipeline.md](docs/apme-pipeline.md) | 8-layer APME session evaluation deep dive |
-| [docs/streamdeck-layout.md](docs/streamdeck-layout.md) | Stream Deck+ per-state layouts, encoder details |
-| [docs/android.md](docs/android.md) | Android device support, e-ink optimisation rules |
-| [docs/testing.md](docs/testing.md) | Coverage thresholds, CI pipeline |
-| [octopus/OCTOPUS_CHANGELOG.md](octopus/OCTOPUS_CHANGELOG.md) | Octopus v1.0 → v2.0 → v3.0 history |
-| [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) | Full AgentDeck development history |
+| [docs/quickstart-local.md](docs/quickstart-local.md) | No hardware, no API key — run in 5 minutes |
+| [docs/quickstart-headless.md](docs/quickstart-headless.md) | Claude Desktop / Cursor as planner |
+| [docs/quickstart-jax-gemma.md](docs/quickstart-jax-gemma.md) | JAX/Gemma custom backend + any OpenAI-compat server |
+| [docs/quickstart-voice.md](docs/quickstart-voice.md) | Voice → Octopus → surfaces → TTS |
+| [docs/octopus-integration.md](docs/octopus-integration.md) | OctoDeck event flow, REST API, WS events |
+| [OCTOPUS.md](OCTOPUS.md) | Developer constitution — injected into every agent |
+| [SKILL.md](SKILL.md) | MCP tool trigger guide, REST API reference |
+| [tools/README.md](tools/README.md) | Tool plugin guide |
+| [examples/jax-gemma-http/README.md](examples/jax-gemma-http/README.md) | JAX/Gemma server guide |
+
+---
+
+## Attribution
+
+| Component | License | Source |
+|---|---|---|
+| Octopus Agent System (`node/`, `python/`) | Apache 2.0 | [Boyapati13/Octopus-Agent-System](https://github.com/Boyapati13/Octopus-Agent-System) |
+| AgentDeck (`bridge/`, Android, Apple, ESP32…) | MIT | [puritysb/AgentDeck](https://github.com/puritysb/AgentDeck) |
+| ECC Skills integration | Apache 2.0 | [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) |
+| Brand icons | MIT | [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) |
+
+**Independent project. Not affiliated with Anthropic, OpenAI, Google, Elgato, DIVOOM, or Ulanzi.**

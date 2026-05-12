@@ -1,0 +1,31 @@
+{
+  "name": "http_fetch",
+  "display_name": "HTTP Fetch",
+  "description": "Fetch the body of an HTTP/HTTPS URL. Only GET requests; no authentication headers; response body truncated to 32 KB.",
+  "safety_tier": "read-only",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string",
+        "description": "The URL to fetch (must start with https:// or http://localhost)"
+      },
+      "max_bytes": {
+        "type": "number",
+        "description": "Maximum response bytes to return (default: 8192, max: 32768)"
+      }
+    },
+    "required": ["url"]
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "status": { "type": "number" },
+      "content_type": { "type": "string" },
+      "body": { "type": "string" },
+      "truncated": { "type": "boolean" }
+    }
+  },
+  "version": "1.0.0",
+  "author": "octopus-plugin"
+}

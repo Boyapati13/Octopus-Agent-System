@@ -119,7 +119,8 @@ function groupIntoStages(plan) {
 
 // ── Parallel stage executor ───────────────────────────────────────────────────
 
-async function runParallelStage(stageAgents, task, memory, results, errors) {
+async function runParallelStage(stageAgents, task, memory, results, errors, _emit) {
+  // _emit is accepted but gate_fail is thrown (caught in runTask)
   const names = stageAgents.map(s => s.agent);
   console.error(`[runner] Parallel stage: [${names.join(', ')}]`);
 
@@ -204,33 +205,83 @@ async function runSequentialStage(stepObj, task, memory, results, errors) {
 
 // ── Main runner ───────────────────────────────────────────────────────────────
 
-async function runTask(task, memory) {
+/**
+ * Run a full agent chain for the given task.
+ *
+ * @param {string} task         - Task description
+ * @param {object} memory       - Memory service proxy
+ * @param {Function} [emit]     - Optional WebSocket broadcast fn: emit(type, data)
+ *                                Called at: chain_start, agent_start, agent_done,
+ *                                gate_fail, chain_done, compaction, instinct_new
+ */
+async function runTask(task, memory, emit) {
+  const _emit = typeof emit === 'function' ? emit : () => {};
   console.error(`[runner] Task: "${task}"`);
   resetToolCalls();
+
+  const startMs = Date.now();
 
   const planResult = await runAgent('cortex', { task, query: task }, memory);
 
   if (!planResult?.plan) {
+    _emit('chain_done', { task, success: false, duration_ms: Date.now() - startMs, error: 'Plan failure' });
     throw new OctopusError(KINDS.PLAN_FAILURE, 'Cortex produced no plan.', 'Cortex', { result: planResult });
   }
+
+  _emit('chain_start', {
+    task,
+    plan: planResult.plan.map(s => s.agent),
+  });
 
   const stages  = groupIntoStages(planResult.plan);
   const results = { cortex: planResult };
   const errors  = [];
 
-  for (const stage of stages) {
-    // Strategic compaction hint (ECC: suggest after COMPACT_THRESHOLD tool calls)
-    const lastAdvice = Object.values(results).pop()?.advice || '';
-    const { suggest, reason } = shouldSuggestCompaction(sessionToolCallCount, lastAdvice);
-    if (suggest) {
-      console.error(`[runner] 💡 Strategic compaction suggested: ${reason}`);
-    }
+  try {
+    for (const stage of stages) {
+      // Strategic compaction hint (ECC: suggest after COMPACT_THRESHOLD tool calls)
+      const lastAdvice = Object.values(results).pop()?.advice || '';
+      const { suggest, reason } = shouldSuggestCompaction(sessionToolCallCount, lastAdvice);
+      if (suggest) {
+        console.error(`[runner] 💡 Strategic compaction suggested: ${reason}`);
+        _emit('compaction', { session_tool_calls: sessionToolCallCount });
+      }
 
-    if (stage.length > 1) {
-      await runParallelStage(stage, task, memory, results, errors);
-    } else {
-      await runSequentialStage(stage[0], task, memory, results, errors);
+      if (stage.length > 1) {
+        // Emit agent_start for each parallel agent before running
+        for (const s of stage) {
+          const mod = getAgent(s.agent);
+          _emit('agent_start', { agent: s.agent, role: mod?.role || s.agent });
+        }
+        await runParallelStage(stage, task, memory, results, errors);
+        // Emit agent_done for each parallel agent
+        for (const s of stage) {
+          const r = results[s.agent.toLowerCase()] || results[s.agent];
+          _emit('agent_done', {
+            agent: s.agent,
+            approved: r?.approved !== false,
+            notes: r?.advice ? [r.advice] : [],
+          });
+        }
+      } else {
+        const agentName = stage[0].agent;
+        const mod = getAgent(agentName);
+        _emit('agent_start', { agent: agentName, role: mod?.role || agentName });
+        await runSequentialStage(stage[0], task, memory, results, errors);
+        const r = results[agentName.toLowerCase()] || results[agentName];
+        _emit('agent_done', {
+          agent: agentName,
+          approved: r?.approved !== false,
+          notes: r?.advice ? [r.advice] : [],
+        });
+      }
     }
+  } catch (err) {
+    if (err instanceof OctopusError && err.envelope?.kind === KINDS.GATE_FAILURE) {
+      _emit('gate_fail', { agent: err.envelope.agent || 'gate', reason: err.message });
+    }
+    _emit('chain_done', { task, success: false, duration_ms: Date.now() - startMs });
+    throw err;
   }
 
   const approvedCount = Object.values(results).filter(r => r.approved === true).length;
@@ -253,9 +304,24 @@ async function runTask(task, memory) {
   };
 
   // ECC Continuous Learning v2: extract instincts from session
-  processSession(finalResults).catch(e =>
-    console.warn(`[runner] Instinct extraction failed: ${e.message}`)
-  );
+  processSession(finalResults)
+    .then(({ instincts }) => {
+      for (const instinct of instincts) {
+        _emit('instinct_new', {
+          id: String(Date.now()),
+          pattern: instinct.pattern,
+          confidence: instinct.confidence,
+          occurrences: instinct.occurrences,
+        });
+      }
+    })
+    .catch(e => console.warn(`[runner] Instinct extraction failed: ${e.message}`));
+
+  _emit('chain_done', {
+    task,
+    success: true,
+    duration_ms: Date.now() - startMs,
+  });
 
   // Stop hook — webhook + console notification
   onStop(task, finalResults);

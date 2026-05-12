@@ -30,12 +30,13 @@ const axios = require('axios');
 // OCTOPUS_CALLER is set in the MCP client's env block — MCP stdio has no built-in caller identity
 const CALLER = (process.env.OCTOPUS_CALLER || '').toLowerCase();
 const CALLER_PRESETS = {
-  claude:    { provider: 'anthropic', model: 'claude-sonnet-4-6'          },
-  openai:    { provider: 'openai',    model: 'gpt-4o'                     },
-  gemini:    { provider: 'google',    model: 'gemini-2.5-pro'             },
-  ollama:    { provider: 'ollama',    model: 'gemma4:e2b'                 },
-  nvidia:       { provider: 'nvidia',       model: 'meta/llama-3.1-405b-instruct'  },
-  huggingface:  { provider: 'huggingface', model: 'google/gemma-3-4b-it'          },
+  claude:       { provider: 'anthropic',   model: 'claude-sonnet-4-6'                },
+  openai:       { provider: 'openai',      model: 'gpt-4o'                           },
+  gemini:       { provider: 'google',      model: 'gemini-2.5-pro'                   },
+  ollama:       { provider: 'ollama',      model: 'gemma4:e2b'                       },
+  nvidia:       { provider: 'nvidia',      model: 'meta/llama-3.1-405b-instruct'     },
+  huggingface:  { provider: 'huggingface', model: 'google/gemma-3-4b-it'             },
+  custom:       { provider: 'custom_http', model: process.env.CUSTOM_HTTP_MODEL || 'default' },
   // cursor/windsurf/continue defer to LLM_PROVIDER/LLM_MODEL env vars
 };
 const preset = CALLER_PRESETS[CALLER] || null;
@@ -51,6 +52,7 @@ const MODEL = process.env.LLM_MODEL || (preset ? preset.model : {
   ollama:       'llama3.2',
   nvidia:       'meta/llama-3.1-405b-instruct',
   huggingface:  'google/gemma-3-4b-it',
+  custom_http:  process.env.CUSTOM_HTTP_MODEL || 'default',
 }[PROVIDER]) || 'claude-sonnet-4-6';
 
 if (CALLER && preset) {
@@ -120,7 +122,15 @@ function withRetry(fn) {
         return await fn();
       } catch (err) {
         lastErr = err;
-        if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        const status = err.response?.status;
+        const detail = status ? ` (HTTP ${status})` : '';
+        if (attempt < MAX_RETRIES) {
+          const delay = 500 * (attempt + 1);
+          console.error(`[llm] Attempt ${attempt + 1} failed${detail}: ${err.message} — retrying in ${delay}ms`);
+          await new Promise(r => setTimeout(r, delay));
+        } else {
+          console.error(`[llm] All ${MAX_RETRIES + 1} attempts failed${detail}: ${err.message}`);
+        }
       }
     }
     throw lastErr;
@@ -202,6 +212,29 @@ async function completeNvidia(prompt, opts = {}) {
   });
 }
 
+// Custom HTTP backend — generic OpenAI-compatible endpoint.
+// Set CUSTOM_HTTP_URL and CUSTOM_HTTP_MODEL to point at any local or remote server
+// that speaks the OpenAI /v1/chat/completions API (e.g., a JAX/Gemma HTTP server,
+// LM Studio, text-generation-webui, llamafile, vLLM, etc.).
+//
+// Example .env:
+//   LLM_PROVIDER=custom_http
+//   CUSTOM_HTTP_URL=http://localhost:8080
+//   CUSTOM_HTTP_MODEL=gemma-3-4b-it
+async function completeCustomHttp(prompt, opts = {}) {
+  const base  = process.env.CUSTOM_HTTP_URL;
+  if (!base) throw new Error('CUSTOM_HTTP_URL is not set — required for LLM_PROVIDER=custom_http');
+  const model = opts._model || MODEL;
+  return withRetry(async () => {
+    const res = await axios.post(
+      `${base}/v1/chat/completions`,
+      { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }], stream: false },
+      { headers: { 'content-type': 'application/json' }, timeout: opts.timeout || 60000 }
+    );
+    return res.data.choices[0].message.content;
+  });
+}
+
 async function completeOllama(prompt, opts = {}) {
   const base  = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   const model = opts._model || MODEL;
@@ -222,6 +255,7 @@ const COMPLETERS = {
   ollama:      completeOllama,
   nvidia:      completeNvidia,
   huggingface: completeHuggingFace,
+  custom_http: completeCustomHttp,
 };
 
 const SOVEREIGN_MODEL = process.env.SOVEREIGN_FALLBACK_MODEL || 'gemma4:e2b';
@@ -246,13 +280,24 @@ async function complete(prompt, opts = {}) {
   }
 
   const fn = COMPLETERS[PROVIDER];
-  if (!fn) throw new Error(`Unknown LLM_PROVIDER "${PROVIDER}". Valid: ${Object.keys(COMPLETERS).concat('router').join(', ')}`);
+  if (!fn) throw new Error(`Unknown LLM_PROVIDER "${PROVIDER}". Valid: ${Object.keys(COMPLETERS).concat('router').join(', ')}.`);
 
   // ── Sovereign Fallback: no cloud key → local Ollama ───────────────────────
-  if (PROVIDER !== 'ollama') {
+  if (PROVIDER !== 'ollama' && PROVIDER !== 'custom_http') {
     const key = await getSecureKey(PROVIDER);
     if (!key) {
-      console.error(`[llm] No key for "${PROVIDER}" — sovereign fallback to Ollama (${SOVEREIGN_MODEL})`);
+      const envHint = {
+        anthropic:   'ANTHROPIC_API_KEY',
+        openai:      'OPENAI_API_KEY',
+        google:      'GOOGLE_API_KEY',
+        nvidia:      'NVIDIA_API_KEY',
+        huggingface: 'HF_TOKEN',
+      }[PROVIDER] || 'API_KEY';
+      console.error(
+        `[llm] ⚠  No key for "${PROVIDER}" (${envHint} not set). ` +
+        `Sovereign Fallback: routing to local Ollama (${SOVEREIGN_MODEL}). ` +
+        `To fix: set ${envHint} in node/.env or run octopus_login.`
+      );
       return completeOllama(prompt, { ...cappedOpts, _model: SOVEREIGN_MODEL });
     }
   }

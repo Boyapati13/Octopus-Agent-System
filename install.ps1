@@ -12,8 +12,8 @@ function Info { param($m) Write-Host "  [octopus] $m" -ForegroundColor Cyan }
 function Warn { param($m) Write-Host "  [octopus] $m" -ForegroundColor Yellow }
 function Head { param($m) Write-Host "`n$m" -ForegroundColor Magenta }
 
-Head "🐙 Octopus 2.0 — Zero-Key Installer"
-Write-Host "  Self-evolving AI · 14 agents · 23 MCP tools · AgentShield · Zero-Key Auth"
+Head "🐙 Octopus 3.0 — OctoDeck Edition Installer"
+Write-Host "  14 agents · 26 MCP tools · AgentShield · Web Dashboard · Voice · JAX/Gemma"
 Write-Host ""
 
 # ── Step 1: Clone if running remotely ────────────────────────────────────────
@@ -57,7 +57,7 @@ Log "Node $(node --version) / npm $(npm --version)"
 # keytar uses a prebuilt binary on Windows (Windows Credential Manager — no build tools needed)
 Push-Location $NodeDir
 npm install --silent
-Log "Dependencies installed (keytar + dotenv + 21-tool MCP stack)"
+Log "Dependencies installed (ws + keytar + dotenv + 26-tool MCP stack)"
 Pop-Location
 
 # ── Step 3: Python dependencies ───────────────────────────────────────────────
@@ -104,18 +104,21 @@ if (-not (Test-Path $EnvFile)) {
     }
 
     @"
-# Octopus 2.0 — Zero-Key Configuration
+# Octopus 3.0 — OctoDeck Edition Configuration
 # API keys are NOT stored here — use 'octopus_login' in your AI chat instead.
 # Keys are stored securely in Windows Credential Manager via the OS Vault.
+
 MEMORY_SERVICE_URL=http://localhost:5000
 DATA_DIR=../data
 PORT=3001
 SAFE_MODE=false
 
-# ECC 2.0 Token Optimization
+# Headless mode: false = Cortex is planner (default); true = external LLM is planner
+HEADLESS_MODE=false
+
+# ECC 3.0 Token Optimization
 MAX_THINKING_TOKENS=10000
 COMPACT_THRESHOLD=50
-COMPACT_REMINDER_INTERVAL=25
 
 # AgentShield
 AGENTSHIELD_MODE=advisory
@@ -126,14 +129,23 @@ PROJECT_ROOT=$RepoDir
 ECC_RULES_PATH=$RulesDir
 
 # LLM Provider (no API key needed — use octopus_login to authorize cloud providers)
+# Options: anthropic | openai | google | ollama | nvidia | huggingface | custom_http | router
 LLM_PROVIDER=$provider
 LLM_MODEL=$model
 OLLAMA_BASE_URL=http://localhost:11434
+SOVEREIGN_FALLBACK_MODEL=gemma4:e2b
+
+# Custom HTTP backend (any OpenAI-compatible server: JAX/Gemma, vLLM, LM Studio, llamafile)
+# Set LLM_PROVIDER=custom_http and fill these in:
+CUSTOM_HTTP_URL=
+CUSTOM_HTTP_MODEL=
 
 # Optional fallback keys (prefer octopus_login — these are plain-text)
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 GOOGLE_API_KEY=
+NVIDIA_API_KEY=
+HF_TOKEN=
 GITHUB_TOKEN=
 "@ | Out-File -FilePath $EnvFile -Encoding utf8
     Log ".env created (LLM_PROVIDER=$provider) — API keys go in OS Vault, not here"
@@ -197,7 +209,7 @@ function Inject-Mcp {
             LLM_PROVIDER        = 'anthropic'
         }
     }
-    $cfg.mcpServers | Add-Member -MemberType NoteProperty -Name 'octopus-2' -Value $entry -Force
+    $cfg.mcpServers | Add-Member -MemberType NoteProperty -Name 'octopus' -Value $entry -Force
     $cfg | ConvertTo-Json -Depth 10 | Out-File -FilePath $CfgPath -Encoding utf8
     Log "$ClientName registered → $CfgPath"
 }
@@ -247,27 +259,39 @@ if ($currentPath -notlike "*$RepoDir*") {
 }
 
 # ── Done ──────────────────────────────────────────────────────────────────────
-Head "Step 6/6 — Done"
-Log "Octopus 2.0 installed ($installed client(s) registered)"
+Head "Step 6/6 — Done ✅"
+Log "Octopus 3.0 installed ($installed MCP client(s) registered)"
 Write-Host ""
-Info "Start the Octopus interactive CLI:"
-Write-Host "  octopus" -ForegroundColor Cyan
-Write-Host "  (or: .\octopus.ps1 from the project directory)"
+Write-Host "  ┌─────────────────────────────────────────────────────────┐" -ForegroundColor Cyan
+Write-Host "  │  Start everything (REST + WS + memory + dashboard):      │" -ForegroundColor Cyan
+Write-Host "  │    .\start_server.ps1                                    │" -ForegroundColor Green
+Write-Host "  │                                                           │" -ForegroundColor Cyan
+Write-Host "  │  Start MCP server (for Claude Desktop / Cursor):         │" -ForegroundColor Cyan
+Write-Host "  │    .\start_mcp.ps1                                       │" -ForegroundColor Green
+Write-Host "  │                                                           │" -ForegroundColor Cyan
+Write-Host "  │  Launch CLI:                                              │" -ForegroundColor Cyan
+Write-Host "  │    octopus   (or: node node\src\cli.js)                  │" -ForegroundColor Green
+Write-Host "  └─────────────────────────────────────────────────────────┘" -ForegroundColor Cyan
 Write-Host ""
-Info "What you get in the CLI:"
-Write-Host "  /plan <task>   — plan with Cortex, see the agent chain"
-Write-Host "  /run  <task>   — run the full 14-agent pipeline live"
-Write-Host "  /models        — see your Ollama models"
-Write-Host "  /routes        — see which model each agent uses"
-Write-Host "  /vault         — check API key status"
-Write-Host "  /update        — self-update from GitHub"
+Info "Web dashboard (after .\start_server.ps1):"
+Write-Host "  http://localhost:3001/dashboard" -ForegroundColor Cyan
+Write-Host ""
+Info "CLI commands:"
+Write-Host "  /plan <task>           plan with Cortex"
+Write-Host "  /run  <task>           run the full 14-agent pipeline"
+Write-Host "  /provider list         show all LLM providers"
+Write-Host "  /provider set ollama   switch to local Gemma"
+Write-Host "  /headless on|off       toggle headless mode"
+Write-Host "  /dashboard             open the web dashboard"
+Write-Host "  /vault                 check API key status"
 Write-Host ""
 Info "Zero-Key auth — in the CLI or your AI chat:"
 Write-Host "  octopus_login  → browser opens, paste key once, stored in Windows Vault"
 Write-Host ""
 Info "Local Gemma 4 (no API key needed):"
-Write-Host "  ollama pull gemma4:e2b    # default — 7.2 GB"
-Write-Host "  ollama pull gemma4:26b    # planning — 18 GB, 3.8B active (MoE)"
+Write-Host "  ollama pull gemma4:e2b    # 7.2 GB — default"
+Write-Host "  ollama pull gemma4:26b    # 18 GB  — MoE, fast planning"
 Write-Host ""
-Info "Full guide: $RepoDir\DEPLOYMENT.md"
+Info "Full guide:  $RepoDir\README.md"
+Info "Quick start: $RepoDir\docs\quickstart-local.md"
 Write-Host ""

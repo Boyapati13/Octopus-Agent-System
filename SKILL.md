@@ -73,6 +73,30 @@ octopus_compact_session { "summary": "...", "facts": ["..."] }
 | `octopus_browser_snapshot` | Snapshot active browser page |
 | `octopus_browser_interact` | Click / fill / eval on active page |
 
+## REST API (direct)
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/health` | Health + chain status |
+| GET | `/api/status` | Live session dashboard |
+| POST | `/api/tasks/plan` | Plan only (no execution) |
+| POST | `/api/tasks/run` | Run full chain (events on WS `/ws`) |
+| POST | `/api/tasks/interrupt` | Stop running chain |
+| POST | `/api/tasks/voice` | Voice-friendly task path (TTS summary via WS) |
+| POST | `/api/security/scan` | `{ target }` → AgentShield scan |
+| GET | `/api/memory/search?q=` | L1 memory search |
+| GET | `/api/plugins` | List tool plugins |
+| POST | `/api/plugins/call/:name` | Call a tool plugin |
+
+## Tool Plugins
+
+Add capabilities via `tools/<name>/tool.json` + `tools/<name>/index.js`.
+See `tools/README.md` for the full guide.
+
+Built-in plugins:
+- `hello_world` — example/template
+- `http_fetch` — safe HTTPS GET with SSRF guard
+
 ---
 
 ## Installing on another LLM

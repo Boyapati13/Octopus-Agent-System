@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐙 OctoDeck Dashboard</title>
+<style>
+  :root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --dim:       #8b949e;
+    --blue:      #1f6feb;
+    --green:     #238636;
+    --amber:     #d29922;
+    --red:       #da3633;
+    --purple:    #8957e5;
+    --orange:    #e3671a;
+    --cyan:      #39c5cf;
+    --running:   #f0a500;
+    --idle:      #424242;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  /* ── Layout ─────────────────────────────────────────────────────────────── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar .logo { font-size: 18px; font-weight: 700; color: var(--cyan); }
+  .topbar .version { color: var(--dim); font-size: 11px; }
+  .ws-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+  }
+  .ws-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    transition: background 0.3s;
+  }
+  .ws-dot.connected { background: var(--green); }
+  .ws-dot.connecting { background: var(--amber); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 20px; max-width: 1400px; }
+  @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
+
+  /* ── Cards ──────────────────────────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-body { padding: 14px; }
+
+  /* ── Chain status ────────────────────────────────────────────────────────── */
+  .chain-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.03);
+    margin-bottom: 12px;
+  }
+  .chain-indicator {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--idle);
+    transition: background 0.3s;
+  }
+  .chain-indicator.running { background: var(--running); animation: pulse 1.2s infinite; }
+  .chain-indicator.done    { background: var(--green); }
+  .chain-indicator.failed  { background: var(--red); }
+
+  .chain-label { font-size: 14px; font-weight: 600; }
+  .chain-task  { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px; }
+  .chain-elapsed { margin-left: auto; color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  /* ── Agent timeline ──────────────────────────────────────────────────────── */
+  .agent-timeline { list-style: none; }
+  .agent-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 5px 0;
+    border-left: 2px solid var(--border);
+    padding-left: 12px;
+    margin-left: 6px;
+  }
+  .agent-step.running { border-color: var(--running); }
+  .agent-step.pass    { border-color: var(--green); }
+  .agent-step.fail    { border-color: var(--red); }
+  .agent-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+  .agent-name { font-weight: 600; color: var(--text); }
+  .agent-role { color: var(--dim); font-size: 11px; }
+  .agent-note { color: var(--amber); font-size: 11px; margin-top: 2px; }
+
+  /* ── Gate panel ─────────────────────────────────────────────────────────── */
+  .gate-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .gate-item {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: border-color 0.3s;
+  }
+  .gate-item.pass   { border-color: var(--green); background: rgba(35,134,54,0.08); }
+  .gate-item.fail   { border-color: var(--red);   background: rgba(218,54,51,0.08); }
+  .gate-item.active { border-color: var(--running); background: rgba(240,165,0,0.08); }
+  .gate-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+  .gate-item.pass .gate-dot   { background: var(--green); }
+  .gate-item.fail .gate-dot   { background: var(--red); }
+  .gate-item.active .gate-dot { background: var(--running); animation: pulse 1s infinite; }
+  .gate-name { font-weight: 600; font-size: 12px; }
+  .gate-result { font-size: 11px; color: var(--dim); }
+
+  /* ── Metrics row ─────────────────────────────────────────────────────────── */
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .metric {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .metric-label { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .metric-value { font-size: 15px; font-weight: 700; color: var(--cyan); margin-top: 2px; }
+
+  /* ── Event log ───────────────────────────────────────────────────────────── */
+  #event-log {
+    height: 260px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    font-size: 12px;
+  }
+  .log-entry {
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    gap: 8px;
+  }
+  .log-time  { color: var(--dim); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .log-type  { flex-shrink: 0; width: 100px; }
+  .log-msg   { color: var(--text); }
+  .log-entry.chain_start  .log-type { color: var(--blue); }
+  .log-entry.agent_start  .log-type { color: var(--cyan); }
+  .log-entry.agent_done   .log-type { color: var(--green); }
+  .log-entry.gate_fail    .log-type { color: var(--red); }
+  .log-entry.chain_done   .log-type { color: var(--purple); }
+  .log-entry.instinct_new .log-type { color: var(--purple); }
+  .log-entry.compaction   .log-type { color: var(--amber); }
+  .log-entry.connected    .log-type { color: var(--green); }
+  .log-entry.disconnected .log-type { color: var(--red); }
+  .log-entry.error        .log-type { color: var(--red); }
+
+  /* ── Provider card ───────────────────────────────────────────────────────── */
+  .provider-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(57,197,207,0.12);
+    border: 1px solid rgba(57,197,207,0.3);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: var(--cyan);
+  }
+  .headless-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(233,103,26,0.12);
+    border: 1px solid rgba(233,103,26,0.3);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: var(--orange);
+  }
+
+  /* ── Prompt bar ──────────────────────────────────────────────────────────── */
+  .prompt-bar {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .prompt-input {
+    flex: 1;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .prompt-input:focus { border-color: var(--cyan); }
+  .btn {
+    background: var(--blue);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 14px;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn.stop { background: var(--red); }
+  .btn.scan { background: var(--orange); }
+
+  /* ── Full-width card ─────────────────────────────────────────────────────── */
+  .full-width { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="logo">🐙 OctoDeck</span>
+  <span class="version" id="ver">v3.0</span>
+  <span id="headless-badge" style="display:none" class="headless-badge">⚡ HEADLESS</span>
+  <span id="provider-badge" class="provider-badge">— / —</span>
+  <div class="ws-status">
+    <div class="ws-dot" id="ws-dot"></div>
+    <span id="ws-label">Connecting…</span>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Chain Status Card -->
+  <div class="card">
+    <div class="card-header">⛓ Chain Status</div>
+    <div class="card-body">
+      <div class="chain-status">
+        <div class="chain-indicator" id="chain-dot"></div>
+        <div>
+          <div class="chain-label" id="chain-state">Idle</div>
+          <div class="chain-task" id="chain-task">No active task</div>
+        </div>
+        <div class="chain-elapsed" id="chain-elapsed"></div>
+      </div>
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Agents run</div>
+          <div class="metric-value" id="m-agents">0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Gates passed</div>
+          <div class="metric-value" id="m-gates">0</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Instincts</div>
+          <div class="metric-value" id="m-instincts">0</div>
+        </div>
+      </div>
+      <div class="prompt-bar">
+        <input class="prompt-input" id="task-input" type="text" placeholder="Enter task prompt…" />
+        <button class="btn" id="run-btn" onclick="sendTask()">RUN</button>
+        <button class="btn stop" id="stop-btn" onclick="stopChain()" disabled>STOP</button>
+        <button class="btn scan" onclick="scanSecurity()">SCAN</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gates Panel -->
+  <div class="card">
+    <div class="card-header">🛡 Gate Agents</div>
+    <div class="card-body">
+      <div class="gate-grid" id="gate-grid"></div>
+    </div>
+  </div>
+
+  <!-- Agent Timeline -->
+  <div class="card">
+    <div class="card-header">🤖 Agent Timeline</div>
+    <div class="card-body">
+      <ul class="agent-timeline" id="agent-timeline">
+        <li class="agent-step" style="color:var(--dim)"><span>No agents run yet</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Event Log -->
+  <div class="card">
+    <div class="card-header">📡 Event Log
+      <button class="btn" style="margin-left:auto;padding:2px 8px;font-size:10px;background:var(--border)" onclick="clearLog()">Clear</button>
+    </div>
+    <div class="card-body" style="padding:8px">
+      <div id="event-log"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = '';   // relative — same origin as this page
+
+// ── State ─────────────────────────────────────────────────────────────────────
+const state = {
+  ws: null,
+  connected: false,
+  chainRunning: false,
+  chainStart: null,
+  activeTask: null,
+  agents: [],
+  gateStates: {},
+  metrics: { agents: 0, gates: 0, instincts: 0 },
+  reconnectDelay: 2000,
+  elapsedTimer: null,
+};
+
+const GATE_AGENTS = ['Reviewer','SecurityReviewer','Probe','FactChecker','ReleaseKeeper'];
+const GATE_LABELS = {
+  Reviewer: 'Quality', SecurityReviewer: 'Security',
+  Probe: 'Coverage', FactChecker: 'Grounding', ReleaseKeeper: 'Release',
+};
+
+// ── Gate grid setup ───────────────────────────────────────────────────────────
+function initGateGrid() {
+  const grid = document.getElementById('gate-grid');
+  grid.innerHTML = '';
+  for (const g of GATE_AGENTS) {
+    const el = document.createElement('div');
+    el.className = 'gate-item';
+    el.id = `gate-${g}`;
+    el.innerHTML = `<div class="gate-dot"></div>
+      <div><div class="gate-name">${g}</div>
+      <div class="gate-result" id="gate-result-${g}">—</div></div>`;
+    grid.appendChild(el);
+  }
+}
+initGateGrid();
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/ws`;
+  setWsStatus('connecting');
+
+  const ws = new WebSocket(url);
+  state.ws = ws;
+
+  ws.onopen = () => {
+    state.connected = true;
+    state.reconnectDelay = 2000;
+    setWsStatus('connected');
+    logEvent('connected', {}, '🟢 WebSocket connected');
+    refreshStatus();
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const ev = JSON.parse(e.data);
+      handleWsEvent(ev);
+    } catch { /* ignore malformed */ }
+  };
+
+  ws.onclose = () => {
+    state.connected = false;
+    setWsStatus('disconnected');
+    logEvent('disconnected', {}, `🔴 Disconnected — retry in ${state.reconnectDelay/1000}s`);
+    setTimeout(connectWS, state.reconnectDelay);
+    state.reconnectDelay = Math.min(state.reconnectDelay * 1.6, 30000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+function setWsStatus(status) {
+  const dot = document.getElementById('ws-dot');
+  const lbl = document.getElementById('ws-label');
+  dot.className = `ws-dot ${status}`;
+  lbl.textContent = status === 'connected' ? 'Connected' : status === 'connecting' ? 'Connecting…' : 'Disconnected';
+}
+
+// ── Event handling ────────────────────────────────────────────────────────────
+function handleWsEvent(ev) {
+  const d = ev.data || {};
+
+  switch (ev.type) {
+    case 'chain_start': {
+      state.chainRunning = true;
+      state.chainStart = Date.now();
+      state.activeTask = d.task;
+      state.agents = [];
+      state.gateStates = {};
+      state.metrics = { agents: 0, gates: 0, instincts: 0 };
+      resetGates();
+      clearTimeline();
+      setChainState('running', d.task);
+      startElapsed();
+      document.getElementById('run-btn').disabled = true;
+      document.getElementById('stop-btn').disabled = false;
+      if (d.plan) {
+        logEvent('chain_start', d, `🐙 Chain: ${d.plan.join(' → ')}`);
+      }
+      break;
+    }
+
+    case 'agent_start': {
+      state.metrics.agents++;
+      updateMetrics();
+      const step = addAgentStep(d.agent, d.role, 'running');
+      state.agents.push({ agent: d.agent, role: d.role, stepEl: step });
+      setGateActive(d.agent);
+      logEvent('agent_start', d, `▶ ${d.agent}  ${d.role || ''}`);
+      break;
+    }
+
+    case 'agent_done': {
+      const st = d.approved !== false ? 'pass' : 'fail';
+      updateAgentStep(d.agent, st, d.notes);
+      setGateResult(d.agent, d.approved !== false, null);
+      if (d.approved !== false) state.metrics.gates++;
+      updateMetrics();
+      const icon = d.approved !== false ? '✅' : '⛔';
+      logEvent('agent_done', d, `${icon} ${d.agent}: ${(d.notes || []).join('; ') || 'done'}`);
+      break;
+    }
+
+    case 'gate_fail': {
+      setGateResult(d.agent, false, d.reason);
+      logEvent('gate_fail', d, `⛔ Gate: ${d.agent} — ${d.reason}`);
+      break;
+    }
+
+    case 'chain_done': {
+      state.chainRunning = false;
+      stopElapsed();
+      const dur = d.duration_ms ? ` (${(d.duration_ms/1000).toFixed(1)}s)` : '';
+      setChainState(d.success ? 'done' : 'failed', d.success ? `✅ Complete${dur}` : `⛔ Failed${dur}`);
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('stop-btn').disabled = true;
+      logEvent('chain_done', d, d.success ? `✅ Chain complete${dur}` : `⛔ Chain failed`);
+      break;
+    }
+
+    case 'instinct_new': {
+      state.metrics.instincts++;
+      updateMetrics();
+      logEvent('instinct_new', d, `🧠 Instinct (${d.confidence?.toFixed(2)}): ${d.pattern}`);
+      break;
+    }
+
+    case 'compaction': {
+      logEvent('compaction', d, `🗜 Context compacted (${d.session_tool_calls} tool calls)`);
+      break;
+    }
+
+    case 'voice_summary': {
+      logEvent('chain_done', d, `🎙 Voice summary: ${d.summary}`);
+      break;
+    }
+  }
+}
+
+// ── Chain state UI ────────────────────────────────────────────────────────────
+function setChainState(state_, label) {
+  const dot = document.getElementById('chain-dot');
+  const lbl = document.getElementById('chain-state');
+  const task = document.getElementById('chain-task');
+  dot.className = `chain-indicator ${state_}`;
+  lbl.textContent = state_ === 'running' ? '⚡ Running' : state_ === 'done' ? '✅ Done' : state_ === 'failed' ? '⛔ Failed' : 'Idle';
+  if (label && state_ !== 'running') {
+    task.textContent = label;
+  } else if (state_ === 'idle') {
+    task.textContent = 'No active task';
+  }
+}
+
+function startElapsed() {
+  stopElapsed();
+  const el = document.getElementById('chain-elapsed');
+  const taskEl = document.getElementById('chain-task');
+  taskEl.textContent = state.activeTask || '';
+  state.elapsedTimer = setInterval(() => {
+    const s = ((Date.now() - state.chainStart) / 1000).toFixed(1);
+    el.textContent = `${s}s`;
+  }, 200);
+}
+
+function stopElapsed() {
+  if (state.elapsedTimer) { clearInterval(state.elapsedTimer); state.elapsedTimer = null; }
+  document.getElementById('chain-elapsed').textContent = '';
+}
+
+// ── Gate UI ───────────────────────────────────────────────────────────────────
+function resetGates() {
+  for (const g of GATE_AGENTS) {
+    const el = document.getElementById(`gate-${g}`);
+    if (el) { el.className = 'gate-item'; }
+    const res = document.getElementById(`gate-result-${g}`);
+    if (res) res.textContent = '—';
+  }
+}
+
+function setGateActive(agent) {
+  const el = document.getElementById(`gate-${agent}`);
+  if (el) el.className = 'gate-item active';
+}
+
+function setGateResult(agent, passed, reason) {
+  const el = document.getElementById(`gate-${agent}`);
+  if (!el) return;
+  el.className = `gate-item ${passed ? 'pass' : 'fail'}`;
+  const res = document.getElementById(`gate-result-${agent}`);
+  if (res) res.textContent = reason ? reason.slice(0, 50) : (passed ? 'passed' : 'failed');
+}
+
+// ── Agent timeline ────────────────────────────────────────────────────────────
+const AGENT_ICONS = {
+  Cortex:'🧠', Atlas:'🗺', Architect:'📐', Forge:'🔨', Reviewer:'👁',
+  SecurityReviewer:'🔒', Probe:'🧪', FactChecker:'📋', Scribe:'✍',
+  ReleaseKeeper:'🚀', Navigator:'🌐', MarketScout:'🔭', Toolsmith:'⚙', SandboxQA:'📦',
+};
+
+function clearTimeline() {
+  document.getElementById('agent-timeline').innerHTML = '';
+}
+
+function addAgentStep(agent, role, status) {
+  const ul = document.getElementById('agent-timeline');
+  const li = document.createElement('li');
+  li.className = `agent-step ${status}`;
+  li.id = `step-${agent}`;
+  const icon = AGENT_ICONS[agent] || '🤖';
+  li.innerHTML = `<span class="agent-icon">${icon}</span>
+    <div><div class="agent-name">${agent}</div>
+    <div class="agent-role">${role || ''}</div>
+    <div class="agent-note" id="step-note-${agent}"></div></div>`;
+  ul.appendChild(li);
+  return li;
+}
+
+function updateAgentStep(agent, status, notes) {
+  const el = document.getElementById(`step-${agent}`);
+  if (el) el.className = `agent-step ${status}`;
+  const note = document.getElementById(`step-note-${agent}`);
+  if (note && notes && notes.length) note.textContent = notes[0].slice(0, 80);
+}
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+function updateMetrics() {
+  document.getElementById('m-agents').textContent = state.metrics.agents;
+  document.getElementById('m-gates').textContent = state.metrics.gates;
+  document.getElementById('m-instincts').textContent = state.metrics.instincts;
+}
+
+// ── Event log ─────────────────────────────────────────────────────────────────
+function logEvent(type, _data, msg) {
+  const log = document.getElementById('event-log');
+  const now = new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const div = document.createElement('div');
+  div.className = `log-entry ${type}`;
+  div.innerHTML = `<span class="log-time">${now}</span>
+    <span class="log-type">${type}</span>
+    <span class="log-msg">${escHtml(msg)}</span>`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  // Keep at most 200 entries
+  while (log.children.length > 200) log.removeChild(log.firstChild);
+}
+
+function clearLog() { document.getElementById('event-log').innerHTML = ''; }
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── REST actions ──────────────────────────────────────────────────────────────
+async function sendTask() {
+  const input = document.getElementById('task-input');
+  const task = input.value.trim();
+  if (!task) return;
+  input.value = '';
+  try {
+    const res = await fetch(`${API}/api/tasks/run`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      logEvent('error', {}, `⚠ ${err.error || res.statusText}`);
+    }
+  } catch (e) {
+    logEvent('error', {}, `⚠ ${e.message}`);
+  }
+}
+
+async function stopChain() {
+  try {
+    await fetch(`${API}/api/tasks/interrupt`, { method: 'POST' });
+    logEvent('chain_done', {}, '🛑 Stop requested');
+  } catch (e) {
+    logEvent('error', {}, `⚠ ${e.message}`);
+  }
+}
+
+async function scanSecurity() {
+  const target = prompt('Scan target (file path or code snippet):');
+  if (!target) return;
+  logEvent('agent_start', {}, `🔒 Security scan: ${target}`);
+  try {
+    const res = await fetch(`${API}/api/security/scan`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target }),
+    });
+    const data = await res.json();
+    const f = data.findings || [];
+    logEvent('agent_done', {}, `🔒 Scan done — ${f.length} finding(s), ${data.critical || 0} critical`);
+    if (f.length) f.slice(0, 5).forEach(finding => {
+      logEvent('gate_fail', {}, `  • ${typeof finding === 'string' ? finding : (finding.issue || JSON.stringify(finding))}`);
+    });
+  } catch (e) {
+    logEvent('error', {}, `⚠ ${e.message}`);
+  }
+}
+
+// ── Status poll ───────────────────────────────────────────────────────────────
+async function refreshStatus() {
+  try {
+    const res = await fetch(`${API}/api/status`);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (data.llm) {
+      document.getElementById('provider-badge').textContent =
+        `${data.llm.provider} / ${data.llm.model}`;
+    }
+
+    const hb = document.getElementById('headless-badge');
+    hb.style.display = data.headless_mode ? 'inline-flex' : 'none';
+
+    if (!state.chainRunning) {
+      if (data.chain_running) {
+        setChainState('running', data.active_task);
+      } else {
+        setChainState('idle', '');
+      }
+    }
+  } catch { /* server may not be up yet */ }
+}
+
+// ── Keyboard shortcut ─────────────────────────────────────────────────────────
+document.getElementById('task-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendTask();
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+connectWS();
+setInterval(refreshStatus, 10000);   // poll every 10s as fallback
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "@agentdeck/octopus-bridge",
+  "version": "3.0.0",
+  "description": "Octopus Agent System bridge for AgentDeck — HTTP/WS client, adapter, deck layout, and APME feedback loop",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.8.3"
+  }
+}

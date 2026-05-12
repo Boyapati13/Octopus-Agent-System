@@ -1,0 +1,24 @@
+{
+  "name": "hello_world",
+  "display_name": "Hello World",
+  "description": "Example tool plugin — echoes a greeting. Use as a template for new plugins.",
+  "safety_tier": "read-only",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Name to greet"
+      }
+    },
+    "required": []
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "greeting": { "type": "string" }
+    }
+  },
+  "version": "1.0.0",
+  "author": "octopus-plugin"
+}

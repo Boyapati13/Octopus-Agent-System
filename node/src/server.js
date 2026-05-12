@@ -1,12 +1,21 @@
 'use strict';
+const http    = require('http');
+const path    = require('path');
+const { WebSocketServer } = require('ws');
 const express = require('express');
 const cors    = require('cors');
 const memory  = require('./memory');
-const { listAgents, runAgent } = require('./agents');
+const { listAgents, runAgent, getAgent } = require('./agents');
 const { runTask } = require('./runner');
 const { complete, activeProvider } = require('./llm');
 const { getTools, SUPPORTED_FORMATS } = require('./adapters');
 const skillRegistry = require('./skill_registry');
+const toolLoader = require('./tool_loader');
+
+// ── HEADLESS_MODE ────────────────────────────────────────────────────────────
+// When true: Cortex does not auto-plan; external LLMs call octopus_* tools directly.
+// Read at request time so tests and runtime toggling work without a restart.
+const isHeadlessMode = () => process.env.HEADLESS_MODE === 'true';
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -14,10 +23,59 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// ── WebSocket broadcast infrastructure ────────────────────────────────────────
+
+const httpServer = http.createServer(app);
+const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+
+const wsClients = new Set();
+
+wss.on('connection', (ws) => {
+  wsClients.add(ws);
+  ws.send(JSON.stringify({ type: 'connected' }));
+  ws.on('close', () => wsClients.delete(ws));
+  ws.on('error', () => wsClients.delete(ws));
+});
+
+/**
+ * Broadcast an Octopus event to all connected WebSocket clients.
+ * Matches the OctopusEvent discriminated union in octopus-client.ts.
+ */
+function broadcastEvent(type, data = {}) {
+  const msg = JSON.stringify({ type, data });
+  for (const ws of wsClients) {
+    try { ws.send(msg); } catch { wsClients.delete(ws); }
+  }
+}
+
+// ── Active chain state (one chain at a time for now) ─────────────────────────
+
+let activeChainTask  = null;   // task description of running chain
+let activeChainAbort = null;   // AbortController (future: stream abort)
+
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {
   const stats = await memory.getCacheStats();
-  res.json({ status: 'ok', port: PORT, cache: stats });
+  res.json({
+    status: 'ok',
+    port: PORT,
+    headless_mode: isHeadlessMode(),
+    chain_running: activeChainTask !== null,
+    active_task: activeChainTask,
+    cache: stats,
+  });
+});
+
+// ── Status (dashboard / TUI) ─────────────────────────────────────────────────
+app.get('/api/status', async (req, res) => {
+  const run = await memory.getRun() || {};
+  res.json({
+    chain_running: activeChainTask !== null,
+    active_task: activeChainTask,
+    headless_mode: isHeadlessMode(),
+    llm: activeProvider(),
+    run_state: run,
+  });
 });
 
 // ── Agents ───────────────────────────────────────────────────────────────────
@@ -33,6 +91,126 @@ app.post('/api/agent/:name/run', async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(404).json({ error: err.message });
+  }
+});
+
+// ── Task planning ─────────────────────────────────────────────────────────────
+// Returns the Cortex plan without executing the chain.
+app.post('/api/tasks/plan', async (req, res) => {
+  const { task } = req.body || {};
+  if (!task) return res.status(400).json({ error: 'task required' });
+
+  if (isHeadlessMode()) {
+    return res.status(403).json({
+      error: 'Planning disabled in HEADLESS_MODE — external LLM is the planner',
+    });
+  }
+
+  try {
+    const planResult = await runAgent('cortex', { task, query: task }, memory);
+    if (!planResult?.plan) {
+      return res.status(500).json({ error: 'Cortex produced no plan' });
+    }
+    res.json({
+      task,
+      agents: planResult.plan.map(s => s.agent),
+      pattern: planResult.pattern || 'default',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Task execution ────────────────────────────────────────────────────────────
+// Starts the full chain and streams events via WebSocket /ws.
+app.post('/api/tasks/run', async (req, res) => {
+  const { task } = req.body || {};
+  if (!task) return res.status(400).json({ error: 'task required' });
+
+  if (isHeadlessMode()) {
+    return res.status(403).json({ error: 'Chain execution disabled in HEADLESS_MODE — external LLM calls octopus_* tools directly' });
+  }
+
+  if (activeChainTask !== null) {
+    return res.status(409).json({ error: 'A chain is already running', active_task: activeChainTask });
+  }
+
+  activeChainTask = task;
+  res.json({ ok: true, task, message: 'Chain started — follow events on /ws' });
+
+  // Run asynchronously so the HTTP response returns immediately
+  setImmediate(async () => {
+    try {
+      await runTask(task, memory, broadcastEvent);
+    } catch (err) {
+      console.error(`[server] Chain error: ${err.message}`);
+    } finally {
+      activeChainTask = null;
+    }
+  });
+});
+
+// ── Task interrupt ────────────────────────────────────────────────────────────
+app.post('/api/tasks/interrupt', (req, res) => {
+  if (!activeChainTask) {
+    return res.status(409).json({ error: 'No chain is running' });
+  }
+  const interrupted = activeChainTask;
+  activeChainTask = null;
+  broadcastEvent('chain_done', { task: interrupted, success: false, interrupted: true, duration_ms: 0 });
+  res.json({ ok: true, interrupted });
+});
+
+// ── Voice-friendly task path ─────────────────────────────────────────────────
+// Accepts a voice prompt, plans and runs the chain, returns a short TTS-ready summary.
+app.post('/api/tasks/voice', async (req, res) => {
+  const { text } = req.body || {};
+  if (!text) return res.status(400).json({ error: 'text required' });
+
+  if (isHeadlessMode()) {
+    return res.status(403).json({ error: 'Not available in HEADLESS_MODE' });
+  }
+
+  if (activeChainTask !== null) {
+    return res.status(409).json({ error: 'A chain is already running' });
+  }
+
+  activeChainTask = text;
+  // Fire chain in background; return a short TTS summary immediately
+  const startMs = Date.now();
+
+  setImmediate(async () => {
+    try {
+      const result = await runTask(text, memory, broadcastEvent);
+      const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+      broadcastEvent('voice_summary', {
+        summary: `Task complete in ${elapsed} seconds. ${result.agents_spawned.length} agents ran.`,
+        success: true,
+      });
+    } catch (err) {
+      broadcastEvent('voice_summary', { summary: `Task failed: ${err.message}`, success: false });
+    } finally {
+      activeChainTask = null;
+    }
+  });
+
+  res.json({ ok: true, text, message: 'Voice task started — summary will follow on /ws' });
+});
+
+// ── Security scan ─────────────────────────────────────────────────────────────
+app.post('/api/security/scan', async (req, res) => {
+  const { target } = req.body || {};
+  if (!target) return res.status(400).json({ error: 'target required' });
+  try {
+    const result = await runAgent('securityreviewer', { task: `Security scan: ${target}`, query: target, target }, memory);
+    res.json({
+      findings: result.findings || [],
+      critical: (result.findings || []).filter(f => f.severity === 'critical' || f.severity === 'high').length,
+      approved: result.approved,
+      advice: result.advice,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -54,10 +232,11 @@ app.post('/api/plan-feature', async (req, res) => {
   res.json(result);
 });
 
+// Legacy route kept for backwards compatibility
 app.post('/api/task/run', async (req, res) => {
   const { task = 'default task' } = req.body;
   try {
-    const result = await runTask(task, memory);
+    const result = await runTask(task, memory, broadcastEvent);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -71,6 +250,14 @@ app.post('/api/release-check', async (req, res) => {
 });
 
 // ── Memory pass-through ───────────────────────────────────────────────────────
+
+// Primary search endpoint (used by OctopusClient.searchMemory)
+app.get('/api/memory/search', async (req, res) => {
+  const { q = '', limit = 10 } = req.query;
+  const results = await memory.searchStructural(q, Number(limit));
+  res.json({ results: (results || []).map(r => r.path || r.summary || String(r)) });
+});
+
 app.get('/api/memory/structural', async (req, res) => {
   const { q = '', limit = 10 } = req.query;
   const results = await memory.searchStructural(q, Number(limit));
@@ -207,9 +394,38 @@ app.post('/api/llm/complete', async (req, res) => {
   }
 });
 
+// ── Tool plugins ──────────────────────────────────────────────────────────────
+app.get('/api/plugins', (_req, res) => {
+  res.json(toolLoader.listTools());
+});
+
+app.post('/api/plugins/call/:name', async (req, res) => {
+  try {
+    const result = await toolLoader.callTool(req.params.name, req.body || {});
+    res.json({ ok: true, result });
+  } catch (err) {
+    const status = err.message.includes('Unknown tool') ? 404 : 400;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+// ── Web dashboard (power-user UI, no hardware needed) ────────────────────────
+const DASHBOARD_HTML = path.join(__dirname, 'dashboard', 'index.html');
+app.get('/dashboard', (_req, res) => res.sendFile(DASHBOARD_HTML));
+app.get('/', (_req, res) => res.redirect('/dashboard'));
+
+// ── 404 catch-all ─────────────────────────────────────────────────────────────
+app.use((req, res) => {
+  res.status(404).json({ error: `Not found: ${req.method} ${req.path}` });
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 if (require.main === module) {
-  app.listen(PORT, () => console.error(`Octopus API running on http://localhost:${PORT}`));
+  httpServer.listen(PORT, () => {
+    console.error(`Octopus API running on http://localhost:${PORT}`);
+    console.error(`WebSocket events:   ws://localhost:${PORT}/ws`);
+    console.error(`HEADLESS_MODE:      ${isHeadlessMode()}`);
+  });
 }
 
 module.exports = app;

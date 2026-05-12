@@ -71,6 +71,7 @@ export type OctopusEvent =
   | { type: 'tool_call'; data: { tool: string; args?: Record<string, unknown> } }
   | { type: 'compaction'; data: { session_tool_calls: number } }
   | { type: 'instinct_new'; data: OctopusInstinct }
+  | { type: 'voice_summary'; data: { summary: string; success: boolean } }
   | { type: 'connected' }
   | { type: 'disconnected' };
 
@@ -90,11 +91,16 @@ declare interface OctopusClient {
  * Lightweight HTTP client for Octopus REST API.
  * WebSocket event streaming is handled via native ws.
  */
+const RECONNECT_INITIAL_MS = 2000;
+const RECONNECT_MAX_MS     = 30000;
+const RECONNECT_MULTIPLIER = 1.6;
+
 class OctopusClient extends EventEmitter {
   private baseUrl: string;
   private memoryUrl: string;
   private ws: import('ws').WebSocket | null = null;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private reconnectDelay = RECONNECT_INITIAL_MS;
   private running = false;
 
   constructor(host = '127.0.0.1') {
@@ -107,6 +113,7 @@ class OctopusClient extends EventEmitter {
 
   connect(): void {
     this.running = true;
+    this.reconnectDelay = RECONNECT_INITIAL_MS;
     this._connectWs();
   }
 
@@ -158,6 +165,21 @@ class OctopusClient extends EventEmitter {
       return res.ok;
     } catch (err) {
       debug('octopus:client', `runTaskChain error: ${err}`);
+      return false;
+    }
+  }
+
+  /** Send a voice prompt to Octopus. Uses /api/tasks/voice for TTS-friendly output. */
+  async runVoiceTask(text: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/tasks/voice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      return res.ok;
+    } catch (err) {
+      debug('octopus:client', `runVoiceTask error: ${err}`);
       return false;
     }
   }
@@ -224,7 +246,7 @@ class OctopusClient extends EventEmitter {
     if (!this.running) return;
 
     const wsUrl = `ws://127.0.0.1:${OCTOPUS_HTTP_PORT}/ws`;
-    debug('octopus:client', `connecting WS → ${wsUrl}`);
+    debug('octopus:client', `connecting WS → ${wsUrl} (retry delay ${this.reconnectDelay}ms)`);
 
     // Dynamic import to avoid hard dependency on ws when octopus is not running
     import('ws').then(({ default: WS }) => {
@@ -233,6 +255,7 @@ class OctopusClient extends EventEmitter {
 
       ws.on('open', () => {
         debug('octopus:client', 'WS connected');
+        this.reconnectDelay = RECONNECT_INITIAL_MS;  // reset backoff on success
         this.emit('connected');
         this.emit('event', { type: 'connected' } as OctopusEvent);
       });
@@ -256,6 +279,7 @@ class OctopusClient extends EventEmitter {
       ws.on('error', (err: Error) => {
         debug('octopus:client', `WS error: ${err.message}`);
         this.emit('error', err);
+        // don't call _scheduleReconnect here — 'close' fires after 'error'
         ws.terminate();
       });
     }).catch((err) => {
@@ -266,10 +290,13 @@ class OctopusClient extends EventEmitter {
 
   private _scheduleReconnect(): void {
     if (!this.running || this.reconnectTimer) return;
+    const delay = this.reconnectDelay;
+    this.reconnectDelay = Math.min(delay * RECONNECT_MULTIPLIER, RECONNECT_MAX_MS);
+    debug('octopus:client', `scheduling reconnect in ${delay}ms`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this._connectWs();
-    }, 5000);
+    }, delay);
   }
 }
 

@@ -30,8 +30,8 @@ import type {
   PluginCommand,
 } from '../types.js';
 import { debug } from '../logger.js';
-import { OctopusClient } from './octopus-client.js';
-import type { OctopusEvent, OctopusPlan } from './octopus-client.js';
+import { OctopusClient } from '../octopus/octopus-client.js';
+import type { OctopusEvent, OctopusPlan } from '../octopus/octopus-client.js';
 
 // ── Capabilities ──────────────────────────────────────────────────────────────
 
@@ -39,9 +39,9 @@ export const OCTOPUS_CAPABILITIES: AgentCapabilities = {
   supportsInterrupt: true,
   supportsPermission: false,   // gates are server-side; no interactive approval
   supportsModeSwitch: false,
-  supportsVoiceInput: false,
+  supportsVoiceInput: true,    // voice prompts routed to /api/tasks/voice
   supportsMultipleOptions: false,
-  agentType: 'octopus' as import('@agentdeck/shared').AgentType,
+  agentType: 'octopus' as import('../types.js').AgentType,
 };
 
 // ── Adapter ───────────────────────────────────────────────────────────────────
@@ -66,10 +66,20 @@ export class OctopusAdapter extends EventEmitter implements AgentAdapter {
 
     const healthy = await this.client.isHealthy();
     if (!healthy) {
-      this._emit({ source: 'connection', event: 'disconnected', data: {} });
+      this._emit({
+        source: 'connection',
+        event: 'disconnected',
+        data: {
+          reason: 'Octopus is not running',
+          hint: 'Start with: cd octopus && ./start_mcp.sh  (Mac/Linux) or .\\start_mcp.ps1 (Windows)',
+        },
+      });
       throw new Error(
-        'Octopus Agent System is not running. ' +
-        'Start it with: cd octopus && ./start_mcp.sh'
+        'Octopus Agent System is not running on http://localhost:3001. ' +
+        'Start it with:\n' +
+        '  Mac/Linux: cd octopus && ./start_mcp.sh\n' +
+        '  Windows:   cd octopus && .\\start_mcp.ps1\n' +
+        'Then retry this session.'
       );
     }
 
@@ -92,7 +102,10 @@ export class OctopusAdapter extends EventEmitter implements AgentAdapter {
         break;
       case 'send_prompt':
         if ('text' in cmd && cmd.text) {
-          this._handleSendPrompt(cmd.text);
+          // 'voice' source routes to /api/tasks/voice for TTS-friendly response
+          const isVoice = 'source' in (cmd as Record<string, unknown>) &&
+            (cmd as Record<string, unknown>).source === 'voice';
+          this._handleSendPrompt(cmd.text, isVoice ? 'voice' : 'text');
         }
         break;
       default:
@@ -110,13 +123,38 @@ export class OctopusAdapter extends EventEmitter implements AgentAdapter {
     this._emit({ source: 'parser', event: 'idle', data: {} });
   }
 
-  private async _handleSendPrompt(text: string): Promise<void> {
+  private async _handleSendPrompt(text: string, source: 'text' | 'voice' = 'text'): Promise<void> {
     if (this.chainRunning) {
       debug('octopus:adapter', 'chain already running — ignoring prompt');
+      this._emit({
+        source: 'parser',
+        event: 'status_line',
+        data: { text: '⚠ Chain already running. Press STOP to interrupt.' },
+      });
       return;
     }
 
-    // Plan first, then run
+    if (source === 'voice') {
+      // Voice path: POST /api/tasks/voice returns immediately and emits
+      // voice_summary on WS — designed for TTS consumption.
+      debug('octopus:adapter', `voice prompt: ${text}`);
+      this._emit({
+        source: 'parser',
+        event: 'status_line',
+        data: { text: `🎙 Voice: ${text}` },
+      });
+      const ok = await this.client.runVoiceTask(text);
+      if (!ok) {
+        this._emit({
+          source: 'parser',
+          event: 'status_line',
+          data: { text: '⚠ Failed to start voice task' },
+        });
+      }
+      return;
+    }
+
+    // Text path: plan first (shows agent chain in UI), then run
     debug('octopus:adapter', `planning: ${text}`);
     const plan = await this.client.planTask(text);
     if (plan) {
@@ -267,6 +305,20 @@ export class OctopusAdapter extends EventEmitter implements AgentAdapter {
             data: { text: '⛔ Chain failed — see logs' },
           });
         }
+        break;
+      }
+
+      case 'voice_summary': {
+        // Surface the TTS-ready summary on all connected displays
+        this._emit({
+          source: 'metadata',
+          event: 'status_line',
+          data: {
+            text: `🎙 ${ev.data.summary}`,
+            tts: true,
+            success: ev.data.success,
+          },
+        });
         break;
       }
 

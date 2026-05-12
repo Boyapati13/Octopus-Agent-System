@@ -121,28 +121,77 @@ async function showBanner() {
 
 function printHelp(short = false) {
   if (short) {
-    console.log(chalk.dim('\n  /plan <task>  /run <task>  /agents  /models  /routes  /vault  /update  /help\n'));
+    console.log(chalk.dim('\n  /plan  /run  /agents  /models  /provider  /headless  /vault  /status  /dashboard  /update  /help\n'));
     return;
   }
   console.log('\n' + chalk.bold('  Commands:'));
   const cmds = [
-    ['/plan <task>',  'Plan a task (Cortex only, shows the agent chain)'],
-    ['/run  <task>',  'Run the full agent chain end-to-end'],
-    ['/agents',       'List all 14 agents and their roles'],
-    ['/models',       'Show installed Ollama models + task router config'],
-    ['/routes',       'Full task router — which model each agent uses'],
-    ['/vault',        'Check OS Vault key status (all providers)'],
-    ['/status',       'Health check all services'],
-    ['/update',       'Check GitHub for updates and apply'],
-    ['/update-models','Re-pull all Ollama models (checks for new versions)'],
-    ['/help',         'Show this help'],
-    ['/exit',         'Quit'],
+    ['/plan <task>',          'Plan a task (Cortex only, shows the agent chain)'],
+    ['/run  <task>',          'Run the full agent chain end-to-end'],
+    ['/agents',               'List all 14 agents and their roles'],
+    ['/models',               'Show installed Ollama models'],
+    ['/routes',               'Full task router — which model each agent uses'],
+    ['/provider',             'Show active LLM provider/model'],
+    ['/provider list',        'List all configured providers + key status'],
+    ['/provider set <p> [m]', 'Switch provider (and optionally model) in .env'],
+    ['/headless',             'Show current HEADLESS_MODE setting'],
+    ['/headless on',          'Enable headless mode (external LLM as planner)'],
+    ['/headless off',         'Disable headless mode (Cortex as planner)'],
+    ['/vault',                'Check OS Vault key status (all providers)'],
+    ['/status',               'Health check all services'],
+    ['/dashboard',            'Open the web dashboard in your browser'],
+    ['/update',               'Check GitHub for updates and apply'],
+    ['/update-models',        'Re-pull all Ollama models (checks for new versions)'],
+    ['/help',                 'Show this help'],
+    ['/exit',                 'Quit'],
   ];
   for (const [cmd, desc] of cmds) {
-    console.log(`    ${chalk.cyan(cmd.padEnd(20))} ${chalk.dim(desc)}`);
+    console.log(`    ${chalk.cyan(cmd.padEnd(28))} ${chalk.dim(desc)}`);
   }
   console.log();
 }
+
+// ── .env read/write helpers ────────────────────────────────────────────────────
+const ENV_PATH = path.join(__dirname, '..', '.env');
+
+function readEnvFile() {
+  try { return fs.readFileSync(ENV_PATH, 'utf8'); } catch { return ''; }
+}
+
+function setEnvVar(key, value) {
+  let content = readEnvFile();
+  const re = new RegExp(`^(${key}=).*$`, 'm');
+  if (re.test(content)) {
+    content = content.replace(re, `$1${value}`);
+  } else {
+    content = content.trimEnd() + `\n${key}=${value}\n`;
+  }
+  try {
+    fs.writeFileSync(ENV_PATH, content, 'utf8');
+    return true;
+  } catch (err) {
+    console.log(chalk.red(`  Could not write .env: ${err.message}\n`));
+    return false;
+  }
+}
+
+function getEnvVar(key) {
+  const match = readEnvFile().match(new RegExp(`^${key}=(.*)$`, 'm'));
+  return match ? match[1].trim() : (process.env[key] || '');
+}
+
+// ── Provider helpers ───────────────────────────────────────────────────────────
+const ALL_PROVIDERS = ['anthropic', 'openai', 'google', 'ollama', 'nvidia', 'huggingface', 'custom_http', 'router'];
+const PROVIDER_DOCS = {
+  anthropic:   'Claude (claude-sonnet-4-6)                ANTHROPIC_API_KEY',
+  openai:      'GPT-4o                                     OPENAI_API_KEY',
+  google:      'Gemini 2.0 Flash                           GOOGLE_API_KEY',
+  ollama:      'Ollama local (gemma4:e2b)                  no key needed',
+  nvidia:      'NVIDIA NIM (llama-3.1-405b)                NVIDIA_API_KEY  free at build.nvidia.com',
+  huggingface: 'HuggingFace Inference API (gemma-3-4b-it)  HF_TOKEN  free at huggingface.co',
+  custom_http: 'Custom OpenAI-compat server                CUSTOM_HTTP_URL + CUSTOM_HTTP_MODEL',
+  router:      'Smart per-agent router                     uses best provider per agent role',
+};
 
 // ── Prompt ─────────────────────────────────────────────────────────────────────
 let rl;
@@ -291,6 +340,106 @@ async function handleCommand(input) {
       }
       console.log();
       if (!active) console.log(chalk.dim('  Enable: set LLM_PROVIDER=router in node/.env\n'));
+      break;
+    }
+
+    case 'provider': {
+      const sub = arg.toLowerCase().split(' ')[0];
+      const extra = arg.split(' ').slice(1).join(' ').trim();
+
+      if (!sub || sub === 'show') {
+        // Show current active provider
+        const p = getEnvVar('LLM_PROVIDER') || 'anthropic';
+        const m = getEnvVar('LLM_MODEL') || chalk.dim('(provider default)');
+        const hm = getEnvVar('HEADLESS_MODE') === 'true';
+        console.log(chalk.bold('\n  Active LLM provider:'));
+        console.log(`    Provider   ${chalk.cyan(p)}`);
+        console.log(`    Model      ${chalk.cyan(m)}`);
+        console.log(`    Headless   ${hm ? chalk.orange('on') : chalk.dim('off')}`);
+        if (p === 'custom_http') {
+          console.log(`    URL        ${chalk.cyan(getEnvVar('CUSTOM_HTTP_URL') || chalk.red('NOT SET'))}`);
+        }
+        console.log(chalk.dim('\n  /provider list  to see all  |  /provider set <p> [model]  to switch\n'));
+        break;
+      }
+
+      if (sub === 'list') {
+        const { getSecureKey } = require('./llm');
+        const currentP = getEnvVar('LLM_PROVIDER') || 'anthropic';
+        console.log(chalk.bold('\n  Available LLM providers:\n'));
+        for (const p of ALL_PROVIDERS) {
+          const active = p === currentP ? chalk.green(' ← active') : '';
+          const doc = PROVIDER_DOCS[p] || '';
+          // Check key availability (async, suppress for non-keyed providers)
+          const needsKey = !['ollama', 'router'].includes(p);
+          console.log(`    ${chalk.cyan(p.padEnd(14))} ${chalk.dim(doc)}${active}`);
+        }
+        console.log(chalk.dim('\n  To switch: /provider set ollama gemma4:e2b\n'));
+        break;
+      }
+
+      if (sub === 'set') {
+        // arg = "set ollama gemma4:e2b"  or  "set anthropic"
+        const parts = arg.split(' ').slice(1);  // remove 'set'
+        const newProvider = parts[0]?.toLowerCase();
+        const newModel    = parts.slice(1).join(' ').trim();
+
+        if (!newProvider || !ALL_PROVIDERS.includes(newProvider)) {
+          console.log(chalk.yellow(`  Usage: /provider set <provider> [model]`));
+          console.log(chalk.dim(`  Providers: ${ALL_PROVIDERS.join(', ')}\n`));
+          break;
+        }
+
+        setEnvVar('LLM_PROVIDER', newProvider);
+        if (newModel) setEnvVar('LLM_MODEL', newModel);
+
+        console.log(chalk.green(`\n  ✅ Set LLM_PROVIDER=${newProvider}${newModel ? ` LLM_MODEL=${newModel}` : ''}`));
+        console.log(chalk.yellow('  ⚠  Changes take effect after restarting Octopus.\n'));
+        break;
+      }
+
+      console.log(chalk.yellow(`  Usage: /provider  |  /provider list  |  /provider set <p> [model]\n`));
+      break;
+    }
+
+    case 'headless': {
+      const current = getEnvVar('HEADLESS_MODE') === 'true';
+
+      if (!arg) {
+        console.log(chalk.bold('\n  HEADLESS_MODE:'));
+        console.log(`    Current:   ${current ? chalk.orange('on  (external LLM is planner)') : chalk.green('off (Cortex is planner)')}`);
+        console.log(chalk.dim('\n  /headless on   — external LLM (Claude, Cursor, Windsurf) calls octopus_* tools'));
+        console.log(chalk.dim('  /headless off  — Cortex auto-plans and runs chains\n'));
+        break;
+      }
+
+      if (arg === 'on' || arg === 'true') {
+        setEnvVar('HEADLESS_MODE', 'true');
+        console.log(chalk.orange('\n  ⚡ HEADLESS_MODE enabled.'));
+        console.log(chalk.dim('  Cortex will not auto-plan. External LLM calls octopus_* MCP tools directly.'));
+        console.log(chalk.yellow('  Restart Octopus for this to take effect.\n'));
+      } else if (arg === 'off' || arg === 'false') {
+        setEnvVar('HEADLESS_MODE', 'false');
+        console.log(chalk.green('\n  ✅ HEADLESS_MODE disabled.'));
+        console.log(chalk.dim('  Cortex is the planner. Chains run automatically from /run <task>.'));
+        console.log(chalk.yellow('  Restart Octopus for this to take effect.\n'));
+      } else {
+        console.log(chalk.yellow('  Usage: /headless  |  /headless on  |  /headless off\n'));
+      }
+      break;
+    }
+
+    case 'dashboard': {
+      const portVal = process.env.PORT || 3001;
+      const url = `http://localhost:${portVal}/dashboard`;
+      console.log(chalk.bold(`\n  🐙 OctoDeck Dashboard`));
+      console.log(`    ${chalk.cyan(url)}`);
+      console.log(chalk.dim('\n  Open the URL above in your browser.'));
+      console.log(chalk.dim('  The server must be running (node src/server.js).\n'));
+      // Try to open in default browser
+      const { exec: execBrowser } = require('child_process');
+      const openCmd = process.platform === 'win32' ? `start ${url}` : process.platform === 'darwin' ? `open ${url}` : `xdg-open ${url}`;
+      execBrowser(openCmd, { timeout: 3000 }, () => {});
       break;
     }
 

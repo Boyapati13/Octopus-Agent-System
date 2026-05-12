@@ -11,7 +11,7 @@ function Octoinfo { param($m) Write-Host "  [INFO] $m" -ForegroundColor Cyan }
 function Octofail { param($m) Write-Host "  [FAIL] $m" -ForegroundColor Red }
 
 Write-Host ""
-Write-Host "  Octopus 2.0 - Sovereign Edition" -ForegroundColor Magenta
+Write-Host "  Octopus 3.0 — OctoDeck Edition (MCP stdio mode)" -ForegroundColor Magenta
 Write-Host ""
 
 # ── Self-Healing Check 1: Python ──────────────────────────────────────────────
@@ -158,7 +158,8 @@ try {
 
 # ── Node MCP Server ────────────────────────────────────────────────────────────
 Write-Host ""
-Octolog "All checks complete — starting MCP server (23 tools)..."
+Octolog "All checks complete — starting MCP server (26 tools)..."
+Octoinfo "For the web dashboard + REST API, use: .\start_server.ps1"
 Write-Host ""
 
 try {

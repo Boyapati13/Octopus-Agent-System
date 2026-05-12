@@ -1,0 +1,36 @@
+# JAX/Gemma HTTP backend dependencies
+# Install: pip install -r requirements.txt
+
+# ── Server ─────────────────────────────────────────────────────────────────────
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.9.0
+
+# ── JAX (choose ONE section) ───────────────────────────────────────────────────
+
+# Option A: CPU only (any machine)
+jax[cpu]>=0.4.30
+flax>=0.10.0
+
+# Option B: GPU (CUDA 12, NVIDIA)
+# Comment out jax[cpu] above, then:
+# jax[cuda12]>=0.4.30
+# flax>=0.10.0
+
+# Option C: TPU (Google Cloud)
+# Comment out jax[cpu] above, then:
+# jax[tpu]>=0.4.30 -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+# flax>=0.10.0
+
+# PyTorch fallback (used when Flax is unavailable or for GGUF models)
+# torch>=2.3.0
+
+# ── HuggingFace ────────────────────────────────────────────────────────────────
+transformers>=4.47.0
+huggingface_hub>=0.26.0
+accelerate>=1.0.0           # needed for device_map="auto" (PyTorch path)
+sentencepiece>=0.2.0        # Gemma tokenizer
+orbax-checkpoint>=0.9.0     # JAX checkpoint loading
+
+# ── Optional: quantization (4-bit, reduces VRAM by ~4x) ───────────────────────
+# bitsandbytes>=0.44.0      # Requires PyTorch + CUDA

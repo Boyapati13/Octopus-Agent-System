@@ -351,6 +351,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      // ── Tool plugins ────────────────────────────────────────────────────────
+      case 'octopus_plugin_list': {
+        const toolLoader = require('./tool_loader');
+        const plugins = toolLoader.listTools();
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({ plugins, count: plugins.length }, null, 2),
+          }],
+        };
+      }
+
+      case 'octopus_plugin_call': {
+        const toolLoader = require('./tool_loader');
+        const pluginName = args.name;
+        if (!pluginName) throw new OctopusError(KINDS.SYSTEM_ERROR, 'name required');
+        try {
+          const pluginResult = await toolLoader.callTool(pluginName, args.input || {});
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ ok: true, result: pluginResult }, null, 2) }],
+          };
+        } catch (pluginErr) {
+          throw new OctopusError(KINDS.SYSTEM_ERROR, pluginErr.message);
+        }
+      }
+
       case 'octopus_memory_status': {
         const serviceUrl = process.env.MEMORY_SERVICE_URL || 'http://localhost:5000';
         try {

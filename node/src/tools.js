@@ -276,6 +276,26 @@ const TOOLS = [
       properties: {},
     },
   },
+  {
+    name: 'octopus_plugin_list',
+    description: 'List all loaded Octopus tool plugins from the tools/ directory. Returns plugin names, descriptions, and safety tiers.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'octopus_plugin_call',
+    description: 'Call a named Octopus tool plugin by name. Plugins are loaded from tools/<name>/index.js with a manifest at tools/<name>/tool.json.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name:  { type: 'string', description: 'Plugin name (from octopus_plugin_list)' },
+        input: { type: 'object', description: 'Input arguments for the plugin (see plugin manifest for schema)' },
+      },
+      required: ['name'],
+    },
+  },
 ];
 
 module.exports = { TOOLS };
