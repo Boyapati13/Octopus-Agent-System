@@ -53,6 +53,181 @@ function broadcastEvent(type, data = {}) {
 let activeChainTask  = null;   // task description of running chain
 let activeChainAbort = null;   // AbortController (future: stream abort)
 
+// ── Project / session workspace state ────────────────────────────────────────
+
+const DEFAULT_PROJECT_TITLE = 'Octo Workspace';
+const projectStore = new Map();
+let projectSequence = 1;
+let activeProjectId = null;
+
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function makeId(prefix) {
+  return `${prefix}-${Date.now()}-${projectSequence++}`;
+}
+
+function cloneProject(project) {
+  return JSON.parse(JSON.stringify(project));
+}
+
+function createProject(title = DEFAULT_PROJECT_TITLE) {
+  const id = makeId('project');
+  const project = {
+    id,
+    title: title.trim() || DEFAULT_PROJECT_TITLE,
+    created_at: isoNow(),
+    last_active: isoNow(),
+    messages: [],
+    answer: '',
+    answer_status: 'idle',
+    status: 'idle',
+    browser_context: {
+      url: '',
+      title: '',
+      last_action: 'Waiting for browser context',
+      status: 'idle',
+      recent_tabs: [],
+    },
+    artifacts: [],
+    activity_feed: [],
+    approvals: [],
+    pinned_tools: ['Browser', 'Terminal', 'Memory', 'Voice'],
+    active_mode: 'operator',
+  };
+  projectStore.set(id, project);
+  if (!activeProjectId) activeProjectId = id;
+  return project;
+}
+
+function getProject(projectId) {
+  if (projectId && projectStore.has(projectId)) return projectStore.get(projectId);
+  if (activeProjectId && projectStore.has(activeProjectId)) return projectStore.get(activeProjectId);
+  if (!projectStore.size) return createProject();
+  return projectStore.values().next().value;
+}
+
+function serializeProject(project) {
+  return cloneProject(project);
+}
+
+function listProjects() {
+  return [...projectStore.values()]
+    .sort((a, b) => new Date(b.last_active).getTime() - new Date(a.last_active).getTime())
+    .map(serializeProject);
+}
+
+function touchProject(project, patch = {}) {
+  Object.assign(project, patch);
+  project.last_active = isoNow();
+  return project;
+}
+
+function appendProjectMessage(projectId, role, text, meta = {}) {
+  const project = getProject(projectId);
+  const message = {
+    id: makeId('message'),
+    role,
+    text,
+    meta,
+    created_at: isoNow(),
+  };
+  project.messages.push(message);
+  touchProject(project);
+  return message;
+}
+
+function appendProjectActivity(projectId, type, payload = {}) {
+  const project = getProject(projectId);
+  const activity = {
+    id: makeId('activity'),
+    type,
+    payload,
+    created_at: isoNow(),
+  };
+  project.activity_feed.unshift(activity);
+  project.activity_feed = project.activity_feed.slice(0, 200);
+  touchProject(project);
+  return activity;
+}
+
+function setProjectAnswer(projectId, text, status = 'idle') {
+  const project = getProject(projectId);
+  touchProject(project, { answer: text, answer_status: status });
+  return project.answer;
+}
+
+function updateProjectBrowserContext(projectId, patch = {}) {
+  const project = getProject(projectId);
+  const nextContext = {
+    ...project.browser_context,
+    ...patch,
+  };
+  if (Array.isArray(nextContext.recent_tabs)) {
+    nextContext.recent_tabs = nextContext.recent_tabs.slice(0, 8);
+  }
+  touchProject(project, { browser_context: nextContext });
+  return project.browser_context;
+}
+
+function recordProjectEvent(projectId, type, payload = {}) {
+  const project = getProject(projectId);
+  const eventData = { ...payload, project_id: project.id };
+
+  switch (type) {
+    case 'chain_start':
+      touchProject(project, { status: 'running' });
+      appendProjectActivity(project.id, 'chain_start', eventData);
+      break;
+    case 'agent_start':
+      appendProjectActivity(project.id, 'agent_start', eventData);
+      break;
+    case 'agent_done':
+      appendProjectActivity(project.id, 'agent_done', eventData);
+      break;
+    case 'gate_fail':
+      appendProjectActivity(project.id, 'gate_fail', eventData);
+      project.approvals.unshift({
+        id: makeId('approval'),
+        type: 'gate_fail',
+        agent: payload.agent || 'gate',
+        reason: payload.reason || 'Blocked',
+        status: 'blocked',
+        created_at: isoNow(),
+      });
+      project.approvals = project.approvals.slice(0, 50);
+      break;
+    case 'compaction':
+      appendProjectActivity(project.id, 'compaction', eventData);
+      break;
+    case 'instinct_new':
+      appendProjectActivity(project.id, 'instinct_new', eventData);
+      break;
+    case 'voice_summary':
+      appendProjectActivity(project.id, 'voice_summary', eventData);
+      setProjectAnswer(project.id, payload.summary || '', payload.success ? 'done' : 'failed');
+      break;
+    case 'chain_done':
+      touchProject(project, { status: payload.success === false ? 'failed' : 'done' });
+      appendProjectActivity(project.id, 'chain_done', eventData);
+      break;
+    default:
+      appendProjectActivity(project.id, type, eventData);
+      break;
+  }
+
+  broadcastEvent('project_updated', {
+    project_id: project.id,
+    type,
+    project: serializeProject(project),
+  });
+
+  return project;
+}
+
+createProject();
+
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {
   const stats = await memory.getCacheStats();
@@ -62,6 +237,7 @@ app.get('/api/health', async (req, res) => {
     headless_mode: isHeadlessMode(),
     chain_running: activeChainTask !== null,
     active_task: activeChainTask,
+    active_project_id: activeProjectId,
     cache: stats,
   });
 });
@@ -75,7 +251,75 @@ app.get('/api/status', async (req, res) => {
     headless_mode: isHeadlessMode(),
     llm: activeProvider(),
     run_state: run,
+    active_project_id: activeProjectId,
+    projects: listProjects(),
   });
+});
+
+// ── Project / session workspace ──────────────────────────────────────────────
+app.get('/api/projects', (_req, res) => {
+  res.json({
+    active_project_id: activeProjectId,
+    projects: listProjects(),
+  });
+});
+
+app.post('/api/projects', (req, res) => {
+  const { title } = req.body || {};
+  const project = createProject(title);
+  activeProjectId = project.id;
+  res.json({ ok: true, project: serializeProject(project) });
+});
+
+app.get('/api/projects/:id', (req, res) => {
+  const project = projectStore.get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  res.json({ project: serializeProject(project) });
+});
+
+app.patch('/api/projects/:id', (req, res) => {
+  const project = projectStore.get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const { title, status, answer_status, pinned_tools, active_mode } = req.body || {};
+  touchProject(project, {
+    ...(title ? { title: String(title).trim() || project.title } : {}),
+    ...(status ? { status } : {}),
+    ...(answer_status ? { answer_status } : {}),
+    ...(Array.isArray(pinned_tools) ? { pinned_tools } : {}),
+    ...(active_mode ? { active_mode } : {}),
+  });
+  res.json({ ok: true, project: serializeProject(project) });
+});
+
+app.post('/api/projects/:id/messages', (req, res) => {
+  const project = projectStore.get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const { role = 'user', text = '', meta = {} } = req.body || {};
+  const message = appendProjectMessage(project.id, role, text, meta);
+  res.json({ ok: true, message });
+});
+
+app.post('/api/projects/:id/activity', (req, res) => {
+  const project = projectStore.get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const { type = 'note', payload = {} } = req.body || {};
+  const activity = appendProjectActivity(project.id, type, payload);
+  res.json({ ok: true, activity });
+});
+
+app.post('/api/projects/:id/answer', (req, res) => {
+  const project = projectStore.get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const { text = '', status = 'idle' } = req.body || {};
+  setProjectAnswer(project.id, text, status);
+  res.json({ ok: true, answer: project.answer, answer_status: project.answer_status });
+});
+
+app.patch('/api/projects/:id/browser-context', (req, res) => {
+  const project = projectStore.get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const context = updateProjectBrowserContext(project.id, req.body || {});
+  res.json({ ok: true, browser_context: context });
 });
 
 // ── Agents ───────────────────────────────────────────────────────────────────
@@ -124,7 +368,7 @@ app.post('/api/tasks/plan', async (req, res) => {
 // ── Task execution ────────────────────────────────────────────────────────────
 // Starts the full chain and streams events via WebSocket /ws.
 app.post('/api/tasks/run', async (req, res) => {
-  const { task } = req.body || {};
+  const { task, project_id } = req.body || {};
   if (!task) return res.status(400).json({ error: 'task required' });
 
   if (isHeadlessMode()) {
@@ -135,15 +379,26 @@ app.post('/api/tasks/run', async (req, res) => {
     return res.status(409).json({ error: 'A chain is already running', active_task: activeChainTask });
   }
 
+  const project = getProject(project_id);
+  activeProjectId = project.id;
   activeChainTask = task;
-  res.json({ ok: true, task, message: 'Chain started — follow events on /ws' });
+  appendProjectActivity(project.id, 'task_started', { task });
+  setProjectAnswer(project.id, 'Working…', 'running');
+  res.json({ ok: true, task, project_id: project.id, message: 'Chain started — follow events on /ws' });
 
   // Run asynchronously so the HTTP response returns immediately
   setImmediate(async () => {
     try {
-      await runTask(task, memory, broadcastEvent);
+      const emit = (type, data = {}) => {
+        recordProjectEvent(project.id, type, data);
+        broadcastEvent(type, { ...data, project_id: project.id });
+      };
+      const result = await runTask(task, memory, emit);
+      const agentCount = Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0;
+      setProjectAnswer(project.id, `Completed ${task}. ${agentCount} agents ran.`, 'done');
     } catch (err) {
       console.error(`[server] Chain error: ${err.message}`);
+      setProjectAnswer(project.id, `Task failed: ${err.message}`, 'failed');
     } finally {
       activeChainTask = null;
     }
@@ -157,14 +412,17 @@ app.post('/api/tasks/interrupt', (req, res) => {
   }
   const interrupted = activeChainTask;
   activeChainTask = null;
-  broadcastEvent('chain_done', { task: interrupted, success: false, interrupted: true, duration_ms: 0 });
+  const project = getProject(activeProjectId);
+  recordProjectEvent(project.id, 'chain_done', { task: interrupted, success: false, interrupted: true, duration_ms: 0, project_id: project.id });
+  broadcastEvent('chain_done', { task: interrupted, success: false, interrupted: true, duration_ms: 0, project_id: project.id });
+  setProjectAnswer(project.id, 'Task interrupted.', 'failed');
   res.json({ ok: true, interrupted });
 });
 
 // ── Voice-friendly task path ─────────────────────────────────────────────────
 // Accepts a voice prompt, plans and runs the chain, returns a short TTS-ready summary.
 app.post('/api/tasks/voice', async (req, res) => {
-  const { text } = req.body || {};
+  const { text, project_id } = req.body || {};
   if (!text) return res.status(400).json({ error: 'text required' });
 
   if (isHeadlessMode()) {
@@ -175,26 +433,37 @@ app.post('/api/tasks/voice', async (req, res) => {
     return res.status(409).json({ error: 'A chain is already running' });
   }
 
+  const project = getProject(project_id);
+  activeProjectId = project.id;
   activeChainTask = text;
+  appendProjectActivity(project.id, 'voice_task_started', { text });
+  setProjectAnswer(project.id, 'Listening and working…', 'running');
   // Fire chain in background; return a short TTS summary immediately
   const startMs = Date.now();
 
   setImmediate(async () => {
     try {
-      const result = await runTask(text, memory, broadcastEvent);
+      const emit = (type, data = {}) => {
+        recordProjectEvent(project.id, type, data);
+        broadcastEvent(type, { ...data, project_id: project.id });
+      };
+      const result = await runTask(text, memory, emit);
       const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+      setProjectAnswer(project.id, `Completed in ${elapsed} seconds. ${Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0} agents ran.`, 'done');
       broadcastEvent('voice_summary', {
         summary: `Task complete in ${elapsed} seconds. ${result.agents_spawned.length} agents ran.`,
         success: true,
+        project_id: project.id,
       });
     } catch (err) {
-      broadcastEvent('voice_summary', { summary: `Task failed: ${err.message}`, success: false });
+      setProjectAnswer(project.id, `Task failed: ${err.message}`, 'failed');
+      broadcastEvent('voice_summary', { summary: `Task failed: ${err.message}`, success: false, project_id: project.id });
     } finally {
       activeChainTask = null;
     }
   });
 
-  res.json({ ok: true, text, message: 'Voice task started — summary will follow on /ws' });
+  res.json({ ok: true, text, project_id: project.id, message: 'Voice task started — summary will follow on /ws' });
 });
 
 // ── Security scan ─────────────────────────────────────────────────────────────
