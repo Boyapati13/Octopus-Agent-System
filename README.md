@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/agents-14%20specialist-blue.svg">
   <img src="https://img.shields.io/badge/MCP%20tools-23-orange.svg">
   <img src="https://img.shields.io/badge/AgentShield-102%20rules-red.svg">
-  <img src="https://img.shields.io/badge/tests-746%20passing-brightgreen.svg">
+  <img src="https://img.shields.io/badge/tests-113%20passing-brightgreen.svg">
   <img src="https://img.shields.io/badge/surfaces-13%20displays-purple.svg">
 </p>
 
@@ -451,28 +451,47 @@ All 13 surfaces update simultaneously from a single WebSocket event stream:
 
 ## Testing
 
+### Currently runnable (113 tests, all green)
+
 ```bash
-# Octopus (Node.js — Jest)
+# Node.js — Jest  (72 tests)
 cd node && npm test
-# → 72 tests: agents, MCP tools, memory bridge, marketplace, commands, vault
-
-# Octopus (Python — pytest)
-cd python && python -m pytest tests/
-# → 41 tests: graph store, indexer, memory service, schema
-
-# AgentDeck bridge (Vitest)
-pnpm test
-# → 646 tests: bridge, plugin, shared, hooks
-
-# Android (JUnit + Robolectric)
-pnpm test:android
-# → 82 tests
-
-# Apple (XCTest)
-# Run via Xcode scheme: AgentDeckTests
+```
+```
+Test Suites: 6 passed, 6 total   |   Tests: 72 passed
+  agents.test.js              32   14 agents: contract + run() · SecurityReviewer · ReleaseKeeper
+  agents_marketplace.test.js  16   Navigator · MarketScout · Toolsmith · SandboxQA
+  commands.test.js             6   REST API: health · agents · onboard · plan · run · 404
+  mcp.test.js                  6   MCP server: 23 tools · SAFE_MODE guards · concurrent calls
+  memory.test.js               3   5-layer structural memory bridge
+  vault_fallback.test.js       9   Zero-Key 4-tier cascade · Ollama routing · Sovereign Fallback
 ```
 
-**Total: 841+ tests across 5 frameworks.**
+```bash
+# Python — pytest  (41 tests)
+py -m pytest python/tests/ -q          # Windows
+python3 -m pytest python/tests/ -q    # Mac/Linux
+```
+```
+41 passed in ~22s
+  test_graph_store.py     11   node upsert · edge queries · relevance scoring · boundary impact
+  test_indexer.py         13   symbol extraction · skip rules · incremental indexer
+  test_memory_service.py   9   health · search · decisions · compact · context assembly
+  test_schema.py           8   decision CRUD · run state · upsert semantics
+```
+
+> **Expected console output during Node tests (not failures):**
+> `[cortex] LLM planning failed — using keyword fallback` — no real LLM in tests; fallback is by design.
+> `AgentShield scan skipped — hook guard active` — deduplication guard fires correctly.
+
+### Coming with full OctoDeck setup
+
+```bash
+pnpm test          # AgentDeck bridge — Vitest (bridge / plugin / shared / hooks)
+pnpm test:android  # Android — JUnit + Robolectric
+# Xcode → AgentDeckTests scheme for Apple (iOS/iPadOS/macOS)
+```
+These require the full AgentDeck monorepo packages (`shared`, `plugin`, `hooks`, `setup`) which are not yet included in this repo.
 
 ---
 
@@ -495,7 +514,8 @@ cd octopus && npm run mcp
 cd octopus && npm run serve
 
 # Start Python memory service (:5000)
-python octopus/python/services/memory_service.py
+py octopus/python/services/memory_service.py     # Windows
+# python3 octopus/python/services/memory_service.py  # Mac/Linux
 
 # Start AgentDeck bridge in Octopus mode
 agentdeck octopus
