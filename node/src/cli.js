@@ -121,11 +121,12 @@ async function showBanner() {
 
 function printHelp(short = false) {
   if (short) {
-    console.log(chalk.dim('\n  /plan  /run  /agents  /models  /provider  /headless  /vault  /status  /dashboard  /update  /help\n'));
+    console.log(chalk.dim('\n  /setup  /plan  /run  /agents  /provider  /headless  /dashboard  /vault  /status  /update  /help\n'));
     return;
   }
   console.log('\n' + chalk.bold('  Commands:'));
   const cmds = [
+    ['/setup',                'Interactive wizard — pick a model, paste API key, test connection'],
     ['/plan <task>',          'Plan a task (Cortex only, shows the agent chain)'],
     ['/run  <task>',          'Run the full agent chain end-to-end'],
     ['/agents',               'List all 14 agents and their roles'],
@@ -149,6 +150,190 @@ function printHelp(short = false) {
     console.log(`    ${chalk.cyan(cmd.padEnd(28))} ${chalk.dim(desc)}`);
   }
   console.log();
+}
+
+// ── Interactive setup wizard ──────────────────────────────────────────────────
+
+const PROVIDER_MENU = [
+  { value: 'ollama',      label: 'Ollama (local)',       model: 'gemma4:e2b',                            key: null,              note: 'No API key needed — runs on your machine' },
+  { value: 'anthropic',   label: 'Anthropic Claude',     model: 'claude-sonnet-4-6',                     key: 'ANTHROPIC_API_KEY', note: 'Get key: console.anthropic.com/settings/keys' },
+  { value: 'openai',      label: 'OpenAI GPT-4o',        model: 'gpt-4o',                                key: 'OPENAI_API_KEY',    note: 'Get key: platform.openai.com/api-keys' },
+  { value: 'google',      label: 'Google Gemini',        model: 'gemini-2.0-flash',                      key: 'GOOGLE_API_KEY',    note: 'Get key: aistudio.google.com/app/apikey' },
+  { value: 'nvidia',      label: 'NVIDIA NIM (free)',    model: 'meta/llama-3.1-405b-instruct',          key: 'NVIDIA_API_KEY',    note: 'Free key: build.nvidia.com/settings/api-key' },
+  { value: 'nvidia',      label: 'NVIDIA Nemotron (reasoning)', model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', key: 'NVIDIA_API_KEY', note: 'Free key: build.nvidia.com/settings/api-key' },
+  { value: 'huggingface', label: 'HuggingFace Gemma',   model: 'google/gemma-3-4b-it',                  key: 'HF_TOKEN',          note: 'Free token: huggingface.co/settings/tokens' },
+  { value: 'custom_http', label: 'Custom HTTP server',  model: '',                                       key: null,              note: 'Any OpenAI-compatible server (vLLM, LM Studio, llamafile)' },
+];
+
+async function runSetupWizard() {
+  const { Select, Password, Input } = require('enquirer');
+  console.log(chalk.bold('\n  🐙 Octopus Setup Wizard\n'));
+
+  // Show all available providers
+  console.log(chalk.bold('  Available LLM providers:\n'));
+  PROVIDER_MENU.forEach((p, i) => {
+    const idx  = chalk.dim(`  ${String(i + 1).padStart(2)}.`);
+    const name = chalk.cyan(p.label.padEnd(34));
+    const note = chalk.dim(p.note);
+    console.log(`${idx} ${name} ${note}`);
+  });
+  console.log();
+
+  // Pick a provider
+  let choice;
+  try {
+    const select = new Select({
+      name: 'provider',
+      message: 'Select LLM provider:',
+      choices: PROVIDER_MENU.map((p, i) => `${i + 1}. ${p.label}`),
+    });
+    const answer = await select.run();
+    const idx = parseInt(answer.split('.')[0]) - 1;
+    choice = PROVIDER_MENU[idx];
+  } catch {
+    console.log(chalk.yellow('\n  Setup cancelled.\n'));
+    return;
+  }
+
+  console.log(chalk.dim(`\n  Selected: ${choice.label} (${choice.value}/${choice.model || 'custom'})\n`));
+
+  // Ollama — check it's running and list models
+  if (choice.value === 'ollama') {
+    const oll = await checkOllama();
+    if (!oll.ok) {
+      console.log(chalk.yellow('  Ollama is not running. Start it with: ollama serve'));
+      console.log(chalk.dim('  Download: https://ollama.ai\n'));
+      return;
+    }
+    let selectedModel = choice.model;
+    if (oll.models.length > 0) {
+      try {
+        const modelSelect = new Select({
+          name: 'model',
+          message: 'Select Ollama model:',
+          choices: oll.models.concat(['(type a different model name)']),
+        });
+        const picked = await modelSelect.run();
+        selectedModel = picked.startsWith('(') ? choice.model : picked;
+      } catch { /* use default */ }
+    }
+    setEnvVar('LLM_PROVIDER', 'ollama');
+    setEnvVar('LLM_MODEL', selectedModel);
+    console.log(chalk.green(`\n  ✅ Configured: ollama / ${selectedModel}`));
+    console.log(chalk.dim('  Restart Octopus to apply.\n'));
+    return;
+  }
+
+  // Custom HTTP
+  if (choice.value === 'custom_http') {
+    let url = '', model = '';
+    try {
+      const urlInput = new Input({ name: 'url', message: 'Server URL (e.g. http://localhost:8080):' });
+      url = await urlInput.run();
+      const modelInput = new Input({ name: 'model', message: 'Model name:' });
+      model = await modelInput.run();
+    } catch {
+      console.log(chalk.yellow('\n  Setup cancelled.\n'));
+      return;
+    }
+    setEnvVar('LLM_PROVIDER', 'custom_http');
+    setEnvVar('CUSTOM_HTTP_URL', url.trim());
+    setEnvVar('CUSTOM_HTTP_MODEL', model.trim());
+    console.log(chalk.green(`\n  ✅ Configured: custom_http → ${url.trim()} / ${model.trim()}`));
+    console.log(chalk.dim('  Restart Octopus to apply.\n'));
+    return;
+  }
+
+  // Cloud provider — need API key
+  console.log(chalk.cyan(`  ${choice.note}`));
+  console.log();
+
+  let apiKey = '';
+  try {
+    const pw = new Password({ name: 'key', message: `Paste your ${choice.key} (input hidden):` });
+    apiKey = await pw.run();
+  } catch {
+    console.log(chalk.yellow('\n  Setup cancelled.\n'));
+    return;
+  }
+
+  if (!apiKey || apiKey.trim().length < 8) {
+    console.log(chalk.red('\n  Key too short — not saved.\n'));
+    return;
+  }
+
+  // Store in OS Vault via vault_set.js
+  const vaultSet = path.join(__dirname, 'vault_set.js');
+  const storeInVault = require('fs').existsSync(vaultSet);
+
+  if (storeInVault) {
+    try {
+      const { spawnSync } = require('child_process');
+      const res = spawnSync('node', [vaultSet, choice.value], {
+        input: apiKey.trim(), encoding: 'utf8', stdio: ['pipe','pipe','pipe'],
+      });
+      if (res.status === 0) {
+        console.log(chalk.green(`\n  ✅ Key stored in OS Vault (not in .env)`));
+      } else {
+        throw new Error(res.stderr || 'vault_set failed');
+      }
+    } catch (err) {
+      console.log(chalk.yellow(`\n  Vault store failed (${err.message}) — writing to .env instead`));
+      setEnvVar(choice.key, apiKey.trim());
+    }
+  } else {
+    setEnvVar(choice.key, apiKey.trim());
+    console.log(chalk.yellow(`\n  ⚠  Key written to .env (plain text). Prefer: octopus_login for vault storage.`));
+  }
+
+  // Update provider + model in .env
+  setEnvVar('LLM_PROVIDER', choice.value);
+  setEnvVar('LLM_MODEL', choice.model);
+
+  // Quick connection test
+  console.log(chalk.dim('\n  Testing connection...'));
+  try {
+    const axios = require('axios');
+    let ok = false;
+    if (choice.value === 'anthropic') {
+      const r = await axios.get('https://api.anthropic.com/v1/models', {
+        headers: { 'x-api-key': apiKey.trim(), 'anthropic-version': '2023-06-01' }, timeout: 6000
+      });
+      ok = r.status === 200;
+    } else if (choice.value === 'openai') {
+      const r = await axios.get('https://api.openai.com/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey.trim()}` }, timeout: 6000
+      });
+      ok = r.status === 200;
+    } else if (choice.value === 'google') {
+      const r = await axios.get(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`,
+        { timeout: 6000 }
+      );
+      ok = r.status === 200;
+    } else if (choice.value === 'nvidia') {
+      const r = await axios.get('https://integrate.api.nvidia.com/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey.trim()}` }, timeout: 6000
+      });
+      ok = r.status === 200;
+    } else if (choice.value === 'huggingface') {
+      const r = await axios.get('https://huggingface.co/api/whoami', {
+        headers: { Authorization: `Bearer ${apiKey.trim()}` }, timeout: 6000
+      });
+      ok = r.status === 200;
+    }
+    if (ok) {
+      console.log(chalk.green(`  ✅ Connection verified — ${choice.label} is working!`));
+    } else {
+      console.log(chalk.yellow('  ⚠  Could not verify connection automatically.'));
+    }
+  } catch (err) {
+    console.log(chalk.yellow(`  ⚠  Connection test failed: ${err.message}`));
+    console.log(chalk.dim('  Key saved. The provider may still work — try /run <task>.'));
+  }
+
+  console.log(chalk.green(`\n  ✅ Setup complete: ${choice.value} / ${choice.model}`));
+  console.log(chalk.yellow('  Restart Octopus (Ctrl+C + start_server.ps1) to apply.\n'));
 }
 
 // ── .env read/write helpers ────────────────────────────────────────────────────
@@ -426,6 +611,11 @@ async function handleCommand(input) {
       } else {
         console.log(chalk.yellow('  Usage: /headless  |  /headless on  |  /headless off\n'));
       }
+      break;
+    }
+
+    case 'setup': {
+      await runSetupWizard();
       break;
     }
 

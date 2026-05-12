@@ -28,7 +28,7 @@ const AGENT_PERMISSIONS = {
   ],
   forge: [
     'searchStructural', 'getContext', 'getDecisions', 'getRun', 'getInstincts',
-    'writeback', 'saveDecision', 'structuralImpact',
+    'writeback', 'saveDecision', 'saveRun', 'structuralImpact',
   ],
   reviewer: [
     'searchStructural', 'getContext', 'getRun', 'writeback',
@@ -40,7 +40,7 @@ const AGENT_PERMISSIONS = {
     'searchStructural', 'getContext', 'getRun', 'writeback',
   ],
   factchecker: [
-    'searchStructural', 'getContext', 'getDecisions', 'writeback',
+    'searchStructural', 'getContext', 'getDecisions', 'getRun', 'writeback',
   ],
   scribe: [
     'getContext', 'getDecisions', 'getRun', 'writeback',
