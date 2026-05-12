@@ -421,6 +421,18 @@ app.use((req, res) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 if (require.main === module) {
+  httpServer.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`[server] Port ${PORT} is already in use.`);
+      console.error(`[server] Kill the old process with:`);
+      console.error(`[server]   Windows: Get-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess | Stop-Process -Force`);
+      console.error(`[server]   Mac/Linux: lsof -ti :${PORT} | xargs kill -9`);
+      process.exit(1);
+    } else {
+      console.error(`[server] Fatal: ${err.message}`);
+      process.exit(1);
+    }
+  });
   httpServer.listen(PORT, () => {
     console.error(`Octopus API running on http://localhost:${PORT}`);
     console.error(`WebSocket events:   ws://localhost:${PORT}/ws`);

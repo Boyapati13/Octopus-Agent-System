@@ -14,10 +14,32 @@ function WARN { param($m) Write-Host "  [WARN] $m" -ForegroundColor Yellow }
 function INFO { param($m) Write-Host "  [INFO] $m" -ForegroundColor Cyan   }
 function FAIL { param($m) Write-Host "  [FAIL] $m" -ForegroundColor Red    }
 
+function Kill-Port {
+    param([int]$p)
+    try {
+        $conns = Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue
+        if ($conns) {
+            $pids = $conns.OwningProcess | Sort-Object -Unique
+            foreach ($id in $pids) {
+                Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
+            }
+            Start-Sleep -Milliseconds 800
+            WARN "Cleared stale process(es) on :$p"
+        }
+    } catch {}
+}
+
 Write-Host ""
 Write-Host "  Octopus 3.0 - OctoDeck Edition" -ForegroundColor Magenta
 Write-Host "  REST API + WebSocket + Memory Service" -ForegroundColor DarkGray
 Write-Host ""
+
+# -- 0. Clear stale port holders ----------------------------------------------
+
+INFO "Clearing ports $Port and 5000..."
+Kill-Port $Port
+Kill-Port 5000
+OK "Ports $Port and 5000 are free"
 
 # -- 1. Prerequisites ---------------------------------------------------------
 
@@ -57,7 +79,7 @@ if (-not (Test-Path $EnvFile)) {
     @"
 MEMORY_SERVICE_URL=http://localhost:5000
 DATA_DIR=../data
-PORT=3001
+PORT=$Port
 SAFE_MODE=false
 HEADLESS_MODE=false
 MAX_THINKING_TOKENS=10000
@@ -104,12 +126,12 @@ try {
             $ollamaOnline = $true; OK "Ollama started"
         } catch { WARN "Ollama did not start - cloud providers only" }
     } else {
-        INFO "Ollama not installed - cloud providers only"
+        INFO "Ollama not installed - cloud providers only. Run /setup in CLI to configure."
     }
 }
 
 # -- 4. Start Python memory service (port 5000) --------------------------------
-# Do NOT set $env:PORT here - Flask reads it and would steal port 3001
+# Do NOT set $env:PORT here - Flask reads it and would steal the Node port
 
 Write-Host ""
 INFO "Starting Python memory service on :5000..."
@@ -125,24 +147,27 @@ try {
     WARN "Memory service health check timed out. Check python/requirements.txt is installed."
 }
 
-# -- 5. Start REST + WebSocket server (foreground, after Python is up) ---------
-# Set PORT only here so Python never sees it
+# -- 5. Start REST + WebSocket server ------------------------------------------
+# Set PORT only here, after Python is already running on 5000
 
 $env:PORT = "$Port"
 $NodeScript = Join-Path $NodeDir "src\server.js"
 
 Write-Host ""
-INFO "Starting Octopus API server on :$Port..."
+INFO "Starting Octopus API on :$Port..."
 
-# Start Node as a visible background process (not a PS Job - avoids stderr error handling)
+# Start Node as a plain OS process (not a PS Job - avoids stderr being treated as errors)
 $NodeProc = Start-Process -FilePath "node" -ArgumentList $NodeScript `
     -NoNewWindow -PassThru -WorkingDirectory $NodeDir
 
 # Poll /api/health until ready (up to 20 seconds)
 $ready = $false
-INFO "Waiting for server to be ready..."
 for ($i = 0; $i -lt 20; $i++) {
     Start-Sleep -Seconds 1
+    if ($NodeProc.HasExited) {
+        FAIL "Node server exited unexpectedly (exit code $($NodeProc.ExitCode)). Check output above."
+        break
+    }
     try {
         $r = Invoke-WebRequest -Uri "http://localhost:$Port/api/health" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
         if ($r.StatusCode -eq 200) { $ready = $true; break }
@@ -150,8 +175,8 @@ for ($i = 0; $i -lt 20; $i++) {
 }
 
 if ($ready) {
-    OK "Server ready on :$Port"
-} else {
+    OK "Server ready"
+} elseif (-not $NodeProc.HasExited) {
     WARN "Server health check timed out - it may still be starting"
 }
 
@@ -159,13 +184,14 @@ Write-Host ""
 Write-Host "  REST API  : http://localhost:$Port/api/health" -ForegroundColor Cyan
 Write-Host "  WebSocket : ws://localhost:$Port/ws"           -ForegroundColor Cyan
 Write-Host "  Dashboard : http://localhost:$Port/dashboard"  -ForegroundColor Cyan
+Write-Host "  CLI       : node node\src\cli.js               " -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Press Ctrl+C to stop all services." -ForegroundColor DarkGray
 Write-Host ""
 
-if (-not $NoBrowser) { Start-Process "http://localhost:$Port/dashboard" }
+if (-not $NoBrowser -and $ready) { Start-Process "http://localhost:$Port/dashboard" }
 
-# Keep the window alive until Node exits or user presses Ctrl+C
+# Keep alive until Node exits or Ctrl+C
 try {
     $NodeProc.WaitForExit()
 } finally {
@@ -174,5 +200,8 @@ try {
     if ($MemProc -and -not $MemProc.HasExited) {
         Stop-Process -Id $MemProc.Id -Force -ErrorAction SilentlyContinue
     }
-    INFO "All services stopped."
+    # Final port cleanup so next run starts clean
+    Kill-Port $Port
+    Kill-Port 5000
+    INFO "All services stopped. Ports $Port and 5000 released."
 }
