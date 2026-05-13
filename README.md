@@ -422,16 +422,73 @@ Full guide: [docs/quickstart-headless.md](docs/quickstart-headless.md)
 
 ## Voice Input
 
+Octopus now has a **full Gemini Live real-time voice interface** built into the web dashboard — inspired by and compatible with the Mark-XXXIX architecture by FatihMakes.
+
+### Architecture
+
 ```
-Wake word / push-to-talk → ASR → AgentDeck → OctopusAdapter
-  → POST /api/tasks/voice { text }
-  → Chain runs
-  → WS event: voice_summary { summary, success }
-  → TTS: speak summary
+Browser frontend (Voice tab)
+  ↕  WebSocket  ws://localhost:8765  (PCM audio + JSON control)
+Python voice_service.py
+  ↕  Gemini Live API  (real-time audio streaming + tool-calling)
+  ↕  HTTP → localhost:3001  (Octopus Node.js API → 14 agents / 23 MCP tools)
 ```
 
+### Quick Start
+
+**1. Get a Gemini API key** (free tier works)
+```
+https://aistudio.google.com/apikey
+```
+
+**2. Add key to config**
+```json
+// config/api_keys.json
+{ "gemini_api_key": "AIza..." }
+// or: export GEMINI_API_KEY=AIza...
+```
+
+**3. Install voice dependencies**
 ```bash
-# Test without hardware
+pip install google-genai aiohttp websockets
+```
+
+**4. Start the voice service**
+```bash
+# macOS / Linux
+./start_voice.sh
+
+# Windows
+.\start_voice.ps1
+
+# Manual
+python python/services/voice_service.py
+```
+
+**5. Open the dashboard → Voice tab → click Start Voice**
+
+### What you can say
+
+| Example | What happens |
+|---|---|
+| *"Review the security of the auth module"* | SecurityReviewer agent runs |
+| *"Write a Redis cache wrapper in TypeScript"* | Forge agent generates code |
+| *"What decisions have been recorded?"* | L2 Decision Memory fetched |
+| *"Search memory for the graph_store"* | L1 Structural Memory queried |
+| *"List all available agents"* | Agent roster returned |
+| *"Plan a feature: JWT refresh tokens"* | Architect + Cortex plan |
+
+### Voice UI Features
+
+- **Animated orb** — colour and pulse reflects state (cyan = listening, amber = thinking, green = speaking, red = muted)
+- **Hybrid input** — speak or type; both route to the same Gemini Live session
+- **Full transcript log** — user speech, Octopus responses, and tool calls shown in real time
+- **Auto-reconnect** — drops reconnect transparently every 5 s
+- **Mute** — silences mic without ending the session
+
+### Legacy text-only voice endpoint
+
+```bash
 curl -X POST http://localhost:3001/api/tasks/voice \
   -H "Content-Type: application/json" \
   -d '{"text": "summarize the last architectural decision"}'

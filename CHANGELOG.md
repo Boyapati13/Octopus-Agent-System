@@ -5,6 +5,58 @@ Format: [Semantic Versioning](https://semver.org) · Scribe agent standard.
 
 ---
 
+## [2.1.0] — 2026-05-13 — Gemini Live Voice Integration
+
+### 🎙 New: Real-Time Voice Interface
+
+Integrated Mark-XXXIX's Gemini Live audio architecture into the Octopus web
+dashboard. The full voice pipeline is now part of the system.
+
+#### New files
+- **`python/services/voice_service.py`** — asyncio WebSocket server that:
+  - Accepts raw PCM audio from the browser via WebSocket
+  - Streams audio to/from Gemini Live API in real time
+  - Routes Gemini tool-calls to the Octopus Node.js agent API
+  - Handles transcription, turn detection, and auto-reconnect
+  - Exposes 5 Octopus tools to Gemini: `run_task`, `list_agents`,
+    `get_memory_context`, `search_memory`, `get_decisions`
+- **`frontend/js/voice.js`** — browser voice client:
+  - `getUserMedia` mic capture via AudioWorklet (low-latency Int16 PCM)
+  - WebSocket to voice_service (`ws://localhost:8765`)
+  - `AudioContext` queue for smooth playback of Gemini audio responses
+  - State machine: OFFLINE → LISTENING → THINKING → SPEAKING → MUTED
+  - Hybrid input: speak OR type, same session
+- **`frontend/css/voice.css`** — animated Octopus orb UI:
+  - Colour-coded pulsing orb matching state
+  - Transcript log with colour-coded roles (you / octopus / tool / sys)
+  - Setup guide panel
+- **`start_voice.sh`** / **`start_voice.ps1`** — cross-platform launch scripts
+  with dependency check and API key validation
+
+#### Modified files
+- **`frontend/index.html`** — added Voice tab + status pill
+- **`python/requirements.txt`** — added `google-genai`, `aiohttp`, `websockets`
+- **`README.md`** — replaced stub Voice section with full integration docs
+  (architecture diagram, quick-start, example commands, UI feature list)
+
+### Architecture
+```
+Browser (voice.js + AudioWorklet)
+  ↕ WebSocket ws://localhost:8765
+voice_service.py (asyncio)
+  ↕ Gemini Live API (real-time PCM audio + function calling)
+  ↕ HTTP → localhost:3001 → 14 Octopus agents / 23 MCP tools
+```
+
+### Mark-XXXIX Attribution
+Voice architecture pattern adapted from Mark-XXXIX by FatihMakes
+(https://github.com/FatihMakes/Mark-XXXIX) — Gemini Live streaming,
+AudioWorklet PCM capture, state orb concept.
+Octopus integration: tool routing to agent API, 5-layer memory bridge,
+browser-native UI (no PyQt6/desktop requirement).
+
+---
+
 ## [2.0.3] — 2026-05-12 — Bug Fixes & Test Hardening
 
 ### 🐛 Bug Fixes

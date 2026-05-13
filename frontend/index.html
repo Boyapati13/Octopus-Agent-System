@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/voice.css"/>
 </head>
 <body>
 
@@ -28,6 +29,9 @@
     <span class="brand-tag">Agent System</span>
   </div>
   <div class="header-status">
+    <div class="status-pill" id="svc-voice">
+      <span class="status-dot"></span>Voice
+    </div>
     <div class="status-pill" id="svc-python">
       <span class="status-dot"></span>Memory SVC
     </div>
@@ -61,6 +65,7 @@
       <button class="tab"        data-tab="console"  role="tab">Command Console</button>
       <button class="tab"        data-tab="explorer" role="tab">Memory Explorer</button>
       <button class="tab"        data-tab="feed"     role="tab">Activity Feed</button>
+      <button class="tab"        data-tab="voice"    role="tab">🎙 Voice</button>
     </nav>
 
     <!-- Memory Layers -->
@@ -162,9 +167,65 @@
       </div>
     </section>
 
+    <!-- Voice -->
+    <section class="tab-panel" id="tab-voice">
+      <div class="voice-layout">
+
+        <!-- Orb + controls -->
+        <div class="voice-orb-panel">
+          <div id="voice-orb" data-state="OFFLINE">
+            <div class="orb-icon">🐙</div>
+          </div>
+          <span class="voice-state-label" id="voice-state-label">Offline</span>
+
+          <div class="voice-controls">
+            <button class="btn-voice" id="voice-mic-btn">🎙 Start Voice</button>
+            <button class="btn-voice" id="voice-mute-btn">🔈 Mute</button>
+          </div>
+
+          <div class="voice-text-row">
+            <input class="voice-text-input" id="voice-text-input" type="text"
+                   placeholder="Or type a command and press Enter…"/>
+            <button class="btn-send" id="voice-send-btn">Send</button>
+          </div>
+
+          <div class="voice-info">
+            <span class="voice-badge">Gemini Live</span>
+            <span class="voice-badge">14 Agents</span>
+            <span class="voice-badge">23 MCP Tools</span>
+            <span class="voice-badge">5-Layer Memory</span>
+          </div>
+        </div>
+
+        <!-- Transcript + setup -->
+        <div style="display:flex;flex-direction:column;gap:16px;overflow:hidden;">
+          <div class="voice-log-panel">
+            <div class="voice-log-header">
+              Conversation
+              <button class="btn-sm" onclick="document.getElementById('voice-log').innerHTML=''">Clear</button>
+            </div>
+            <div id="voice-log"></div>
+          </div>
+
+          <div class="voice-setup">
+            <h4>⚡ Quick Setup</h4>
+            <ul>
+              <li>Get a free Gemini API key at <code>aistudio.google.com</code></li>
+              <li>Add it to <code>config/api_keys.json</code> as <code>gemini_api_key</code></li>
+              <li>Install deps: <code>pip install google-genai aiohttp websockets</code></li>
+              <li>Start voice service: <code>python python/services/voice_service.py</code></li>
+              <li>Click <strong>Start Voice</strong> and allow microphone access</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
   </main>
 </div>
 
 <script src="js/app.js"></script>
+<script src="js/voice.js"></script>
 </body>
 </html>
