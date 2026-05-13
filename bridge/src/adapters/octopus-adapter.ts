@@ -103,8 +103,7 @@ export class OctopusAdapter extends EventEmitter implements AgentAdapter {
       case 'send_prompt':
         if ('text' in cmd && cmd.text) {
           // 'voice' source routes to /api/tasks/voice for TTS-friendly response
-          const isVoice = 'source' in (cmd as Record<string, unknown>) &&
-            (cmd as Record<string, unknown>).source === 'voice';
+          const isVoice = cmd.source === 'voice';
           this._handleSendPrompt(cmd.text, isVoice ? 'voice' : 'text');
         }
         break;
