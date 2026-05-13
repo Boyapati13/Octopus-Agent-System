@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Octopus — Setup</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:       #00060a;
+  --bg2:      #000d14;
+  --bg3:      #001520;
+  --cyan:     #00d4ff;
+  --cyan-dim: rgba(0,212,255,.15);
+  --cyan-glow:rgba(0,212,255,.35);
+  --orange:   #ff6b00;
+  --gold:     #ffcc00;
+  --green:    #00ff88;
+  --red:      #ff4455;
+  --text:     #cce8f0;
+  --text-dim: #5a8a9f;
+  --border:   rgba(0,212,255,.18);
+  --border2:  rgba(0,212,255,.35);
+}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Courier New',Courier,monospace;
+  min-height:100vh;
+  display:flex;
+  overflow:hidden;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────────── */
+.wizard{display:flex;width:100vw;height:100vh}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar{
+  width:260px;min-width:260px;
+  background:var(--bg2);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  padding:28px 0;
+  position:relative;
+}
+.sidebar::after{
+  content:'';position:absolute;right:0;top:0;bottom:0;width:1px;
+  background:linear-gradient(to bottom,transparent,var(--cyan-glow) 40%,var(--cyan-glow) 60%,transparent);
+}
+
+.logo{
+  padding:0 24px 32px;
+  border-bottom:1px solid var(--border);
+}
+.logo-mark{
+  font-size:26px;font-weight:700;color:var(--cyan);
+  letter-spacing:2px;text-transform:uppercase;
+  text-shadow:0 0 12px var(--cyan-glow);
+}
+.logo-sub{
+  font-size:10px;color:var(--text-dim);letter-spacing:3px;
+  text-transform:uppercase;margin-top:4px;
+}
+
+.steps-nav{padding:20px 0;flex:1}
+
+.step-item{
+  display:flex;align-items:center;gap:14px;
+  padding:12px 24px;cursor:default;
+  border-left:2px solid transparent;
+  transition:all .2s;
+}
+.step-item.active{
+  border-left-color:var(--cyan);
+  background:var(--cyan-dim);
+}
+.step-item.done{border-left-color:var(--green)}
+.step-item.active .step-num{
+  background:var(--cyan);color:var(--bg);
+  box-shadow:0 0 10px var(--cyan-glow);
+}
+.step-item.done .step-num{background:var(--green);color:var(--bg)}
+.step-num{
+  width:26px;height:26px;border-radius:50%;
+  border:1.5px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:var(--text-dim);
+  flex-shrink:0;transition:all .2s;
+}
+.step-item.done .step-num::before{content:'✓';font-size:13px}
+.step-item:not(.done) .step-num::before{content:attr(data-n)}
+.step-label{
+  font-size:11px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--text-dim);transition:color .2s;
+}
+.step-item.active .step-label{color:var(--cyan)}
+.step-item.done .step-label{color:var(--green)}
+
+.sidebar-footer{
+  padding:20px 24px 0;
+  border-top:1px solid var(--border);
+  font-size:10px;color:var(--text-dim);letter-spacing:1px;
+}
+
+/* ── Main content ─────────────────────────────────────────────────────────── */
+.content{
+  flex:1;display:flex;flex-direction:column;
+  overflow:hidden;min-width:0;
+}
+
+.step-panel{
+  display:none;flex:1;flex-direction:column;
+  overflow-y:auto;padding:40px 48px 24px;
+}
+.step-panel.active{display:flex}
+
+.step-head{margin-bottom:32px}
+.step-icon{font-size:36px;margin-bottom:12px}
+.step-title{
+  font-size:22px;font-weight:700;color:var(--cyan);
+  letter-spacing:2px;text-transform:uppercase;
+  text-shadow:0 0 16px var(--cyan-glow);
+}
+.step-subtitle{
+  font-size:12px;color:var(--text-dim);letter-spacing:1px;margin-top:6px;
+}
+
+/* ── Form elements ─────────────────────────────────────────────────────────── */
+.field{margin-bottom:20px}
+.field label{
+  display:block;font-size:10px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--text-dim);margin-bottom:7px;
+}
+.field input,.field select{
+  width:100%;background:var(--bg3);
+  border:1px solid var(--border);border-radius:4px;
+  color:var(--text);font-family:inherit;font-size:13px;
+  padding:10px 14px;outline:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.field input:focus,.field select:focus{
+  border-color:var(--cyan);
+  box-shadow:0 0 0 2px var(--cyan-dim);
+}
+.field input::placeholder{color:var(--text-dim)}
+.field select option{background:var(--bg2)}
+
+.field-row{display:flex;gap:16px}
+.field-row .field{flex:1}
+
+.hint{font-size:11px;color:var(--text-dim);margin-top:5px;letter-spacing:.5px}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:inherit;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;
+  padding:10px 20px;border-radius:4px;cursor:pointer;
+  border:1.5px solid;transition:all .18s;font-weight:600;
+}
+.btn-primary{
+  background:var(--cyan);border-color:var(--cyan);color:var(--bg);
+  box-shadow:0 0 12px var(--cyan-glow);
+}
+.btn-primary:hover{box-shadow:0 0 22px var(--cyan-glow);filter:brightness(1.1)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+.btn-ghost{
+  background:transparent;border-color:var(--border2);color:var(--text-dim);
+}
+.btn-ghost:hover{border-color:var(--cyan);color:var(--cyan)}
+.btn-test{
+  background:transparent;border-color:var(--orange);color:var(--orange);
+  font-size:11px;padding:7px 14px;
+}
+.btn-test:hover{background:rgba(255,107,0,.12)}
+.btn-test:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{padding:6px 12px;font-size:11px}
+
+/* ── Provider cards ─────────────────────────────────────────────────────────── */
+.provider-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+  gap:12px;margin-bottom:28px;
+}
+.provider-card{
+  background:var(--bg3);border:1.5px solid var(--border);
+  border-radius:6px;padding:16px 14px;cursor:pointer;
+  text-align:center;transition:all .18s;position:relative;
+}
+.provider-card:hover{border-color:var(--cyan-glow);background:var(--cyan-dim)}
+.provider-card.selected{
+  border-color:var(--cyan);background:var(--cyan-dim);
+  box-shadow:0 0 14px var(--cyan-glow);
+}
+.provider-card .pc-icon{font-size:26px;margin-bottom:8px}
+.provider-card .pc-name{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.provider-card .pc-tag{
+  font-size:9px;color:var(--text-dim);margin-top:3px;letter-spacing:.5px;
+}
+.provider-card .pc-badge{
+  position:absolute;top:7px;right:7px;
+  font-size:8px;padding:2px 5px;border-radius:3px;
+  background:var(--green);color:var(--bg);letter-spacing:.5px;font-weight:700;
+}
+.provider-card.selected .pc-badge-sel{
+  display:block;
+}
+
+/* ── Check rows ─────────────────────────────────────────────────────────────── */
+.check-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+.check-row{
+  display:flex;align-items:center;gap:14px;
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:5px;padding:13px 18px;
+}
+.check-icon{font-size:18px;width:22px;text-align:center;flex-shrink:0}
+.check-label{flex:1;font-size:12px;letter-spacing:.5px}
+.check-status{
+  font-size:11px;padding:3px 9px;border-radius:3px;
+  background:var(--bg2);border:1px solid var(--border);
+  color:var(--text-dim);white-space:nowrap;
+}
+.check-status.ok{border-color:var(--green);color:var(--green)}
+.check-status.fail{border-color:var(--red);color:var(--red)}
+.check-status.warn{border-color:var(--gold);color:var(--gold)}
+.check-status.spin::before{content:'⟳ ';animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Gateway accordion ──────────────────────────────────────────────────────── */
+.gateway-list{display:flex;flex-direction:column;gap:10px}
+.gateway-item{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:6px;overflow:hidden;transition:border-color .2s;
+}
+.gateway-item.enabled{border-color:var(--cyan)}
+.gateway-header{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 18px;cursor:pointer;user-select:none;
+}
+.gateway-header:hover{background:var(--cyan-dim)}
+.gw-icon{font-size:20px;width:24px;text-align:center}
+.gw-name{flex:1;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.gw-status{font-size:10px;color:var(--text-dim);letter-spacing:.5px}
+.gw-toggle{
+  position:relative;width:38px;height:20px;flex-shrink:0;
+}
+.gw-toggle input{opacity:0;width:0;height:0;position:absolute}
+.gw-slider{
+  position:absolute;inset:0;background:var(--bg2);
+  border:1px solid var(--border);border-radius:20px;cursor:pointer;
+  transition:all .2s;
+}
+.gw-slider::before{
+  content:'';position:absolute;width:14px;height:14px;border-radius:50%;
+  background:var(--text-dim);top:2px;left:2px;transition:all .2s;
+}
+.gw-toggle input:checked + .gw-slider{
+  background:var(--cyan-dim);border-color:var(--cyan);
+}
+.gw-toggle input:checked + .gw-slider::before{
+  background:var(--cyan);transform:translateX(18px);
+  box-shadow:0 0 6px var(--cyan-glow);
+}
+.gateway-body{
+  display:none;padding:18px 20px;
+  border-top:1px solid var(--border);
+}
+.gateway-item.enabled .gateway-body{display:block}
+
+/* ── Toggle switch (reusable) ─────────────────────────────────────────────── */
+.toggle-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:12px;
+}
+.toggle-row:last-child{border-bottom:none;margin-bottom:0}
+.toggle-label{font-size:12px;letter-spacing:.5px}
+.toggle-desc{font-size:10px;color:var(--text-dim);margin-top:2px;letter-spacing:.3px}
+.toggle-switch{
+  position:relative;width:44px;height:22px;flex-shrink:0;
+}
+.toggle-switch input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{
+  position:absolute;inset:0;background:var(--bg2);
+  border:1px solid var(--border);border-radius:22px;cursor:pointer;transition:all .2s;
+}
+.toggle-track::before{
+  content:'';position:absolute;width:16px;height:16px;border-radius:50%;
+  background:var(--text-dim);top:2px;left:2px;transition:all .2s;
+}
+.toggle-switch input:checked + .toggle-track{background:var(--cyan-dim);border-color:var(--cyan)}
+.toggle-switch input:checked + .toggle-track::before{
+  background:var(--cyan);transform:translateX(22px);box-shadow:0 0 6px var(--cyan-glow);
+}
+
+/* ── Test result pill ─────────────────────────────────────────────────────── */
+.test-result{
+  display:none;margin-left:10px;font-size:11px;
+  padding:4px 10px;border-radius:4px;align-items:center;gap:5px;
+}
+.test-result.show{display:inline-flex}
+.test-result.ok{background:rgba(0,255,136,.1);border:1px solid var(--green);color:var(--green)}
+.test-result.fail{background:rgba(255,68,85,.1);border:1px solid var(--red);color:var(--red)}
+
+/* ── Radio group ─────────────────────────────────────────────────────────── */
+.radio-group{display:flex;flex-direction:column;gap:9px;margin-top:8px}
+.radio-opt{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:11px 14px;border-radius:5px;cursor:pointer;
+  border:1.5px solid var(--border);transition:all .18s;
+}
+.radio-opt:hover{border-color:var(--cyan-glow);background:var(--cyan-dim)}
+.radio-opt.selected{border-color:var(--cyan);background:var(--cyan-dim)}
+.radio-opt input{margin-top:2px;accent-color:var(--cyan)}
+.radio-text .rt-label{font-size:12px;font-weight:700;letter-spacing:.5px}
+.radio-text .rt-desc{font-size:10px;color:var(--text-dim);margin-top:2px;letter-spacing:.3px}
+
+/* ── Preflight list ─────────────────────────────────────────────────────────── */
+.preflight-list{display:flex;flex-direction:column;gap:8px}
+.pf-row{
+  display:flex;align-items:center;gap:14px;
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:5px;padding:12px 16px;transition:border-color .2s;
+}
+.pf-row.ok{border-color:rgba(0,255,136,.3)}
+.pf-row.fail{border-color:rgba(255,68,85,.3)}
+.pf-row.skip{opacity:.5}
+.pf-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.pf-label{flex:1;font-size:12px;letter-spacing:.3px}
+.pf-hint{font-size:10px;color:var(--text-dim)}
+.pf-badge{font-size:10px;padding:2px 8px;border-radius:3px}
+.pf-badge.ok{background:rgba(0,255,136,.15);color:var(--green)}
+.pf-badge.fail{background:rgba(255,68,85,.12);color:var(--red)}
+.pf-badge.skip{background:var(--bg2);color:var(--text-dim)}
+.pf-badge.spin{color:var(--cyan)}
+.pf-badge.spin::before{content:'⟳ ';animation:spin .8s linear infinite;display:inline-block}
+
+/* ── Summary ─────────────────────────────────────────────────────────────── */
+.summary-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px;
+}
+.summary-card{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:6px;padding:14px 16px;
+}
+.sc-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim)}
+.sc-val{font-size:13px;margin-top:5px;color:var(--cyan)}
+
+/* ── Launch button ────────────────────────────────────────────────────────── */
+.launch-wrap{text-align:center;padding:20px 0}
+.launch-icon{font-size:60px;margin-bottom:20px;display:block}
+.launch-title{
+  font-size:24px;font-weight:700;color:var(--green);
+  letter-spacing:3px;text-transform:uppercase;
+  text-shadow:0 0 20px rgba(0,255,136,.5);
+  margin-bottom:8px;
+}
+.launch-sub{font-size:12px;color:var(--text-dim);letter-spacing:1px;margin-bottom:28px}
+
+/* ── Nav bar ─────────────────────────────────────────────────────────────── */
+.nav-bar{
+  display:flex;align-items:center;gap:16px;
+  padding:18px 48px;
+  border-top:1px solid var(--border);
+  background:var(--bg2);flex-shrink:0;
+}
+.nav-spacer{flex:1}
+.progress-wrap{flex:1;position:relative}
+.progress-track{
+  height:2px;background:var(--bg3);border-radius:2px;overflow:hidden;
+}
+.progress-fill{
+  height:100%;background:linear-gradient(90deg,var(--cyan),var(--orange));
+  border-radius:2px;transition:width .4s ease;
+}
+.progress-label{
+  text-align:center;font-size:10px;color:var(--text-dim);
+  letter-spacing:1.5px;margin-top:5px;
+}
+
+/* ── Info callout ─────────────────────────────────────────────────────────── */
+.callout{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:13px 16px;border-radius:5px;margin-bottom:20px;
+  background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);
+  font-size:11px;color:var(--text-dim);letter-spacing:.4px;line-height:1.6;
+}
+.callout-warn{background:rgba(255,107,0,.06);border-color:rgba(255,107,0,.25)}
+.callout .icon{font-size:15px;flex-shrink:0;margin-top:1px}
+
+/* ── Section divider ─────────────────────────────────────────────────────── */
+.section-title{
+  font-size:10px;letter-spacing:2.5px;text-transform:uppercase;
+  color:var(--text-dim);margin-bottom:12px;
+  padding-bottom:6px;border-bottom:1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<div class="wizard">
+
+  <!-- ── Sidebar ──────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">🐙 Octopus</div>
+      <div class="logo-sub">Initial Configuration</div>
+    </div>
+    <nav class="steps-nav" id="stepsNav">
+      <div class="step-item active" data-step="1">
+        <div class="step-num" data-n="1"></div>
+        <div class="step-label">System Check</div>
+      </div>
+      <div class="step-item" data-step="2">
+        <div class="step-num" data-n="2"></div>
+        <div class="step-label">LLM Provider</div>
+      </div>
+      <div class="step-item" data-step="3">
+        <div class="step-num" data-n="3"></div>
+        <div class="step-label">Gateways</div>
+      </div>
+      <div class="step-item" data-step="4">
+        <div class="step-num" data-n="4"></div>
+        <div class="step-label">Advanced</div>
+      </div>
+      <div class="step-item" data-step="5">
+        <div class="step-num" data-n="5"></div>
+        <div class="step-label">Pre-flight</div>
+      </div>
+      <div class="step-item" data-step="6">
+        <div class="step-num" data-n="6"></div>
+        <div class="step-label">Launch</div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      v4.0 · Octopus Agent System
+    </div>
+  </aside>
+
+  <!-- ── Main content ──────────────────────────────────────────────────────── -->
+  <div class="content">
+
+    <!-- ═══ STEP 1: System Check ═══════════════════════════════════════════ -->
+    <div class="step-panel active" id="panel-1">
+      <div class="step-head">
+        <div class="step-icon">🔍</div>
+        <div class="step-title">System Check</div>
+        <div class="step-subtitle">Verifying your environment before configuration</div>
+      </div>
+
+      <div class="check-grid" id="sysCheckGrid">
+        <div class="check-row" id="chk-node">
+          <span class="check-icon">⚙️</span>
+          <span class="check-label">Node.js runtime</span>
+          <span class="check-status spin" id="chk-node-status">Checking…</span>
+        </div>
+        <div class="check-row" id="chk-memory">
+          <span class="check-icon">🧠</span>
+          <span class="check-label">Memory Service (localhost:5000)</span>
+          <span class="check-status spin" id="chk-memory-status">Checking…</span>
+        </div>
+        <div class="check-row" id="chk-ollama">
+          <span class="check-icon">🦙</span>
+          <span class="check-label">Ollama local inference (optional)</span>
+          <span class="check-status spin" id="chk-ollama-status">Checking…</span>
+        </div>
+        <div class="check-row" id="chk-env">
+          <span class="check-icon">📄</span>
+          <span class="check-label">Existing configuration</span>
+          <span class="check-status spin" id="chk-env-status">Checking…</span>
+        </div>
+      </div>
+
+      <div class="callout" id="chk-summary" style="display:none">
+        <span class="icon">ℹ️</span>
+        <span id="chk-summary-text"></span>
+      </div>
+    </div>
+
+    <!-- ═══ STEP 2: LLM Provider ════════════════════════════════════════════ -->
+    <div class="step-panel" id="panel-2">
+      <div class="step-head">
+        <div class="step-icon">🤖</div>
+        <div class="step-title">LLM Provider</div>
+        <div class="step-subtitle">Choose the AI model that powers Octopus agents</div>
+      </div>
+
+      <div class="section-title">Select Provider</div>
+      <div class="provider-grid" id="providerGrid">
+        <div class="provider-card selected" data-provider="anthropic">
+          <div class="pc-badge">Recommended</div>
+          <div class="pc-icon">🔮</div>
+          <div class="pc-name">Anthropic</div>
+          <div class="pc-tag">Claude Sonnet 4.6</div>
+        </div>
+        <div class="provider-card" data-provider="openai">
+          <div class="pc-icon">⚡</div>
+          <div class="pc-name">OpenAI</div>
+          <div class="pc-tag">GPT-4o</div>
+        </div>
+        <div class="provider-card" data-provider="google">
+          <div class="pc-icon">💎</div>
+          <div class="pc-name">Google</div>
+          <div class="pc-tag">Gemini 2.5 Pro</div>
+        </div>
+        <div class="provider-card" data-provider="ollama">
+          <div class="pc-badge">Free · Local</div>
+          <div class="pc-icon">🦙</div>
+          <div class="pc-name">Ollama</div>
+          <div class="pc-tag">Local inference</div>
+        </div>
+        <div class="provider-card" data-provider="nvidia">
+          <div class="pc-badge">Free tier</div>
+          <div class="pc-icon">🚀</div>
+          <div class="pc-name">NVIDIA NIM</div>
+          <div class="pc-tag">Llama 3.1 405B</div>
+        </div>
+        <div class="provider-card" data-provider="huggingface">
+          <div class="pc-badge">Free</div>
+          <div class="pc-icon">🤗</div>
+          <div class="pc-name">HuggingFace</div>
+          <div class="pc-tag">Gemma 3 · 100k+ models</div>
+        </div>
+        <div class="provider-card" data-provider="openrouter">
+          <div class="pc-icon">🌐</div>
+          <div class="pc-name">OpenRouter</div>
+          <div class="pc-tag">Hermes · 200+ models</div>
+        </div>
+        <div class="provider-card" data-provider="router">
+          <div class="pc-icon">🔀</div>
+          <div class="pc-name">Auto Router</div>
+          <div class="pc-tag">Best model per task</div>
+        </div>
+        <div class="provider-card" data-provider="custom_http">
+          <div class="pc-icon">🔧</div>
+          <div class="pc-name">Custom HTTP</div>
+          <div class="pc-tag">vLLM · LM Studio</div>
+        </div>
+      </div>
+
+      <!-- Provider-specific fields -->
+      <div id="pf-anthropic" class="provider-fields">
+        <div class="section-title">Anthropic Configuration</div>
+        <div class="field">
+          <label>API Key</label>
+          <input type="password" id="inp-anthropic-key" placeholder="sk-ant-…" autocomplete="off">
+          <div class="hint">Get your key at console.anthropic.com → API Keys</div>
+        </div>
+        <div class="field">
+          <label>Model (optional — leave blank for default)</label>
+          <input type="text" id="inp-anthropic-model" placeholder="claude-sonnet-4-6">
+        </div>
+      </div>
+
+      <div id="pf-openai" class="provider-fields" style="display:none">
+        <div class="section-title">OpenAI Configuration</div>
+        <div class="field">
+          <label>API Key</label>
+          <input type="password" id="inp-openai-key" placeholder="sk-…" autocomplete="off">
+          <div class="hint">Get your key at platform.openai.com → API Keys</div>
+        </div>
+        <div class="field">
+          <label>Model (optional)</label>
+          <input type="text" id="inp-openai-model" placeholder="gpt-4o">
+        </div>
+      </div>
+
+      <div id="pf-google" class="provider-fields" style="display:none">
+        <div class="section-title">Google Gemini Configuration</div>
+        <div class="field">
+          <label>API Key</label>
+          <input type="password" id="inp-google-key" placeholder="AIza…" autocomplete="off">
+          <div class="hint">Get your key at aistudio.google.com → Get API Key</div>
+        </div>
+        <div class="field">
+          <label>Model (optional)</label>
+          <input type="text" id="inp-google-model" placeholder="gemini-2.0-flash">
+        </div>
+      </div>
+
+      <div id="pf-ollama" class="provider-fields" style="display:none">
+        <div class="section-title">Ollama Configuration</div>
+        <div class="field">
+          <label>Ollama Base URL</label>
+          <input type="text" id="inp-ollama-url" value="http://localhost:11434">
+          <div class="hint">Run <code style="color:var(--cyan)">ollama pull gemma4:e2b</code> to download a model first</div>
+        </div>
+        <div class="field">
+          <label>Model</label>
+          <input type="text" id="inp-ollama-model" placeholder="gemma4:e2b">
+        </div>
+        <div id="ollama-models-list" style="display:none;margin-top:8px">
+          <div class="section-title">Available Models</div>
+          <div id="ollama-models" style="font-size:12px;color:var(--cyan)"></div>
+        </div>
+      </div>
+
+      <div id="pf-nvidia" class="provider-fields" style="display:none">
+        <div class="section-title">NVIDIA NIM Configuration</div>
+        <div class="callout">
+          <span class="icon">💡</span>
+          Free trial at <strong style="color:var(--cyan)">build.nvidia.com</strong> — no credit card required. Includes Llama 3.1 405B.
+        </div>
+        <div class="field">
+          <label>API Key</label>
+          <input type="password" id="inp-nvidia-key" placeholder="nvapi-…" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Model (optional)</label>
+          <input type="text" id="inp-nvidia-model" placeholder="meta/llama-3.1-405b-instruct">
+        </div>
+      </div>
+
+      <div id="pf-huggingface" class="provider-fields" style="display:none">
+        <div class="section-title">HuggingFace Configuration</div>
+        <div class="callout">
+          <span class="icon">💡</span>
+          Free access tokens at <strong style="color:var(--cyan)">huggingface.co</strong> → Settings → Access Tokens (read permission).
+        </div>
+        <div class="field">
+          <label>Access Token</label>
+          <input type="password" id="inp-hf-token" placeholder="hf_…" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Model (optional)</label>
+          <input type="text" id="inp-hf-model" placeholder="google/gemma-3-4b-it">
+        </div>
+      </div>
+
+      <div id="pf-openrouter" class="provider-fields" style="display:none">
+        <div class="section-title">OpenRouter Configuration</div>
+        <div class="callout">
+          <span class="icon">💡</span>
+          Access 200+ models including Hermes 3, Llama, Mistral and more at <strong style="color:var(--cyan)">openrouter.ai</strong>.
+        </div>
+        <div class="field">
+          <label>API Key</label>
+          <input type="password" id="inp-openrouter-key" placeholder="sk-or-…" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Model (optional)</label>
+          <input type="text" id="inp-openrouter-model" placeholder="nousresearch/hermes-3-llama-3.1-405b">
+        </div>
+      </div>
+
+      <div id="pf-router" class="provider-fields" style="display:none">
+        <div class="callout">
+          <span class="icon">🔀</span>
+          <div>
+            <strong style="color:var(--cyan)">Auto Router</strong> mode automatically selects the best available model for each agent role (planning, coding, search, etc.).<br>
+            Configure any API keys above — the router will use all available providers.
+          </div>
+        </div>
+        <div class="field">
+          <label>Sovereign Fallback Model (local Ollama)</label>
+          <input type="text" id="inp-sovereign" placeholder="gemma4:e2b">
+          <div class="hint">Used when no cloud key is available</div>
+        </div>
+      </div>
+
+      <div id="pf-custom_http" class="provider-fields" style="display:none">
+        <div class="section-title">Custom HTTP Backend</div>
+        <div class="callout">
+          <span class="icon">🔧</span>
+          Any server that speaks the OpenAI <code style="color:var(--cyan)">/v1/chat/completions</code> API — vLLM, LM Studio, llamafile, JAX/Gemma server.
+        </div>
+        <div class="field">
+          <label>Endpoint URL</label>
+          <input type="text" id="inp-custom-url" placeholder="http://localhost:8080">
+        </div>
+        <div class="field">
+          <label>Model Name</label>
+          <input type="text" id="inp-custom-model" placeholder="gemma-3-4b-it">
+        </div>
+      </div>
+
+      <!-- Test connection -->
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+        <button class="btn btn-test" id="btn-test-llm" onclick="testLLM()">⚡ Test Connection</button>
+        <span class="test-result" id="llm-test-result"></span>
+      </div>
+    </div>
+
+    <!-- ═══ STEP 3: Gateways ═════════════════════════════════════════════════ -->
+    <div class="step-panel" id="panel-3">
+      <div class="step-head">
+        <div class="step-icon">💬</div>
+        <div class="step-title">Messaging Gateways</div>
+        <div class="step-subtitle">Connect messaging platforms — all optional, can be added later</div>
+      </div>
+
+      <div class="callout">
+        <span class="icon">ℹ️</span>
+        Gateways let users talk to Octopus via Telegram, Discord, Slack and more. Enable and configure whichever platforms you use. All are optional.
+      </div>
+
+      <div class="gateway-list">
+
+        <!-- Telegram -->
+        <div class="gateway-item" id="gw-telegram">
+          <div class="gateway-header" onclick="toggleGateway('telegram')">
+            <span class="gw-icon">✈️</span>
+            <span class="gw-name">Telegram</span>
+            <span class="gw-status" id="gw-telegram-status">Not configured</span>
+            <label class="gw-toggle" onclick="event.stopPropagation()">
+              <input type="checkbox" id="gw-telegram-toggle" onchange="toggleGateway('telegram')">
+              <span class="gw-slider"></span>
+            </label>
+          </div>
+          <div class="gateway-body">
+            <div class="callout">
+              <span class="icon">📌</span>
+              Create a bot via <strong style="color:var(--cyan)">@BotFather</strong> on Telegram → /newbot → copy the token.
+            </div>
+            <div class="field">
+              <label>Bot Token</label>
+              <input type="password" id="inp-telegram-token" placeholder="123456789:ABCdef…" autocomplete="off"
+                oninput="updateGwStatus('telegram')">
+            </div>
+            <div class="field">
+              <label>Allowed User IDs (optional — comma separated)</label>
+              <input type="text" id="inp-telegram-users" placeholder="123456, 789012">
+              <div class="hint">Leave blank to allow all users. Find your ID via @userinfobot</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Discord -->
+        <div class="gateway-item" id="gw-discord">
+          <div class="gateway-header" onclick="toggleGateway('discord')">
+            <span class="gw-icon">🎮</span>
+            <span class="gw-name">Discord</span>
+            <span class="gw-status" id="gw-discord-status">Not configured</span>
+            <label class="gw-toggle" onclick="event.stopPropagation()">
+              <input type="checkbox" id="gw-discord-toggle" onchange="toggleGateway('discord')">
+              <span class="gw-slider"></span>
+            </label>
+          </div>
+          <div class="gateway-body">
+            <div class="callout">
+              <span class="icon">📌</span>
+              Go to <strong style="color:var(--cyan)">discord.com/developers</strong> → New Application → Bot → Copy Token. Enable Message Content Intent.
+            </div>
+            <div class="field">
+              <label>Bot Token</label>
+              <input type="password" id="inp-discord-token" placeholder="MTI…" autocomplete="off"
+                oninput="updateGwStatus('discord')">
+            </div>
+          </div>
+        </div>
+
+        <!-- Slack -->
+        <div class="gateway-item" id="gw-slack">
+          <div class="gateway-header" onclick="toggleGateway('slack')">
+            <span class="gw-icon">💚</span>
+            <span class="gw-name">Slack</span>
+            <span class="gw-status" id="gw-slack-status">Not configured</span>
+            <label class="gw-toggle" onclick="event.stopPropagation()">
+              <input type="checkbox" id="gw-slack-toggle" onchange="toggleGateway('slack')">
+              <span class="gw-slider"></span>
+            </label>
+          </div>
+          <div class="gateway-body">
+            <div class="callout">
+              <span class="icon">📌</span>
+              Create a Slack app at <strong style="color:var(--cyan)">api.slack.com/apps</strong>. Enable Socket Mode, add Bot Scopes: <code style="color:var(--cyan)">chat:write, im:history, app_mentions:read</code>.
+            </div>
+            <div class="field">
+              <label>Bot Token (xoxb-…)</label>
+              <input type="password" id="inp-slack-bot" placeholder="xoxb-…" autocomplete="off"
+                oninput="updateGwStatus('slack')">
+            </div>
+            <div class="field">
+              <label>App Token (xapp-… for Socket Mode)</label>
+              <input type="password" id="inp-slack-app" placeholder="xapp-…" autocomplete="off">
+            </div>
+          </div>
+        </div>
+
+        <!-- WhatsApp -->
+        <div class="gateway-item" id="gw-whatsapp">
+          <div class="gateway-header" onclick="toggleGateway('whatsapp')">
+            <span class="gw-icon">📱</span>
+            <span class="gw-name">WhatsApp</span>
+            <span class="gw-status" id="gw-whatsapp-status">Not configured</span>
+            <label class="gw-toggle" onclick="event.stopPropagation()">
+              <input type="checkbox" id="gw-whatsapp-toggle" onchange="toggleGateway('whatsapp')">
+              <span class="gw-slider"></span>
+            </label>
+          </div>
+          <div class="gateway-body">
+            <div class="callout callout-warn">
+              <span class="icon">⚠️</span>
+              WhatsApp uses QR code scanning on first run. Scan via the Octopus dashboard. Session is stored locally.
+            </div>
+            <div class="field">
+              <label>Session Storage Path</label>
+              <input type="text" id="inp-whatsapp-path" placeholder="../data/whatsapp-session"
+                oninput="updateGwStatus('whatsapp')">
+              <div class="hint">Folder where session keys are persisted across restarts</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Signal -->
+        <div class="gateway-item" id="gw-signal">
+          <div class="gateway-header" onclick="toggleGateway('signal')">
+            <span class="gw-icon">🔒</span>
+            <span class="gw-name">Signal</span>
+            <span class="gw-status" id="gw-signal-status">Not configured</span>
+            <label class="gw-toggle" onclick="event.stopPropagation()">
+              <input type="checkbox" id="gw-signal-toggle" onchange="toggleGateway('signal')">
+              <span class="gw-slider"></span>
+            </label>
+          </div>
+          <div class="gateway-body">
+            <div class="callout">
+              <span class="icon">📌</span>
+              Requires <strong style="color:var(--cyan)">signal-cli</strong> installed and registered. Run <code style="color:var(--cyan)">signal-cli -u +YOURPHONE register</code> first.
+            </div>
+            <div class="field">
+              <label>Phone Number (with country code)</label>
+              <input type="text" id="inp-signal-phone" placeholder="+1234567890"
+                oninput="updateGwStatus('signal')">
+            </div>
+          </div>
+        </div>
+
+        <!-- Home Assistant -->
+        <div class="gateway-item" id="gw-ha">
+          <div class="gateway-header" onclick="toggleGateway('ha')">
+            <span class="gw-icon">🏠</span>
+            <span class="gw-name">Home Assistant</span>
+            <span class="gw-status" id="gw-ha-status">Not configured</span>
+            <label class="gw-toggle" onclick="event.stopPropagation()">
+              <input type="checkbox" id="gw-ha-toggle" onchange="toggleGateway('ha')">
+              <span class="gw-slider"></span>
+            </label>
+          </div>
+          <div class="gateway-body">
+            <div class="callout">
+              <span class="icon">📌</span>
+              Generate a Long-Lived Access Token in Home Assistant → Profile → Long-Lived Access Tokens.
+            </div>
+            <div class="field">
+              <label>Home Assistant URL</label>
+              <input type="text" id="inp-ha-url" placeholder="http://homeassistant.local:8123"
+                oninput="updateGwStatus('ha')">
+            </div>
+            <div class="field">
+              <label>Long-Lived Access Token</label>
+              <input type="password" id="inp-ha-token" placeholder="eyJhbGci…" autocomplete="off">
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ STEP 4: Advanced Settings ═══════════════════════════════════════ -->
+    <div class="step-panel" id="panel-4">
+      <div class="step-head">
+        <div class="step-icon">⚙️</div>
+        <div class="step-title">Advanced Settings</div>
+        <div class="step-subtitle">Security, performance, and integration options</div>
+      </div>
+
+      <!-- Security -->
+      <div class="section-title">Security & Safety</div>
+      <div style="margin-bottom:24px">
+        <div class="field">
+          <label>AgentShield Mode</label>
+          <div class="radio-group">
+            <label class="radio-opt selected" id="shield-none-opt">
+              <input type="radio" name="agentshield" value="none" id="shield-none">
+              <div class="radio-text">
+                <div class="rt-label">None</div>
+                <div class="rt-desc">No content scanning. Maximum performance. Use for trusted local environments only.</div>
+              </div>
+            </label>
+            <label class="radio-opt" id="shield-advisory-opt">
+              <input type="radio" name="agentshield" value="advisory" id="shield-advisory" checked>
+              <div class="radio-text">
+                <div class="rt-label">Advisory <span style="color:var(--gold);font-size:9px">Default</span></div>
+                <div class="rt-desc">Scans agent inputs/outputs and logs warnings. Non-blocking. Recommended for development.</div>
+              </div>
+            </label>
+            <label class="radio-opt" id="shield-gate-opt">
+              <input type="radio" name="agentshield" value="gate" id="shield-gate">
+              <div class="radio-text">
+                <div class="rt-label">Gate <span style="color:var(--red);font-size:9px">Blocking</span></div>
+                <div class="rt-desc">Blocks requests that fail safety scans. Required for production deployments with external users.</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Safe Mode</div>
+            <div class="toggle-desc">Disable file-write and shell-command MCP tools</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="tog-safe" checked>
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Headless Mode</div>
+            <div class="toggle-desc">Disable auto-planning — let Claude Desktop or Cursor drive Octopus as a tool layer</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="tog-headless">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Server -->
+      <div class="section-title">Server</div>
+      <div style="margin-bottom:24px">
+        <div class="field-row">
+          <div class="field">
+            <label>API Port</label>
+            <input type="number" id="inp-port" value="3001" min="1024" max="65535">
+          </div>
+          <div class="field">
+            <label>Max Thinking Tokens</label>
+            <input type="number" id="inp-thinking" value="10000" min="1000" max="100000">
+          </div>
+        </div>
+        <div class="field">
+          <label>Memory Service URL</label>
+          <input type="text" id="inp-mem-url" value="http://localhost:5000">
+          <div class="hint">Python memory service — started by start_server.ps1</div>
+        </div>
+        <div class="field">
+          <label>Redis URL (optional — for L4 prompt cache)</label>
+          <input type="text" id="inp-redis" placeholder="redis://localhost:6379">
+          <div class="hint">Falls back to in-memory cache if unset</div>
+        </div>
+      </div>
+
+      <!-- Integrations -->
+      <div class="section-title">Integrations</div>
+      <div class="field">
+        <label>GitHub Token (optional)</label>
+        <input type="password" id="inp-github" placeholder="ghp_…" autocomplete="off">
+        <div class="hint">Raises GitHub Search rate limit from 10 → 30 req/min for MarketScout agent</div>
+      </div>
+      <div class="field">
+        <label>Webhook URL (optional — Slack/Discord notifications)</label>
+        <input type="text" id="inp-webhook" placeholder="https://hooks.slack.com/…">
+        <div class="hint">Posted when an agent chain completes</div>
+      </div>
+    </div>
+
+    <!-- ═══ STEP 5: Pre-flight ════════════════════════════════════════════ -->
+    <div class="step-panel" id="panel-5">
+      <div class="step-head">
+        <div class="step-icon">🚀</div>
+        <div class="step-title">Pre-flight Check</div>
+        <div class="step-subtitle">Testing all configured connections before launch</div>
+      </div>
+
+      <div class="preflight-list" id="pfList"></div>
+
+      <div id="pf-summary" style="display:none;margin-top:20px">
+        <div class="callout" id="pf-summary-box">
+          <span class="icon" id="pf-summary-icon">✅</span>
+          <span id="pf-summary-text"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ STEP 6: Launch ════════════════════════════════════════════════ -->
+    <div class="step-panel" id="panel-6">
+      <div class="launch-wrap">
+        <span class="launch-icon">🐙</span>
+        <div class="launch-title">Ready to Launch</div>
+        <div class="launch-sub">Configuration complete — Octopus is ready to go</div>
+      </div>
+
+      <div class="section-title">Configuration Summary</div>
+      <div class="summary-grid" id="summaryGrid"></div>
+
+      <div class="callout callout-warn" id="restart-notice" style="display:none">
+        <span class="icon">🔄</span>
+        Some settings (PORT change, gateway tokens) require a server restart to take full effect.
+        After launching the dashboard, restart with <code style="color:var(--orange)">.\start_server.ps1</code>.
+      </div>
+    </div>
+
+    <!-- ── Nav bar ─────────────────────────────────────────────────────────── -->
+    <div class="nav-bar">
+      <button class="btn btn-ghost" id="btn-back" onclick="goBack()" style="display:none">← Back</button>
+      <div class="nav-spacer"></div>
+      <div class="progress-wrap">
+        <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:16%"></div></div>
+        <div class="progress-label" id="progressLabel">Step 1 of 6</div>
+      </div>
+      <div class="nav-spacer"></div>
+      <button class="btn btn-primary" id="btn-next" onclick="goNext()">Next →</button>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /wizard -->
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+const S = {
+  step: 1,
+  total: 6,
+  provider: 'anthropic',
+  llmTested: false,
+  sysChecksOk: false,
+  existingConfig: {},
+  gateways: { telegram: false, discord: false, slack: false, whatsapp: false, signal: false, ha: false },
+};
+
+// ── Step navigation ──────────────────────────────────────────────────────────
+function goTo(n) {
+  document.querySelector('.step-panel.active')?.classList.remove('active');
+  document.querySelector(`.step-panel#panel-${n}`)?.classList.add('active');
+  document.querySelectorAll('.step-item').forEach(el => {
+    const sn = +el.dataset.step;
+    el.classList.remove('active', 'done');
+    if (sn === n) el.classList.add('active');
+    else if (sn < n) el.classList.add('done');
+  });
+  S.step = n;
+  document.getElementById('btn-back').style.display = n > 1 ? '' : 'none';
+
+  const isLast = n === S.total;
+  const btn = document.getElementById('btn-next');
+  btn.textContent = isLast ? '💾 Save & Launch Dashboard' : 'Next →';
+
+  document.getElementById('progressFill').style.width = `${(n / S.total) * 100}%`;
+  document.getElementById('progressLabel').textContent = `Step ${n} of ${S.total}`;
+
+  if (n === 1) runSystemChecks();
+  if (n === 5) runPreflight();
+  if (n === 6) buildSummary();
+}
+
+function goNext() {
+  if (S.step === 6) { saveAndLaunch(); return; }
+  goTo(S.step + 1);
+}
+
+function goBack() { if (S.step > 1) goTo(S.step - 1); }
+
+// ── Step 1: System checks ────────────────────────────────────────────────────
+async function runSystemChecks() {
+  setCheck('node', 'spin', 'Checking…');
+  setCheck('memory', 'spin', 'Checking…');
+  setCheck('ollama', 'spin', 'Checking…');
+  setCheck('env', 'spin', 'Checking…');
+
+  // Node.js — always passes (we're running)
+  setCheck('node', 'ok', `Node.js ${typeof process !== 'undefined' ? 'running' : 'ok'}`);
+
+  // Memory service
+  try {
+    const r = await api('/api/setup/test-service', { url: 'http://localhost:5000/health' });
+    if (r.ok) setCheck('memory', 'ok', 'Running on :5000');
+    else       setCheck('memory', 'warn', 'Not running — start with start_server.ps1');
+  } catch {    setCheck('memory', 'warn', 'Not reachable — will start with server'); }
+
+  // Ollama
+  try {
+    const r = await api('/api/setup/test-llm', { provider: 'ollama', ollamaUrl: 'http://localhost:11434' });
+    if (r.ok) setCheck('ollama', 'ok', r.hint || 'Running');
+    else       setCheck('ollama', 'warn', 'Not running (optional — only needed for local inference)');
+  } catch {    setCheck('ollama', 'warn', 'Not running (optional)'); }
+
+  // Existing config
+  try {
+    const r = await fetch('/api/setup/status').then(x => x.json());
+    S.existingConfig = r.config || {};
+    if (r.config?.provider) {
+      setCheck('env', 'ok', `Found: provider=${r.config.provider}`);
+      preloadConfig(r.config);
+    } else {
+      setCheck('env', 'warn', 'No .env found — will create one');
+    }
+  } catch { setCheck('env', 'warn', 'Could not read existing config'); }
+
+  S.sysChecksOk = true;
+  const summary = document.getElementById('chk-summary');
+  document.getElementById('chk-summary-text').textContent =
+    'System check complete. Proceed to configure your LLM provider.';
+  summary.style.display = 'flex';
+}
+
+function setCheck(id, cls, text) {
+  const el = document.getElementById(`chk-${id}-status`);
+  if (!el) return;
+  el.className = `check-status ${cls}`;
+  el.textContent = text;
+}
+
+function preloadConfig(cfg) {
+  if (cfg.provider) selectProvider(cfg.provider);
+  val('inp-port', cfg.port);
+  val('inp-mem-url', cfg.memoryServiceUrl);
+  val('inp-redis', cfg.redisUrl);
+  val('inp-webhook', cfg.webhookUrl);
+  val('inp-thinking', cfg.maxThinkingTokens);
+  val('inp-ollama-url', cfg.ollamaUrl);
+  val('inp-custom-url', cfg.customHttpUrl);
+  val('inp-custom-model', cfg.customHttpModel);
+  val('inp-sovereign', cfg.sovereignFallback);
+  if (cfg.agentshieldMode) setShield(cfg.agentshieldMode);
+  if (cfg.safeMode === 'false') document.getElementById('tog-safe').checked = false;
+  if (cfg.headlessMode === 'true') document.getElementById('tog-headless').checked = true;
+  // Gateway presence hints
+  if (cfg.hasTelegramToken) setGwStatus('telegram', 'Configured (token already set)');
+  if (cfg.hasDiscordToken)  setGwStatus('discord',  'Configured (token already set)');
+  if (cfg.hasSlackToken)    setGwStatus('slack',     'Configured (token already set)');
+  if (cfg.hasSignalPhone)   setGwStatus('signal',    'Configured');
+  if (cfg.hasHAUrl)         setGwStatus('ha',        'Configured');
+}
+
+function val(id, v) { const el = document.getElementById(id); if (el && v) el.value = v; }
+function get(id)    { return document.getElementById(id)?.value?.trim() || ''; }
+function checked(id){ return document.getElementById(id)?.checked; }
+
+// ── Step 2: Provider ─────────────────────────────────────────────────────────
+document.getElementById('providerGrid').addEventListener('click', e => {
+  const card = e.target.closest('.provider-card');
+  if (!card) return;
+  selectProvider(card.dataset.provider);
+});
+
+function selectProvider(p) {
+  document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('selected'));
+  document.querySelector(`.provider-card[data-provider="${p}"]`)?.classList.add('selected');
+  document.querySelectorAll('.provider-fields').forEach(f => f.style.display = 'none');
+  const pf = document.getElementById(`pf-${p}`);
+  if (pf) pf.style.display = '';
+  S.provider = p;
+  S.llmTested = false;
+  resetTestResult();
+}
+
+async function testLLM() {
+  const btn = document.getElementById('btn-test-llm');
+  btn.disabled = true;
+  btn.textContent = '⟳ Testing…';
+  resetTestResult();
+
+  const payload = {
+    provider: S.provider,
+    apiKey:   getApiKey(),
+    model:    getModel(),
+    ollamaUrl:   get('inp-ollama-url'),
+    customUrl:   get('inp-custom-url'),
+    customModel: get('inp-custom-model'),
+  };
+
+  try {
+    const r = await api('/api/setup/test-llm', payload);
+    showTestResult(r.ok, r.hint || (r.ok ? 'Connected' : 'Failed'));
+    S.llmTested = r.ok;
+  } catch (err) {
+    showTestResult(false, err.message);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⚡ Test Connection';
+}
+
+function getApiKey() {
+  const map = { anthropic:'inp-anthropic-key', openai:'inp-openai-key',
+    google:'inp-google-key', nvidia:'inp-nvidia-key',
+    huggingface:'inp-hf-token', openrouter:'inp-openrouter-key' };
+  return get(map[S.provider] || '');
+}
+function getModel() {
+  const map = { anthropic:'inp-anthropic-model', openai:'inp-openai-model',
+    google:'inp-google-model', ollama:'inp-ollama-model',
+    nvidia:'inp-nvidia-model', huggingface:'inp-hf-model',
+    openrouter:'inp-openrouter-model' };
+  return get(map[S.provider] || '');
+}
+
+function showTestResult(ok, hint) {
+  const el = document.getElementById('llm-test-result');
+  el.className = `test-result show ${ok ? 'ok' : 'fail'}`;
+  el.textContent = `${ok ? '✓' : '✗'} ${hint}`;
+}
+function resetTestResult() {
+  const el = document.getElementById('llm-test-result');
+  el.className = 'test-result';
+}
+
+// Fetch Ollama models on URL change
+document.getElementById('inp-ollama-url').addEventListener('change', async function() {
+  const r = await api('/api/setup/test-llm', { provider: 'ollama', ollamaUrl: this.value }).catch(() => null);
+  if (r?.ok && r.models?.length) {
+    const box = document.getElementById('ollama-models-list');
+    box.style.display = '';
+    document.getElementById('ollama-models').textContent = r.models.join('  ·  ');
+  }
+});
+
+// ── Step 3: Gateways ─────────────────────────────────────────────────────────
+function toggleGateway(name) {
+  const toggle = document.getElementById(`gw-${name}-toggle`);
+  const item   = document.getElementById(`gw-${name}`);
+  S.gateways[name] = toggle.checked;
+  item.classList.toggle('enabled', toggle.checked);
+}
+
+function updateGwStatus(name) {
+  const inputs = {
+    telegram: 'inp-telegram-token', discord: 'inp-discord-token',
+    slack: 'inp-slack-bot', whatsapp: 'inp-whatsapp-path',
+    signal: 'inp-signal-phone', ha: 'inp-ha-url',
+  };
+  const v = get(inputs[name]);
+  setGwStatus(name, v ? 'Configured' : 'Not configured');
+}
+
+function setGwStatus(name, text) {
+  const el = document.getElementById(`gw-${name}-status`);
+  if (el) el.textContent = text;
+}
+
+// ── Step 4: Advanced ─────────────────────────────────────────────────────────
+function setShield(val) {
+  ['none', 'advisory', 'gate'].forEach(v => {
+    const opt = document.getElementById(`shield-${v}-opt`);
+    opt?.classList.toggle('selected', v === val);
+    const inp = document.getElementById(`shield-${v}`);
+    if (inp) inp.checked = v === val;
+  });
+}
+
+document.querySelectorAll('input[name="agentshield"]').forEach(r => {
+  r.addEventListener('change', () => setShield(r.value));
+});
+
+// ── Step 5: Pre-flight ────────────────────────────────────────────────────────
+async function runPreflight() {
+  const list = document.getElementById('pfList');
+  list.innerHTML = '';
+
+  const tests = buildPreflightTests();
+  const rows = tests.map(t => {
+    const div = document.createElement('div');
+    div.className = 'pf-row';
+    div.id = `pf-${t.id}`;
+    div.innerHTML = `
+      <span class="pf-icon">${t.icon}</span>
+      <div style="flex:1">
+        <div class="pf-label">${t.label}</div>
+        <div class="pf-hint" id="pf-hint-${t.id}">Pending…</div>
+      </div>
+      <span class="pf-badge spin" id="pf-badge-${t.id}">Testing</span>`;
+    list.appendChild(div);
+    return t;
+  });
+
+  let pass = 0, fail = 0;
+
+  for (const t of rows) {
+    try {
+      const r = await t.run();
+      const ok = r?.ok ?? false;
+      document.getElementById(`pf-${t.id}`).classList.add(ok ? 'ok' : 'fail');
+      const badge = document.getElementById(`pf-badge-${t.id}`);
+      badge.className = `pf-badge ${ok ? 'ok' : (t.optional ? 'skip' : 'fail')}`;
+      badge.textContent = ok ? 'OK' : (t.optional ? 'Skipped' : 'Failed');
+      document.getElementById(`pf-hint-${t.id}`).textContent = r?.hint || (ok ? 'Connected' : 'Not reachable');
+      if (ok) pass++; else if (!t.optional) fail++;
+    } catch (err) {
+      document.getElementById(`pf-badge-${t.id}`).className = 'pf-badge fail';
+      document.getElementById(`pf-badge-${t.id}`).textContent = 'Error';
+      document.getElementById(`pf-hint-${t.id}`).textContent = err.message;
+      if (!t.optional) fail++;
+    }
+  }
+
+  const summary = document.getElementById('pf-summary');
+  const box = document.getElementById('pf-summary-box');
+  const icon = document.getElementById('pf-summary-icon');
+  const text = document.getElementById('pf-summary-text');
+  summary.style.display = '';
+  if (fail === 0) {
+    box.classList.remove('callout-warn');
+    icon.textContent = '✅';
+    text.textContent = `All ${pass} checks passed — ready to launch.`;
+  } else {
+    box.classList.add('callout-warn');
+    icon.textContent = '⚠️';
+    text.textContent = `${pass} passed · ${fail} failed. Optional services can be ignored. You can proceed to launch.`;
+  }
+}
+
+function buildPreflightTests() {
+  const tests = [
+    {
+      id: 'llm', icon: '🤖', label: `LLM Provider: ${S.provider}`,
+      optional: false,
+      run: () => api('/api/setup/test-llm', {
+        provider: S.provider, apiKey: getApiKey(), model: getModel(),
+        ollamaUrl: get('inp-ollama-url'), customUrl: get('inp-custom-url'), customModel: get('inp-custom-model'),
+      }),
+    },
+    {
+      id: 'memory', icon: '🧠', label: 'Memory Service (localhost:5000)',
+      optional: true,
+      run: () => api('/api/setup/test-service', { url: get('inp-mem-url') + '/health' }),
+    },
+  ];
+
+  if (S.gateways.telegram && get('inp-telegram-token')) {
+    tests.push({ id: 'telegram', icon: '✈️', label: 'Telegram Bot', optional: true,
+      run: async () => {
+        const tok = get('inp-telegram-token');
+        const r = await api('/api/setup/test-service', { url: `https://api.telegram.org/bot${tok}/getMe` });
+        return { ok: r.ok, hint: r.ok ? 'Bot token valid' : 'Invalid token — check @BotFather' };
+      } });
+  }
+
+  if (S.gateways.ha && get('inp-ha-url')) {
+    tests.push({ id: 'ha', icon: '🏠', label: 'Home Assistant', optional: true,
+      run: () => api('/api/setup/test-service', { url: get('inp-ha-url') + '/api/' }) });
+  }
+
+  return tests;
+}
+
+// ── Step 6: Summary & Save ────────────────────────────────────────────────────
+function buildSummary() {
+  const grid = document.getElementById('summaryGrid');
+  const gws  = Object.keys(S.gateways).filter(k => S.gateways[k]).join(', ') || 'None';
+  const shield = document.querySelector('input[name="agentshield"]:checked')?.value || 'advisory';
+
+  const items = [
+    { label: 'LLM Provider', val: S.provider },
+    { label: 'Model', val: getModel() || 'Default' },
+    { label: 'API Port', val: get('inp-port') || '3001' },
+    { label: 'AgentShield', val: shield },
+    { label: 'Safe Mode', val: checked('tog-safe') ? 'Enabled' : 'Disabled' },
+    { label: 'Headless Mode', val: checked('tog-headless') ? 'Enabled' : 'Disabled' },
+    { label: 'Gateways', val: gws },
+    { label: 'Memory Service', val: get('inp-mem-url') || 'http://localhost:5000' },
+  ];
+
+  grid.innerHTML = items.map(i => `
+    <div class="summary-card">
+      <div class="sc-label">${i.label}</div>
+      <div class="sc-val">${i.val}</div>
+    </div>`).join('');
+
+  // Show restart notice if port changed or gateways configured
+  const needsRestart = get('inp-port') !== '3001' || Object.values(S.gateways).some(v => v);
+  document.getElementById('restart-notice').style.display = needsRestart ? 'flex' : 'none';
+}
+
+function buildConfig() {
+  const shield = document.querySelector('input[name="agentshield"]:checked')?.value || 'advisory';
+  const cfg = {
+    PORT:                  get('inp-port')       || '3001',
+    MEMORY_SERVICE_URL:    get('inp-mem-url')    || 'http://localhost:5000',
+    REDIS_URL:             get('inp-redis'),
+    SAFE_MODE:             checked('tog-safe')    ? 'true' : 'false',
+    HEADLESS_MODE:         checked('tog-headless') ? 'true' : 'false',
+    AGENTSHIELD_MODE:      shield,
+    MAX_THINKING_TOKENS:   get('inp-thinking')   || '10000',
+    LLM_PROVIDER:          S.provider,
+    LLM_MODEL:             getModel(),
+    OLLAMA_BASE_URL:       get('inp-ollama-url') || 'http://localhost:11434',
+    SOVEREIGN_FALLBACK_MODEL: get('inp-sovereign') || 'gemma4:e2b',
+    CUSTOM_HTTP_URL:       get('inp-custom-url'),
+    CUSTOM_HTTP_MODEL:     get('inp-custom-model'),
+    OCTOPUS_WEBHOOK_URL:   get('inp-webhook'),
+    GITHUB_TOKEN:          get('inp-github'),
+  };
+
+  // API keys
+  const keyMap = { anthropic:'inp-anthropic-key', openai:'inp-openai-key',
+    google:'inp-google-key', nvidia:'inp-nvidia-key',
+    huggingface:'inp-hf-token', openrouter:'inp-openrouter-key' };
+  cfg.ANTHROPIC_API_KEY   = get('inp-anthropic-key');
+  cfg.OPENAI_API_KEY      = get('inp-openai-key');
+  cfg.GOOGLE_API_KEY      = get('inp-google-key');
+  cfg.NVIDIA_API_KEY      = get('inp-nvidia-key');
+  cfg.HF_TOKEN            = get('inp-hf-token');
+  cfg.OPENROUTER_API_KEY  = get('inp-openrouter-key');
+
+  // Gateways
+  if (S.gateways.telegram)  cfg.TELEGRAM_BOT_TOKEN   = get('inp-telegram-token');
+  if (S.gateways.discord)   cfg.DISCORD_BOT_TOKEN    = get('inp-discord-token');
+  if (S.gateways.slack)   { cfg.SLACK_BOT_TOKEN      = get('inp-slack-bot'); cfg.SLACK_APP_TOKEN = get('inp-slack-app'); }
+  if (S.gateways.whatsapp)  cfg.WHATSAPP_SESSION_PATH = get('inp-whatsapp-path');
+  if (S.gateways.signal)    cfg.SIGNAL_PHONE          = get('inp-signal-phone');
+  if (S.gateways.ha)      { cfg.HA_URL               = get('inp-ha-url');   cfg.HA_TOKEN = get('inp-ha-token'); }
+
+  return cfg;
+}
+
+async function saveAndLaunch() {
+  const btn = document.getElementById('btn-next');
+  btn.disabled = true;
+  btn.textContent = '⟳ Saving…';
+
+  try {
+    const r = await api('/api/setup/save', { config: buildConfig(), complete: true });
+    if (r.ok) {
+      btn.textContent = '✓ Saved! Opening dashboard…';
+      setTimeout(() => { window.location.href = '/dashboard'; }, 800);
+    } else {
+      btn.textContent = '✗ Error — check console';
+      btn.disabled = false;
+    }
+  } catch (err) {
+    btn.textContent = `✗ ${err.message}`;
+    btn.disabled = false;
+  }
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+goTo(1);
+</script>
+</body>
+</html>

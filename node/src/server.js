@@ -16,6 +16,7 @@ const toolLoader    = require('./tool_loader');
 const { search: webSearch, formatResults } = require('./tools/web_search');
 const { processDocument } = require('./tools/document');
 const { initGateways, manager: gatewayManager } = require('./gateways');
+const { router: setupRouter, isSetupComplete, SETUP_HTML } = require('./setup-api');
 
 // ── HEADLESS_MODE ────────────────────────────────────────────────────────────
 // When true: Cortex does not auto-plan; external LLMs call octopus_* tools directly.
@@ -898,10 +899,17 @@ app.get('/api/router', (_req, res) => {
   res.json({ routes: summarise() });
 });
 
+// ── Setup wizard ──────────────────────────────────────────────────────────────
+app.use('/api/setup', setupRouter);
+app.get('/setup', (_req, res) => res.sendFile(SETUP_HTML));
+
 // ── Web dashboard (power-user UI, no hardware needed) ────────────────────────
 const DASHBOARD_HTML = path.join(__dirname, 'dashboard', 'index.html');
 app.get('/dashboard', (_req, res) => res.sendFile(DASHBOARD_HTML));
-app.get('/', (_req, res) => res.redirect('/dashboard'));
+app.get('/', (_req, res) => {
+  if (!isSetupComplete()) return res.redirect('/setup');
+  res.redirect('/dashboard');
+});
 
 // ── 404 catch-all ─────────────────────────────────────────────────────────────
 app.use((req, res) => {

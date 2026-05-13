@@ -50,13 +50,16 @@ After install, start everything:
 .\start_server.ps1   # starts API + WebSocket + memory service
 ```
 
-Open: **http://localhost:3001/dashboard**
+Open: **http://localhost:3001**
+
+On first run you are redirected to the **Setup Wizard** automatically. Once configuration is saved, `http://localhost:3001` opens the HUD dashboard directly.
 
 ---
 
 ## Table of Contents
 
 - [What's New in v4.0](#whats-new-in-v40)
+- [Setup Wizard](#setup-wizard)
 - [Architecture](#architecture)
 - [O.C.T.O HUD Dashboard](#octo-hud-dashboard)
 - [Multi-Model AI Router](#multi-model-ai-router)
@@ -122,6 +125,72 @@ Open: **http://localhost:3001/dashboard**
 
 ---
 
+## Setup Wizard
+
+On first launch `http://localhost:3001` redirects to `/setup` — a six-step configuration wizard that runs before the dashboard opens.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  OCTOPUS SETUP WIZARD  ·  Initial Configuration                 │
+├───────────────┬─────────────────────────────────────────────────┤
+│  Sidebar      │  Main Content                                   │
+│               │                                                  │
+│  1 System     │  • System Check  — auto-tests Node.js,         │
+│    Check   ←  │    Memory Service, Ollama, existing .env        │
+│               │                                                  │
+│  2 LLM        │  • LLM Provider — provider cards (9 options),  │
+│    Provider   │    per-provider API key + model fields,         │
+│               │    live "Test Connection" button                 │
+│  3 Messaging  │                                                  │
+│    Gateways   │  • Gateways — toggle accordion for Telegram,   │
+│               │    Discord, Slack, WhatsApp, Signal, HA         │
+│  4 Advanced   │                                                  │
+│    Settings   │  • Advanced — AgentShield mode, Safe/Headless  │
+│               │    toggles, port, Redis, GitHub token, webhook  │
+│  5 Pre-flight │                                                  │
+│    Check      │  • Pre-flight — live connection tests for all  │
+│               │    configured services with pass/fail badges    │
+│  6 Launch  →  │                                                  │
+│               │  • Launch — config summary + Save & Launch      │
+└───────────────┴─────────────────────────────────────────────────┘
+```
+
+### How it works
+
+1. Start the server — `.\start_server.ps1`
+2. Open `http://localhost:3001` — redirects to `/setup` on first run
+3. Complete the 6 steps (all gateway/advanced steps are optional)
+4. Click **Save & Launch Dashboard** — config is written to `node/.env` and the marker file `node/.setup-complete` is created
+5. All subsequent visits to `/` redirect straight to `/dashboard`
+
+### Re-running setup
+
+To reconfigure, delete the marker file and reload:
+
+```powershell
+Remove-Item node\.setup-complete
+# then open http://localhost:3001 — setup wizard runs again
+```
+
+Or call the API:
+
+```bash
+POST /api/setup/reset
+```
+
+### Setup API
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/setup/status` | Current config state (all keys masked) |
+| `POST` | `/api/setup/test-llm` | Live-test an LLM provider connection |
+| `POST` | `/api/setup/test-service` | Ping any HTTP service URL |
+| `POST` | `/api/setup/save` | Write config to `node/.env` + mark complete |
+| `POST` | `/api/setup/reset` | Delete setup marker (triggers re-run on next `/`) |
+| `GET` | `/setup` | Setup wizard HTML |
+
+---
+
 ## Architecture
 
 ```
@@ -136,6 +205,7 @@ Open: **http://localhost:3001/dashboard**
 │  │  REST API  :3001                    │  │  Signal     Home Assistant   │ │
 │  │  WS  ws://:3001/ws                  │  │                              │ │
 │  │  O.C.T.O Dashboard /dashboard       │  │  manager.js (shared router)  │ │
+│  Setup Wizard  /setup               │  └──────────────────────────────┘ │
 │  │  AgentShield 102 rules              │  └──────────────────────────────┘ │
 │  │  Instincts (learn)                  │                                    │
 │  │  Multi-model router                 │  ┌──────────────────────────────┐ │
