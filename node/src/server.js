@@ -899,6 +899,33 @@ app.get('/api/router', (_req, res) => {
   res.json({ routes: summarise() });
 });
 
+// ── WhatsApp QR & on-demand pairing ───────────────────────────────────────────
+app.get('/api/gateways/whatsapp/qr', (_req, res) => {
+  const wa = gatewayManager.gateways.get('whatsapp');
+  res.json({ qr: wa ? wa.qrData : null, online: wa ? wa.online : false });
+});
+
+app.post('/api/gateways/whatsapp/pair', async (req, res) => {
+  const { sessionPath } = req.body || {};
+  if (sessionPath) process.env.WHATSAPP_SESSION_PATH = sessionPath;
+  if (!process.env.WHATSAPP_SESSION_PATH) {
+    return res.status(400).json({ error: 'WHATSAPP_SESSION_PATH required' });
+  }
+  if (gatewayManager.gateways.has('whatsapp')) {
+    const wa = gatewayManager.gateways.get('whatsapp');
+    return res.json({ ok: true, status: wa.online ? 'connected' : 'waiting_qr' });
+  }
+  try {
+    const waModule = require('./gateways/whatsapp');
+    const instance = new waModule();
+    const ok = await instance.init(gatewayManager);
+    if (ok) instance.on('qr', (qr) => broadcastEvent('whatsapp_qr', { qr }));
+    res.json({ ok, status: ok ? 'started' : 'failed' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Setup wizard ──────────────────────────────────────────────────────────────
 app.use('/api/setup', setupRouter);
 app.get('/setup', (_req, res) => res.sendFile(SETUP_HTML));
@@ -978,6 +1005,10 @@ if (require.main === module) {
     };
 
     await initGateways(gatewayTaskHandler, broadcastEvent);
+
+    // Wire WhatsApp QR broadcast so dashboard receives it in real-time
+    const waGateway = gatewayManager.gateways.get('whatsapp');
+    if (waGateway) waGateway.on('qr', (qr) => broadcastEvent('whatsapp_qr', { qr }));
   });
 }
 

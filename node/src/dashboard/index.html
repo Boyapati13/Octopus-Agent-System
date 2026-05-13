@@ -921,7 +921,6 @@
     <!-- ══════════════════ HEADER ══════════════════ -->
     <header class="header">
       <div class="header-left">
-        <div class="brand-badge">MARK.O</div>
         <div>
           <div class="header-title">O.C.T.O Command Interface</div>
           <div class="header-sub">Optimized Cognitive Task Orchestrator — Octopus Industries</div>
@@ -1120,10 +1119,23 @@
 
         <!-- Gateways tab -->
         <div class="tab-pane" id="tab-gateways">
-          <div class="gw-wrap" id="gw-list">
-            <div style="font-size:9px;color:var(--text-dim);letter-spacing:0.08em;padding:4px 0;">
-              Gateways bridge external platforms to Octopus. Configure env vars in node/.env and restart.
+          <div class="gw-wrap" id="gw-list"></div>
+          <!-- WhatsApp QR panel — shown when gateway is waiting for scan -->
+          <div id="wa-qr-panel" style="display:none;margin-top:10px;text-align:center">
+            <div style="font-size:9px;color:var(--acc2);letter-spacing:1px;margin-bottom:8px">
+              📱 WHATSAPP PAIRING — Scan with your phone
             </div>
+            <img id="wa-qr-img" src="" alt="WhatsApp QR"
+              style="width:180px;height:180px;border:2px solid var(--pri-dim);border-radius:4px;background:#fff">
+            <div style="font-size:9px;color:var(--text-dim);margin-top:6px">
+              WhatsApp → Linked Devices → Link a Device
+            </div>
+            <button onclick="refreshWaQR()" style="
+              margin-top:6px;font-family:inherit;font-size:9px;letter-spacing:1px;
+              background:transparent;border:1px solid var(--border-b);color:var(--text-dim);
+              padding:3px 10px;cursor:pointer;border-radius:3px">
+              ↻ Refresh QR
+            </button>
           </div>
         </div>
 
@@ -2177,7 +2189,7 @@
       telegram:       "Set TELEGRAM_BOT_TOKEN + npm install node-telegram-bot-api",
       discord:        "Set DISCORD_BOT_TOKEN + npm install discord.js",
       slack:          "Set SLACK_BOT_TOKEN + SLACK_APP_TOKEN + npm install @slack/bolt",
-      whatsapp:       "npm install @whiskeysockets/baileys (QR scan on first run)",
+      whatsapp:       "Set WHATSAPP_SESSION_PATH in .env — QR appears below when pairing",
       signal:         "Set SIGNAL_PHONE + SIGNAL_CLI_PORT (signal-cli daemon required)",
       home_assistant: "Set HA_URL + HA_TOKEN (built-in, no extra packages)",
     };
@@ -2204,6 +2216,25 @@
       } catch(_) {
         listEl.innerHTML += '<div style="font-size:9px;color:var(--red);">Could not load gateway status</div>';
       }
+    }
+
+    function showWaQR(qr) {
+      if (!qr) return;
+      const panel = document.getElementById("wa-qr-panel");
+      const img   = document.getElementById("wa-qr-img");
+      img.src = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=" + encodeURIComponent(qr);
+      panel.style.display = "";
+    }
+
+    async function refreshWaQR() {
+      try {
+        const r = await apiFetch("/api/gateways/whatsapp/qr");
+        if (r.online) {
+          document.getElementById("wa-qr-panel").style.display = "none";
+        } else if (r.qr) {
+          showWaQR(r.qr);
+        }
+      } catch(_) {}
     }
 
     // ═══════════════════════════════════════════════════════
@@ -2388,6 +2419,9 @@
           }
           if (type === "gateway_reply") {
             logLine("log-octo", "GW→", (data.reply || "").slice(0, 160));
+          }
+          if (type === "whatsapp_qr") {
+            showWaQR(data.qr);
           }
           if (type === "web_search") {
             logLine("log-system", "SEARCH", "Queried: " + (data.query || "") + " (" + (data.count || 0) + " results)");

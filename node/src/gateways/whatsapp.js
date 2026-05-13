@@ -29,6 +29,7 @@ class WhatsAppGateway extends EventEmitter {
     super();
     this.sock           = null;
     this.online         = false;
+    this.qrData         = null;   // latest QR string — exposed via /api/gateways/whatsapp/qr
     this.sessionPath    = process.env.WHATSAPP_SESSION_PATH
       || path.join(os.homedir(), '.octopus', 'wa_session');
     this.triggerWord    = (process.env.WHATSAPP_TRIGGER_WORD || 'octo').toLowerCase();
@@ -64,7 +65,11 @@ class WhatsAppGateway extends EventEmitter {
       this.sock.ev.on('creds.update', saveCreds);
 
       this.sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-        if (qr) console.error('[whatsapp] Scan QR code above to connect');
+        if (qr) {
+          this.qrData = qr;
+          this.emit('qr', qr);
+          console.error('[whatsapp] QR ready — scan in dashboard Gateways tab or terminal above');
+        }
         if (connection === 'open') {
           this.online = true;
           console.error('[whatsapp] Connected');

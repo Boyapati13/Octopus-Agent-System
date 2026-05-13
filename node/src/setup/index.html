@@ -788,15 +788,25 @@ body{
             </label>
           </div>
           <div class="gateway-body">
-            <div class="callout callout-warn">
-              <span class="icon">⚠️</span>
-              WhatsApp uses QR code scanning on first run. Scan via the Octopus dashboard. Session is stored locally.
-            </div>
             <div class="field">
               <label>Session Storage Path</label>
               <input type="text" id="inp-whatsapp-path" placeholder="../data/whatsapp-session"
                 oninput="updateGwStatus('whatsapp')">
               <div class="hint">Folder where session keys are persisted across restarts</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <button class="btn btn-test" id="btn-wa-pair" onclick="startWaPair()">📱 Pair WhatsApp Now</button>
+              <span id="wa-pair-status" style="font-size:11px;color:var(--text-dim)"></span>
+            </div>
+            <!-- QR display -->
+            <div id="wa-qr-box" style="display:none;text-align:center;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:6px">
+              <div style="font-size:10px;color:var(--gold);letter-spacing:1.5px;margin-bottom:10px">
+                📱 Scan with WhatsApp → Linked Devices → Link a Device
+              </div>
+              <img id="wa-qr-img-setup" src="" alt="WhatsApp QR"
+                style="width:180px;height:180px;background:#fff;border-radius:4px">
+              <div style="font-size:10px;color:var(--text-dim);margin-top:8px">QR refreshes every 30s automatically</div>
+              <button class="btn btn-ghost btn-sm" onclick="pollWaQR()" style="margin-top:8px">↻ Refresh</button>
             </div>
           </div>
         </div>
@@ -939,6 +949,23 @@ body{
           <label>Redis URL (optional — for L4 prompt cache)</label>
           <input type="text" id="inp-redis" placeholder="redis://localhost:6379">
           <div class="hint">Falls back to in-memory cache if unset</div>
+        </div>
+      </div>
+
+      <!-- Voice -->
+      <div class="section-title">Voice Service</div>
+      <div style="margin-bottom:24px">
+        <div class="callout">
+          <span class="icon">🎙️</span>
+          <div>The Gemini Live voice service enables real-time speech input/output. Get a free key at
+            <strong style="color:var(--cyan)">aistudio.google.com</strong>.
+            Start separately with <code style="color:var(--orange)">.\start_voice.ps1</code>.
+          </div>
+        </div>
+        <div class="field">
+          <label>Gemini API Key (for voice service)</label>
+          <input type="password" id="inp-gemini-key" placeholder="AIza…" autocomplete="off">
+          <div class="hint">Used by python/services/voice_service.py — separate from the LLM provider above</div>
         </div>
       </div>
 
@@ -1380,6 +1407,7 @@ function buildConfig() {
     CUSTOM_HTTP_MODEL:     get('inp-custom-model'),
     OCTOPUS_WEBHOOK_URL:   get('inp-webhook'),
     GITHUB_TOKEN:          get('inp-github'),
+    GEMINI_API_KEY:        get('inp-gemini-key'),
   };
 
   // API keys
@@ -1433,6 +1461,55 @@ async function api(path, body) {
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
+}
+
+// ── WhatsApp pairing ──────────────────────────────────────────────────────────
+let waQRInterval = null;
+
+async function startWaPair() {
+  const path = get('inp-whatsapp-path') || '../data/whatsapp-session';
+  const btn  = document.getElementById('btn-wa-pair');
+  const stat = document.getElementById('wa-pair-status');
+  btn.disabled = true;
+  stat.textContent = 'Starting WhatsApp gateway…';
+  stat.style.color = 'var(--cyan)';
+
+  try {
+    const r = await api('/api/gateways/whatsapp/pair', { sessionPath: path });
+    if (r.ok) {
+      if (r.status === 'connected') {
+        stat.textContent = '✓ Already connected';
+        stat.style.color = 'var(--green)';
+      } else {
+        stat.textContent = 'Waiting for QR scan…';
+        pollWaQR();
+        waQRInterval = setInterval(pollWaQR, 8000);
+      }
+    } else {
+      stat.textContent = '✗ ' + (r.error || 'Failed');
+      stat.style.color = 'var(--red)';
+    }
+  } catch (err) {
+    stat.textContent = '✗ ' + err.message;
+    stat.style.color = 'var(--red)';
+  }
+  btn.disabled = false;
+}
+
+async function pollWaQR() {
+  try {
+    const r = await fetch('/api/gateways/whatsapp/qr').then(x => x.json());
+    if (r.online) {
+      document.getElementById('wa-qr-box').style.display = 'none';
+      document.getElementById('wa-pair-status').textContent = '✓ WhatsApp connected!';
+      document.getElementById('wa-pair-status').style.color = 'var(--green)';
+      clearInterval(waQRInterval);
+    } else if (r.qr) {
+      const img = document.getElementById('wa-qr-img-setup');
+      img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(r.qr);
+      document.getElementById('wa-qr-box').style.display = '';
+    }
+  } catch (_) {}
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
