@@ -51,6 +51,7 @@ export interface AdapterEvent {
 export interface PluginCommand {
   type: 'send_prompt' | 'interrupt' | 'permission_response' | 'mode_switch';
   text?: string;
+  source?: 'text' | 'voice';
   response?: string;
   mode?: string;
 }
