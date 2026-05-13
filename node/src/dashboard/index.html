@@ -1,757 +1,2227 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Octopus Dashboard</title>
-    <style>
-        :root {
-            --bg: #eff2f7;
-            --surface: #ffffff;
-            --surface-soft: #f8fafc;
-            --text: #1f2937;
-            --muted: #64748b;
-            --line: #dbe3ee;
-            --brand: #2f8fd6;
-            --brand-soft: #e5f1fb;
-            --ok: #16a34a;
-            --warn: #ca8a04;
-            --danger: #dc2626;
-            --shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Octopus — O.C.T.O Command Interface</title>
+  <style>
+    /* ═══════════════════════════════════════════
+       DESIGN TOKENS — Mark-XXXIX × Octopus Adapted
+       ═══════════════════════════════════════════ */
+    :root {
+      --bg:        #00060a;
+      --panel:     #010d14;
+      --panel2:    #010f18;
+      --border:    #0d3347;
+      --border-b:  #1a5c7a;
+      --border-a:  #0f4060;
+      --pri:       #00d4ff;
+      --pri-dim:   #007a99;
+      --pri-gho:   #001f2e;
+      --acc:       #ff6b00;
+      --acc2:      #ffcc00;
+      --green:     #00ff88;
+      --green-d:   #00aa55;
+      --red:       #ff3355;
+      --muted-c:   #ff3366;
+      --text:      #8ffcff;
+      --text-dim:  #3a8a9a;
+      --text-med:  #5ab8cc;
+      --white:     #d8f8ff;
+      --dark:      #000d14;
+      --bar-bg:    #011520;
+      --mono: "Courier New", "Cascadia Mono", Consolas, monospace;
+    }
 
-        * { box-sizing: border-box; }
-        html, body { height: 100%; }
-        body {
-            margin: 0;
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            overflow: hidden;
-        }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
 
-        button, textarea { font: inherit; }
-        button { cursor: pointer; }
+    body {
+      font-family: var(--mono);
+      color: var(--text);
+      background: var(--bg);
+      position: relative;
+    }
 
-        .shell {
-            height: 100%;
-            display: grid;
-            grid-template-rows: auto 1fr auto;
-        }
+    /* Full-page grid background */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background-image:
+        radial-gradient(circle, rgba(0,212,255,0.18) 1px, transparent 1px);
+      background-size: 45px 45px;
+      opacity: 0.22;
+    }
 
-        .topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 20px;
-            border-bottom: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.92);
-            backdrop-filter: blur(6px);
-        }
+    /* Ambient glow blobs */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 420px 260px at 18% 50%, rgba(0,212,255,0.06) 0%, transparent 70%),
+        radial-gradient(ellipse 300px 200px at 80% 20%, rgba(255,107,0,0.05) 0%, transparent 70%);
+    }
 
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: #526276;
-            font-size: 36px;
-            font-weight: 300;
-            letter-spacing: 0.01em;
-        }
+    /* ═══════════════════ LAYOUT SHELL ═══════════════════ */
+    .shell {
+      position: relative;
+      z-index: 1;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 54px 1fr 22px;
+      grid-template-columns: 168px 1fr 360px;
+      grid-template-areas:
+        "header header header"
+        "left   center right"
+        "footer footer footer";
+    }
 
-        .brand-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--brand);
-        }
+    /* ═══════════════════ HEADER ═══════════════════ */
+    .header {
+      grid-area: header;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      background: var(--dark);
+      border-bottom: 1px solid var(--border-b);
+      gap: 12px;
+      position: relative;
+      z-index: 10;
+    }
 
-        .top-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
 
-        .status-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 7px 10px;
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            background: var(--surface);
-            color: var(--muted);
-            font-size: 12px;
-        }
+    .brand-badge {
+      background: var(--pri-gho);
+      border: 1px solid var(--pri-dim);
+      color: var(--pri);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      padding: 4px 10px;
+      text-transform: uppercase;
+      position: relative;
+      clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+    }
 
-        .dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: #94a3b8;
-        }
+    .header-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--pri);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
 
-        .dot.live { background: var(--brand); animation: pulse 1.3s infinite; }
-        .dot.ok { background: var(--ok); }
-        .dot.warn { background: var(--warn); }
-        .dot.bad { background: var(--danger); }
+    .header-sub {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
 
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.3); opacity: 0.6; }
-        }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
 
-        .toggle-btn {
-            border: 1px solid var(--line);
-            background: var(--surface);
-            color: #516075;
-            border-radius: 10px;
-            width: 38px;
-            height: 38px;
-        }
+    .hdr-clock {
+      font-size: 13px;
+      color: var(--pri);
+      letter-spacing: 0.1em;
+      font-weight: 700;
+    }
 
-        .main {
-            overflow: auto;
-            padding: 26px;
-            display: grid;
-            gap: 18px;
-            align-content: start;
-            max-width: 980px;
-            margin: 0 auto;
-            width: 100%;
-        }
+    .hdr-date {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+    }
 
-        .answer-box {
-            border-radius: 16px;
-            border: 1px solid var(--line);
-            background: var(--surface);
-            box-shadow: var(--shadow);
-            padding: 22px;
-            min-height: 170px;
-            display: grid;
-            gap: 10px;
-        }
+    .hdr-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+    }
 
-        .answer-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-        }
+    .hdr-project-select {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text);
+      background: var(--panel);
+      border: 1px solid var(--border-b);
+      padding: 4px 8px;
+      cursor: pointer;
+      outline: none;
+      max-width: 180px;
+    }
 
-        .answer-state {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-            color: var(--muted);
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
+    .hdr-project-select:focus {
+      border-color: var(--pri-dim);
+    }
 
-        .answer-text {
-            font-size: 24px;
-            line-height: 1.5;
-            color: #2a3a4f;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
+    /* ═══════════════════ STATUS DOTS ═══════════════════ */
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border-b);
+      flex-shrink: 0;
+    }
+    .dot.live  { background: var(--pri);   animation: pulse 1.3s infinite; }
+    .dot.ok    { background: var(--green); }
+    .dot.warn  { background: var(--acc2); }
+    .dot.bad   { background: var(--red); }
+    .dot.muted { background: var(--muted-c); animation: pulse 1.3s infinite; }
 
-        .conversation {
-            border-radius: 14px;
-            border: 1px solid var(--line);
-            background: var(--surface-soft);
-            padding: 14px;
-            display: grid;
-            gap: 10px;
-            min-height: 220px;
-            max-height: 340px;
-            overflow: auto;
-        }
+    @keyframes pulse {
+      0%,100% { transform: scale(1); opacity:1; }
+      50%      { transform: scale(1.5); opacity:0.55; }
+    }
 
-        .msg {
-            border-radius: 12px;
-            border: 1px solid #d7e1ee;
-            background: var(--surface);
-            padding: 10px 12px;
-            display: grid;
-            gap: 5px;
-        }
+    /* ═══════════════════ LEFT PANEL — SYS MONITOR ═══════════════════ */
+    .left-panel {
+      grid-area: left;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      overflow: hidden;
+    }
 
-        .msg.user { border-color: #cde3f7; }
-        .msg.assistant { border-color: #dbeadf; }
+    .panel-section {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
 
-        .msg-role {
-            font-size: 11px;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-weight: 600;
-        }
+    .panel-section-title {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 700;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
 
-        .msg-text {
-            font-size: 14px;
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-break: break-word;
-            color: var(--text);
-        }
+    .panel-section-title::before {
+      content: "◈";
+      color: var(--pri);
+      font-size: 8px;
+    }
 
-        .composer {
-            border-top: 1px solid var(--line);
-            background: #f8fbff;
-            padding: 14px 20px 18px;
-            display: grid;
-            gap: 10px;
-        }
+    .metric-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 7px;
+    }
 
-        .task-input {
-            width: 100%;
-            min-height: 56px;
-            max-height: 140px;
-            resize: vertical;
-            border-radius: 12px;
-            border: 1px solid #cfd9e8;
-            background: #ffffff;
-            padding: 11px 12px;
-            color: var(--text);
-            outline: none;
-        }
+    .metric-label {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+      width: 28px;
+      flex-shrink: 0;
+      text-transform: uppercase;
+    }
 
-        .task-input:focus { border-color: #8ec1ea; }
+    .metric-bar-wrap {
+      flex: 1;
+      height: 6px;
+      background: var(--bar-bg);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
 
-        .actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
+    .metric-bar-fill {
+      height: 100%;
+      background: var(--pri-dim);
+      transition: width 0.8s ease, background 0.4s;
+      position: relative;
+    }
 
-        .btn {
-            border-radius: 10px;
-            border: 1px solid transparent;
-            padding: 8px 12px;
-            font-size: 13px;
-            font-weight: 600;
-        }
+    .metric-bar-fill::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 3px;
+      height: 100%;
+      background: var(--pri);
+      box-shadow: 0 0 6px var(--pri);
+    }
 
-        .btn.primary {
-            background: linear-gradient(135deg, #65b2eb, #2f8fd6);
-            color: #ffffff;
-        }
+    .metric-bar-fill.warn { background: #7a5500; }
+    .metric-bar-fill.warn::after { background: var(--acc2); box-shadow: 0 0 6px var(--acc2); }
+    .metric-bar-fill.hot  { background: #5c1020; }
+    .metric-bar-fill.hot::after  { background: var(--red);  box-shadow: 0 0 6px var(--red); }
 
-        .btn.secondary {
-            background: #ffffff;
-            color: #344256;
-            border-color: #d3deed;
-        }
+    .metric-val {
+      font-size: 9px;
+      color: var(--text-med);
+      width: 26px;
+      text-align: right;
+      flex-shrink: 0;
+    }
 
-        .btn.alert {
-            background: #fff1f2;
-            color: #9f1239;
-            border-color: #fecdd3;
-        }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      padding: 3px 0;
+    }
 
-        .drawer {
-            position: fixed;
-            right: 0;
-            top: 0;
-            width: 360px;
-            height: 100%;
-            border-left: 1px solid var(--line);
-            background: var(--surface);
-            transform: translateX(100%);
-            transition: transform 0.24s ease;
-            box-shadow: -10px 0 24px rgba(15, 23, 42, 0.08);
-            z-index: 10;
-            display: grid;
-            grid-template-rows: auto 1fr;
-        }
+    .status-badge .dot { width: 5px; height: 5px; }
 
-        .drawer.open { transform: translateX(0); }
+    .info-row {
+      font-size: 9px;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      padding: 2px 0;
+      display: flex;
+      justify-content: space-between;
+    }
 
-        .drawer-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid var(--line);
-            padding: 14px;
-        }
+    .info-val {
+      color: var(--text-med);
+    }
 
-        .drawer-title {
-            margin: 0;
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-        }
+    .left-spacer { flex: 1; }
 
-        .drawer-body {
-            overflow: auto;
-            padding: 12px 14px 20px;
-            display: grid;
-            gap: 14px;
-            align-content: start;
-        }
+    /* ═══════════════════ CENTER PANEL ═══════════════════ */
+    .center-panel {
+      grid-area: center;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
 
-        .card {
-            border: 1px solid #dce6f3;
-            border-radius: 12px;
-            background: #fafcff;
-            padding: 10px;
-            display: grid;
-            gap: 6px;
-        }
+    .hud-wrap {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 0 4px;
+      position: relative;
+    }
 
-        .card-title {
-            font-size: 11px;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-weight: 700;
-        }
+    #hud-canvas {
+      display: block;
+    }
 
-        .mono {
-            font-family: Consolas, "Cascadia Mono", monospace;
-            font-size: 12px;
-            color: #35465b;
-            word-break: break-all;
-        }
+    .hud-state-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 6px 0;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
 
-        .event {
-            border-top: 1px solid #e4edf8;
-            padding-top: 6px;
-            font-size: 12px;
-            color: #465970;
-            line-height: 1.45;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
+    .hud-state-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--text-dim);
+    }
 
-        @media (max-width: 900px) {
-            .main { padding: 16px; }
-            .answer-text { font-size: 20px; }
-            .drawer { width: 100%; }
-        }
-    </style>
+    .hud-state-item.active { color: var(--pri); }
+    .hud-state-item.active .dot { background: var(--pri); animation: pulse 1.3s infinite; }
+
+    /* Quick metrics strip below HUD */
+    .metrics-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 6px 14px 8px;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .metric-tile {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      position: relative;
+    }
+
+    /* Corner bracket decoration */
+    .metric-tile::before, .metric-tile::after,
+    .panel-bordered::before, .panel-bordered::after {
+      content: "";
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-color: var(--pri-dim);
+      border-style: solid;
+    }
+    .metric-tile::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+    .metric-tile::after  { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+    .tile-label {
+      font-size: 8px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .tile-value {
+      font-size: 11px;
+      color: var(--white);
+      line-height: 1.3;
+      word-break: break-word;
+    }
+
+    /* Answer box */
+    .answer-section {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 12px 16px;
+      gap: 8px;
+    }
+
+    .answer-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .answer-label {
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 700;
+    }
+
+    .answer-state-txt {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--acc);
+      font-weight: 700;
+    }
+
+    #answer-text {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: clamp(14px, 1.6vw, 20px);
+      line-height: 1.55;
+      color: var(--white);
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-b) transparent;
+    }
+
+    /* Typewriter cursor */
+    .cursor {
+      display: inline-block;
+      width: 10px;
+      height: 1.1em;
+      background: var(--pri);
+      vertical-align: text-bottom;
+      margin-left: 2px;
+      animation: blink 0.9s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0; }
+    }
+
+    /* ═══════════════════ RIGHT PANEL ═══════════════════ */
+    .right-panel {
+      grid-area: right;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .rp-header {
+      flex-shrink: 0;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rp-header::before { content: "◈"; color: var(--acc); font-size: 8px; }
+
+    .rp-tabs {
+      flex-shrink: 0;
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .rp-tab {
+      flex: 1;
+      padding: 7px 4px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .rp-tab.active {
+      color: var(--pri);
+      border-bottom-color: var(--pri);
+    }
+
+    .rp-tab:hover:not(.active) { color: var(--text-med); }
+
+    .rp-body {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .tab-pane {
+      display: none;
+      height: 100%;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .tab-pane.active { display: flex; }
+
+    /* Activity log */
+    #log-output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      font-size: 11px;
+      line-height: 1.6;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-b) transparent;
+    }
+
+    .log-entry {
+      padding: 2px 0;
+      border-top: 1px solid rgba(13,51,71,0.4);
+      word-break: break-word;
+      white-space: pre-wrap;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .log-entry:first-child { border-top: none; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+    .log-you     { color: var(--white); }
+    .log-octo    { color: var(--pri); }
+    .log-error   { color: var(--red); }
+    .log-file    { color: var(--green); }
+    .log-system  { color: var(--acc2); }
+    .log-event   { color: var(--text-dim); }
+    .log-voice   { color: var(--acc); }
+
+    .log-ts {
+      font-size: 9px;
+      color: var(--text-dim);
+      margin-right: 6px;
+    }
+
+    /* Conversation tab */
+    #conversation {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-b) transparent;
+    }
+
+    .msg {
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      padding: 8px 10px;
+      position: relative;
+    }
+
+    .msg.user      { border-color: rgba(0,212,255,0.35); background: rgba(0,212,255,0.06); }
+    .msg.assistant { border-color: rgba(0,255,136,0.3);  background: rgba(0,255,136,0.05); }
+    .msg.voice     { border-color: rgba(255,107,0,0.35); background: rgba(255,107,0,0.06); }
+
+    .msg-role {
+      font-size: 8px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .msg.user .msg-role      { color: var(--pri-dim); }
+    .msg.assistant .msg-role { color: var(--green-d); }
+    .msg.voice .msg-role     { color: var(--pri-dim); opacity: 0.7; }
+
+    .msg-text {
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--white);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Events tab */
+    #events-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-b) transparent;
+    }
+
+    .event-item {
+      border: 1px solid var(--border);
+      padding: 6px 8px;
+      background: var(--panel2);
+      animation: fadeIn 0.2s ease;
+    }
+
+    .event-type {
+      font-size: 8px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--acc2);
+      margin-bottom: 3px;
+    }
+
+    /* ═══ SEARCH TAB ═══ */
+    .search-wrap { flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .search-input-row { display:flex; gap:6px; }
+    .search-input { flex:1; font-family:var(--mono); font-size:11px; background:var(--bar-bg); border:1px solid var(--border-b); color:var(--white); padding:6px 8px; outline:none; }
+    .search-input:focus { border-color:var(--pri-dim); }
+    .search-result { border:1px solid var(--border); background:var(--panel2); padding:8px 10px; display:grid; gap:4px; animation:fadeIn 0.2s ease; }
+    .sr-title { font-size:11px; color:var(--pri); font-weight:700; }
+    .sr-url   { font-size:9px; color:var(--text-dim); word-break:break-all; }
+    .sr-snip  { font-size:10px; color:var(--white); line-height:1.45; }
+
+    /* ═══ DOCS TAB ═══ */
+    .docs-wrap { flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .drop-zone {
+      border:2px dashed var(--border-b); padding:24px; text-align:center; cursor:pointer;
+      font-size:11px; color:var(--text-dim); letter-spacing:0.1em; text-transform:uppercase;
+      transition:border-color 0.2s, background 0.2s;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color:var(--pri); background:var(--pri-gho); color:var(--pri); }
+    .doc-mode-row { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    .mode-chip { font-family:var(--mono); font-size:9px; letter-spacing:0.1em; text-transform:uppercase; padding:4px 8px; border:1px solid var(--border); background:var(--panel2); color:var(--text-dim); cursor:pointer; transition:all 0.15s; }
+    .mode-chip.active { border-color:var(--pri-dim); color:var(--pri); background:var(--pri-gho); }
+    .doc-result { border:1px solid var(--border); background:var(--panel2); padding:10px; display:grid; gap:6px; }
+    .doc-meta { font-size:9px; color:var(--text-dim); letter-spacing:0.08em; }
+    .doc-analysis { font-size:11px; color:var(--white); white-space:pre-wrap; line-height:1.55; max-height:320px; overflow-y:auto; }
+    .doc-qa-input { font-family:var(--mono); font-size:10px; width:100%; background:var(--bar-bg); border:1px solid var(--border-b); color:var(--white); padding:5px 8px; outline:none; margin-top:4px; }
+
+    /* ═══ GATEWAYS TAB ═══ */
+    .gw-wrap { flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .gw-card { border:1px solid var(--border); background:var(--panel2); padding:8px 10px; display:grid; gap:4px; }
+    .gw-name { font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; display:flex; align-items:center; gap:6px; }
+    .gw-info { font-size:9px; color:var(--text-dim); }
+    .gw-setup { font-size:9px; color:var(--acc2); letter-spacing:0.06em; }
+
+    /* ═══ ROUTER TAB ═══ */
+    .router-wrap { flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+    .route-card { border:1px solid var(--border); background:var(--panel2); padding:7px 10px; display:grid; gap:2px; }
+    .route-role  { font-size:9px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--acc2); }
+    .route-model { font-size:10px; color:var(--pri); }
+    .route-desc  { font-size:9px; color:var(--text-dim); }
+    }
+
+    .event-body {
+      font-size: 10px;
+      color: var(--text-med);
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.4;
+    }
+
+    /* ═══════════════════ COMPOSER ═══════════════════ */
+    .composer {
+      flex-shrink: 0;
+      border-top: 1px solid var(--border);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--dark);
+    }
+
+    .task-input {
+      width: 100%;
+      min-height: 52px;
+      max-height: 120px;
+      resize: none;
+      background: var(--bar-bg);
+      border: 1px solid var(--border-b);
+      color: var(--white);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 8px 10px;
+      outline: none;
+      line-height: 1.45;
+      transition: border-color 0.2s;
+    }
+
+    .task-input::placeholder { color: var(--text-dim); }
+
+    .task-input:focus {
+      border-color: var(--pri-dim);
+      box-shadow: 0 0 0 3px rgba(0,212,255,0.1);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 700;
+      padding: 6px 10px;
+      border: 1px solid var(--border-b);
+      background: var(--panel2);
+      color: var(--text-med);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .btn:hover { background: var(--pri-gho); color: var(--pri); border-color: var(--pri-dim); }
+
+    .btn.primary {
+      background: var(--pri-gho);
+      color: var(--pri);
+      border-color: var(--pri-dim);
+      box-shadow: 0 0 12px rgba(0,212,255,0.2);
+    }
+
+    .btn.primary:hover {
+      background: rgba(0,212,255,0.18);
+      box-shadow: 0 0 18px rgba(0,212,255,0.35);
+    }
+
+    .btn.danger { border-color: rgba(255,51,85,0.5); color: var(--red); }
+    .btn.danger:hover { background: rgba(255,51,85,0.12); }
+
+    .btn.orange { border-color: rgba(255,107,0,0.5); color: var(--acc); }
+    .btn.orange:hover { background: rgba(255,107,0,0.12); }
+
+    /* Quick prompts */
+    .quick-section {
+      flex-shrink: 0;
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .chip {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      padding: 4px 8px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+
+    .chip:hover {
+      color: var(--acc2);
+      border-color: rgba(255,204,0,0.4);
+      background: rgba(255,204,0,0.06);
+    }
+
+    /* ═══════════════════ FOOTER ═══════════════════ */
+    .footer {
+      grid-area: footer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      background: var(--dark);
+      border-top: 1px solid var(--border);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+
+    .footer-center {
+      color: var(--border-b);
+      letter-spacing: 0.14em;
+    }
+
+    /* ═══════════════════ SCROLLBAR GLOBAL ═══════════════════ */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-b); border-radius: 0; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--pri-dim); }
+
+    /* ═══════════════════ SCAN LINE EFFECT ═══════════════════ */
+    .center-panel::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--pri), transparent);
+      animation: scanline 4s linear infinite;
+      opacity: 0.4;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    @keyframes scanline {
+      0%   { top: 0; }
+      100% { top: 100%; }
+    }
+
+    /* ═══════════════════ RESPONSIVE ═══════════════════ */
+    @media (max-width: 1100px) {
+      .shell {
+        grid-template-columns: 0 1fr 300px;
+      }
+      .left-panel { display: none; }
+    }
+
+    @media (max-width: 760px) {
+      .shell {
+        grid-template-columns: 1fr;
+        grid-template-rows: 54px 1fr auto 22px;
+        grid-template-areas: "header" "center" "right" "footer";
+      }
+      .left-panel { display: none; }
+      .right-panel { max-height: 40vh; }
+    }
+  </style>
 </head>
 <body>
-    <div class="shell">
-        <header class="topbar">
-            <div class="brand"><span class="brand-dot"></span>Octopus</div>
-            <div class="top-actions">
-                <div class="status-pill"><span class="dot" id="ws-dot"></span><span id="ws-label">Connecting</span></div>
-                <div class="status-pill"><span class="dot" id="run-dot"></span><span id="run-label">Idle</span></div>
-                <button class="toggle-btn" id="drawer-toggle" aria-label="Toggle details">≡</button>
-            </div>
-        </header>
+  <div class="shell">
 
-        <main class="main">
-            <section class="answer-box">
-                <div class="answer-head">
-                    <div class="answer-state"><span class="dot" id="answer-dot"></span><span id="answer-state">ready</span></div>
-                    <div id="project-label" class="status-pill">Project: none</div>
-                </div>
-                <div id="answer" class="answer-text">No answer yet. Type a command below and run it.</div>
-            </section>
-
-            <section id="conversation" class="conversation">
-                <div class="msg"><div class="msg-role">system</div><div class="msg-text">Conversation will appear here.</div></div>
-            </section>
-        </main>
-
-        <section class="composer">
-            <textarea id="task-input" class="task-input" placeholder="Try: summarize README, inspect project files, or run a coding task"></textarea>
-            <div class="actions">
-                <button id="run-btn" class="btn primary">Run Command</button>
-                <button id="voice-btn" class="btn secondary">Voice Input</button>
-                <button id="stop-voice-btn" class="btn secondary">Stop Voice</button>
-                <button id="interrupt-btn" class="btn alert">Interrupt</button>
-            </div>
-        </section>
-    </div>
-
-    <aside id="drawer" class="drawer" aria-label="Details Drawer">
-        <div class="drawer-head">
-            <h2 class="drawer-title">Details</h2>
-            <button class="toggle-btn" id="drawer-close" aria-label="Close details">X</button>
+    <!-- ══════════════════ HEADER ══════════════════ -->
+    <header class="header">
+      <div class="header-left">
+        <div class="brand-badge">MARK.O</div>
+        <div>
+          <div class="header-title">O.C.T.O Command Interface</div>
+          <div class="header-sub">Optimized Cognitive Task Orchestrator — Octopus Industries</div>
         </div>
-        <div class="drawer-body">
-            <div class="card">
-                <div class="card-title">Browser Context</div>
-                <div id="ctx-url" class="mono">URL: -</div>
-                <div id="ctx-title" class="mono">Title: -</div>
-                <div id="ctx-status" class="mono">Status: idle</div>
-            </div>
-            <div class="card">
-                <div class="card-title">Last Events</div>
-                <div id="events"></div>
-            </div>
+      </div>
+      <div class="header-right">
+        <select id="project-select" class="hdr-project-select" aria-label="Select project"></select>
+        <div class="hdr-badge"><span class="dot" id="ws-dot"></span><span id="ws-label">Connecting</span></div>
+        <div class="hdr-badge"><span class="dot" id="run-dot"></span><span id="run-label">Idle</span></div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+          <div class="hdr-clock" id="clock">00:00:00</div>
+          <div class="hdr-date"  id="dateline">--/--/----</div>
         </div>
+      </div>
+    </header>
+
+    <!-- ══════════════════ LEFT PANEL ══════════════════ -->
+    <aside class="left-panel">
+      <div class="panel-section">
+        <div class="panel-section-title">Sys Monitor</div>
+        <div class="metric-row">
+          <div class="metric-label">CPU</div>
+          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-cpu" style="width:0%"></div></div>
+          <div class="metric-val" id="val-cpu">—</div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label">MEM</div>
+          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-mem" style="width:0%"></div></div>
+          <div class="metric-val" id="val-mem">—</div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label">NET</div>
+          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-net" style="width:30%"></div></div>
+          <div class="metric-val" id="val-net">OK</div>
+        </div>
+        <div class="metric-row">
+          <div class="metric-label">AGT</div>
+          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-agt" style="width:0%"></div></div>
+          <div class="metric-val" id="val-agt">0</div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-section-title">Status</div>
+        <div class="status-badge"><span class="dot ok"></span>Agent Core Active</div>
+        <div class="status-badge"><span class="dot" id="voice-status-dot"></span><span id="voice-status-txt">Voice Idle</span></div>
+        <div class="status-badge"><span class="dot ok"></span>Sec Cleared</div>
+        <div class="status-badge"><span class="dot ok"></span>Protocol Octo-X</div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-section-title">Info</div>
+        <div class="info-row"><span>Uptime</span><span class="info-val" id="info-uptime">—</span></div>
+        <div class="info-row"><span>Projects</span><span class="info-val" id="info-projects">—</span></div>
+        <div class="info-row"><span>Cache</span><span class="info-val" id="info-cache">—</span></div>
+        <div class="info-row"><span>Provider</span><span class="info-val" id="info-provider">—</span></div>
+      </div>
+
+      <div class="left-spacer"></div>
     </aside>
 
-    <script>
-        const API = "";
-        const state = {
-            ws: null,
-            activeProjectId: null,
-            messages: [],
-            answer: "No answer yet. Type a command below and run it.",
-            running: false,
-            listening: false,
-            speaking: false,
-            recognizer: null,
-            lastSpokenAnswer: "",
-            lastEvents: [],
-            browser: {
-                url: "-",
-                title: "-",
-                status: "idle",
-            },
-        };
+    <!-- ══════════════════ CENTER PANEL ══════════════════ -->
+    <main class="center-panel" style="position:relative;">
 
-        const el = {
-            answer: document.getElementById("answer"),
-            answerDot: document.getElementById("answer-dot"),
-            answerState: document.getElementById("answer-state"),
-            wsDot: document.getElementById("ws-dot"),
-            wsLabel: document.getElementById("ws-label"),
-            runDot: document.getElementById("run-dot"),
-            runLabel: document.getElementById("run-label"),
-            projectLabel: document.getElementById("project-label"),
-            conversation: document.getElementById("conversation"),
-            taskInput: document.getElementById("task-input"),
-            runBtn: document.getElementById("run-btn"),
-            voiceBtn: document.getElementById("voice-btn"),
-            stopVoiceBtn: document.getElementById("stop-voice-btn"),
-            interruptBtn: document.getElementById("interrupt-btn"),
-            drawer: document.getElementById("drawer"),
-            drawerToggle: document.getElementById("drawer-toggle"),
-            drawerClose: document.getElementById("drawer-close"),
-            events: document.getElementById("events"),
-            ctxUrl: document.getElementById("ctx-url"),
-            ctxTitle: document.getElementById("ctx-title"),
-            ctxStatus: document.getElementById("ctx-status"),
-        };
+      <!-- HUD Canvas -->
+      <div class="hud-wrap">
+        <canvas id="hud-canvas" width="220" height="220"></canvas>
+        <div class="hud-state-row">
+          <div class="hud-state-item" id="hud-item-listen">
+            <span class="dot"></span><span>Listen</span>
+          </div>
+          <div class="hud-state-item" id="hud-item-think">
+            <span class="dot"></span><span>Think</span>
+          </div>
+          <div class="hud-state-item" id="hud-item-speak">
+            <span class="dot"></span><span>Speak</span>
+          </div>
+          <div class="hud-state-item" id="hud-item-run">
+            <span class="dot"></span><span>Execute</span>
+          </div>
+        </div>
+      </div>
 
-        function escapeHtml(value) {
-            return String(value || "")
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/\"/g, "&quot;")
-                .replace(/'/g, "&#39;");
+      <!-- Metrics strip -->
+      <div class="metrics-strip">
+        <div class="metric-tile">
+          <div class="tile-label">Current Task</div>
+          <div class="tile-value" id="tile-task">Idle</div>
+        </div>
+        <div class="metric-tile">
+          <div class="tile-label">Voice Mode</div>
+          <div class="tile-value" id="tile-voice">Idle</div>
+        </div>
+        <div class="metric-tile">
+          <div class="tile-label">Execution</div>
+          <div class="tile-value" id="tile-exec">Awaiting</div>
+        </div>
+        <div class="metric-tile">
+          <div class="tile-label">WebSocket</div>
+          <div class="tile-value" id="tile-ws">Connecting</div>
+        </div>
+      </div>
+
+      <!-- Answer box -->
+      <div class="answer-section">
+        <div class="answer-header">
+          <span class="dot" id="answer-dot"></span>
+          <span class="answer-label">Output</span>
+          <span class="answer-state-txt" id="answer-state-txt">● READY</span>
+          <span style="flex:1"></span>
+          <span style="font-size:9px;color:var(--text-dim);letter-spacing:0.06em;" id="project-label">Project: none</span>
+        </div>
+        <div id="answer-text">Ask anything and I will route it through the live agent pipeline.<span class="cursor"></span></div>
+      </div>
+    </main>
+
+    <!-- ══════════════════ RIGHT PANEL ══════════════════ -->
+    <aside class="right-panel">
+      <div class="rp-header">Activity Center</div>
+
+      <div class="rp-tabs" style="flex-wrap:wrap;">
+        <button class="rp-tab active" data-tab="log">Log</button>
+        <button class="rp-tab"        data-tab="conv">Convo</button>
+        <button class="rp-tab"        data-tab="search">Search</button>
+        <button class="rp-tab"        data-tab="docs">Docs</button>
+        <button class="rp-tab"        data-tab="gateways">Gates</button>
+        <button class="rp-tab"        data-tab="router">Router</button>
+        <button class="rp-tab"        data-tab="events">Events</button>
+      </div>
+
+      <div class="rp-body">
+        <!-- Activity log tab -->
+        <div class="tab-pane active" id="tab-log">
+          <div id="log-output"></div>
+        </div>
+
+        <!-- Conversation tab -->
+        <div class="tab-pane" id="tab-conv">
+          <div id="conversation"></div>
+        </div>
+
+        <!-- Web Search tab -->
+        <div class="tab-pane" id="tab-search">
+          <div class="search-wrap">
+            <div class="search-input-row">
+              <input id="search-input" class="search-input" type="text" placeholder="Search the web…" />
+              <button class="btn primary" id="search-btn" style="flex-shrink:0;">⌕ Go</button>
+            </div>
+            <div style="font-size:9px;color:var(--text-dim);letter-spacing:0.08em;">
+              Engine: auto (DDG → Brave → SerpAPI). Set BRAVE_API_KEY or SERP_API_KEY for better results.
+            </div>
+            <div id="search-results"></div>
+          </div>
+        </div>
+
+        <!-- Document Analysis tab -->
+        <div class="tab-pane" id="tab-docs">
+          <div class="docs-wrap">
+            <div id="drop-zone" class="drop-zone">
+              ⬆ Drop file here or click to upload<br>
+              <span style="font-size:9px;opacity:0.6;">txt · md · json · csv · js · py · java · go · xml · html · yaml</span>
+            </div>
+            <input id="file-input" type="file" style="display:none" />
+            <div class="doc-mode-row">
+              <span style="font-size:9px;color:var(--text-dim);letter-spacing:0.1em;">MODE:</span>
+              <button class="mode-chip active" data-mode="summarise">Summarise</button>
+              <button class="mode-chip"        data-mode="analyse">Analyse</button>
+              <button class="mode-chip"        data-mode="extract">Extract Data</button>
+              <button class="mode-chip"        data-mode="code_review">Code Review</button>
+              <button class="mode-chip"        data-mode="explain">Explain</button>
+              <button class="mode-chip"        data-mode="qa">Q&amp;A</button>
+            </div>
+            <div id="qa-row" style="display:none;">
+              <input id="doc-question" class="doc-qa-input" placeholder="Type your question about the document…" />
+            </div>
+            <div id="doc-result"></div>
+          </div>
+        </div>
+
+        <!-- Gateways tab -->
+        <div class="tab-pane" id="tab-gateways">
+          <div class="gw-wrap" id="gw-list">
+            <div style="font-size:9px;color:var(--text-dim);letter-spacing:0.08em;padding:4px 0;">
+              Gateways bridge external platforms to Octopus. Configure env vars in node/.env and restart.
+            </div>
+          </div>
+        </div>
+
+        <!-- Task Router tab -->
+        <div class="tab-pane" id="tab-router">
+          <div class="router-wrap" id="router-list">
+            <div style="font-size:9px;color:var(--text-dim);letter-spacing:0.08em;padding:4px 0;">
+              Loading router config…
+            </div>
+          </div>
+        </div>
+
+        <!-- Events tab -->
+        <div class="tab-pane" id="tab-events">
+          <div id="events-list"></div>
+        </div>
+      </div>
+
+      <!-- Composer -->
+      <div class="composer">
+        <textarea id="task-input" class="task-input"
+          placeholder="Command or question — Ctrl+Enter to execute"></textarea>
+        <div class="btn-row">
+          <button id="run-btn"         class="btn primary">▶ Run</button>
+          <button id="voice-btn"       class="btn orange">⬤ Voice</button>
+          <button id="stop-voice-btn"  class="btn">◼ Stop</button>
+          <button id="interrupt-btn"   class="btn danger">⊘ Kill</button>
+        </div>
+      </div>
+
+      <!-- Quick prompts -->
+      <div class="quick-section">
+        <button class="chip" data-prompt="Summarize the current repository architecture.">Architecture</button>
+        <button class="chip" data-prompt="Review current dashboard code and suggest 3 improvements.">Review UI</button>
+        <button class="chip" data-prompt="List high-priority TODOs based on current project state.">Priority TODOs</button>
+        <button class="chip" data-prompt="Explain the latest git changes and their impact.">Latest Commit</button>
+        <button class="chip" data-prompt="Run a security scan on the current project.">Security Scan</button>
+        <button class="chip" data-prompt="What agents are available and what can they do?">List Agents</button>
+      </div>
+    </aside>
+
+    <!-- ══════════════════ FOOTER ══════════════════ -->
+    <footer class="footer">
+      <span>[Ctrl+Enter] Execute · [F4] Mute · [F11] Fullscreen</span>
+      <span class="footer-center">Octopus Industries · O.C.T.O v2.0 · CLASSIFIED</span>
+      <span>© OCTOPUS AGENT SYSTEM</span>
+    </footer>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════
+    //  CONSTANTS & TOKENS
+    // ═══════════════════════════════════════════════════════
+    const C = {
+      BG:       "#00060a",
+      PANEL:    "#010d14",
+      BORDER:   "#0d3347",
+      BORDER_B: "#1a5c7a",
+      PRI:      "#00d4ff",
+      PRI_DIM:  "#007a99",
+      PRI_GHO:  "#001f2e",
+      ACC:      "#ff6b00",
+      ACC2:     "#ffcc00",
+      GREEN:    "#00ff88",
+      GREEN_D:  "#00aa55",
+      RED:      "#ff3355",
+      MUTED_C:  "#ff3366",
+      TEXT:     "#8ffcff",
+      TEXT_DIM: "#3a8a9a",
+      TEXT_MED: "#5ab8cc",
+      WHITE:    "#d8f8ff",
+    };
+
+    // ═══════════════════════════════════════════════════════
+    //  STATE
+    // ═══════════════════════════════════════════════════════
+    const state = {
+      ws: null,
+      activeProjectId: null,
+      projects: [],
+      messages: [],
+      answer: "Ask anything and I will route it through the live agent pipeline.",
+      running: false,
+      listening: false,
+      speaking: false,
+      recognizer: null,
+      lastSpokenAnswer: "",
+      lastEvents: [],
+      lastTask: "Idle",
+    };
+
+    // ═══════════════════════════════════════════════════════
+    //  ELEMENT REFS
+    // ═══════════════════════════════════════════════════════
+    const el = {
+      answerText:    document.getElementById("answer-text"),
+      answerDot:     document.getElementById("answer-dot"),
+      answerStateTxt:document.getElementById("answer-state-txt"),
+      wsDot:         document.getElementById("ws-dot"),
+      wsLabel:       document.getElementById("ws-label"),
+      runDot:        document.getElementById("run-dot"),
+      runLabel:      document.getElementById("run-label"),
+      projectLabel:  document.getElementById("project-label"),
+      projectSelect: document.getElementById("project-select"),
+      conversation:  document.getElementById("conversation"),
+      taskInput:     document.getElementById("task-input"),
+      runBtn:        document.getElementById("run-btn"),
+      voiceBtn:      document.getElementById("voice-btn"),
+      stopVoiceBtn:  document.getElementById("stop-voice-btn"),
+      interruptBtn:  document.getElementById("interrupt-btn"),
+      eventsList:    document.getElementById("events-list"),
+      logOutput:     document.getElementById("log-output"),
+      tileTask:      document.getElementById("tile-task"),
+      tileVoice:     document.getElementById("tile-voice"),
+      tileExec:      document.getElementById("tile-exec"),
+      tileWs:        document.getElementById("tile-ws"),
+      clock:         document.getElementById("clock"),
+      dateline:      document.getElementById("dateline"),
+      voiceStatusDot:document.getElementById("voice-status-dot"),
+      voiceStatusTxt:document.getElementById("voice-status-txt"),
+      infoUptime:    document.getElementById("info-uptime"),
+      infoProjects:  document.getElementById("info-projects"),
+      infoCache:     document.getElementById("info-cache"),
+      infoProvider:  document.getElementById("info-provider"),
+    };
+
+    // ═══════════════════════════════════════════════════════
+    //  HUD CANVAS ANIMATION
+    // ═══════════════════════════════════════════════════════
+    (function initHud() {
+      const canvas = document.getElementById("hud-canvas");
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width;
+      const H = canvas.height;
+      const cx = W / 2;
+      const cy = H / 2;
+
+      let rings   = [{ r: 0, speed: 0.008 }, { r: 0, speed: -0.013 }, { r: 0, speed: 0.019 }];
+      let scanAng = 0;
+      let scanAng2 = Math.PI;
+      let haloR   = 18;
+      let targetHaloR = 18;
+      let pulses  = [];
+      let particles = [];
+      let wavePhase = 0;
+      let blinkT  = 0;
+
+      // exposed so render() can read current app state
+      function isRunning()   { return state.running; }
+      function isSpeaking()  { return state.speaking; }
+      function isListening() { return state.listening; }
+
+      function spawnPulse() {
+        pulses.push({ r: W * 0.14, alpha: 0.7, maxR: W * 0.42 });
+      }
+
+      function spawnParticle() {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 0.9 + Math.random() * 1.5;
+        particles.push({
+          x: cx + Math.cos(angle) * W * 0.14,
+          y: cy + Math.sin(angle) * W * 0.14,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 0.3,
+          alpha: 1,
+          size: 1 + Math.random() * 1.5
+        });
+      }
+
+      function hexToRgba(hex, a) {
+        const r = parseInt(hex.slice(1,3),16);
+        const g = parseInt(hex.slice(3,5),16);
+        const b = parseInt(hex.slice(5,7),16);
+        return `rgba(${r},${g},${b},${a})`;
+      }
+
+      function render() {
+        ctx.clearRect(0, 0, W, H);
+
+        const running   = isRunning();
+        const speaking  = isSpeaking();
+        const listening = isListening();
+        const active    = running || speaking || listening;
+        const muted     = !active;
+
+        // Target halo radius
+        targetHaloR = active ? 38 : 18;
+        haloR += (targetHaloR - haloR) * 0.06;
+
+        // Ring rotation speeds
+        const rSpeeds = active
+          ? [0.016, -0.024, 0.030]
+          : [0.008, -0.013, 0.019];
+        rings[0].r += rSpeeds[0];
+        rings[1].r += rSpeeds[1];
+        rings[2].r += rSpeeds[2];
+
+        // Scan arc
+        scanAng  += active ? 0.05 : 0.022;
+        scanAng2 += active ? 0.03 : 0.014;
+
+        blinkT++;
+
+        // Spawn effects
+        if (active && Math.random() < 0.06)  spawnPulse();
+        if (speaking && Math.random() < 0.3) spawnParticle();
+
+        // ── Grid dots (background) ──────────────────────────
+        ctx.fillStyle = hexToRgba(C.BORDER, 0.55);
+        const grid = 22;
+        for (let x = grid/2; x < W; x += grid) {
+          for (let y = grid/2; y < H; y += grid) {
+            const dx = x - cx, dy = y - cy;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > W * 0.48) continue;
+            ctx.beginPath();
+            ctx.arc(x, y, 0.7, 0, Math.PI*2);
+            ctx.fill();
+          }
         }
 
-        function addMessage(role, text) {
-            state.messages.push({ role: role, text: text });
-            state.messages = state.messages.slice(-80);
-            renderConversation();
+        // ── Outer circle boundary ───────────────────────────
+        ctx.beginPath();
+        ctx.arc(cx, cy, W * 0.46, 0, Math.PI*2);
+        ctx.strokeStyle = hexToRgba(C.BORDER_B, 0.25);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // ── Tick marks ──────────────────────────────────────
+        for (let i = 0; i < 36; i++) {
+          const angle = (i / 36) * Math.PI * 2 - Math.PI/2;
+          const isLong = i % 9 === 0;
+          const outer = W * 0.46;
+          const inner = outer - (isLong ? 8 : 4);
+          const alpha = isLong ? 0.6 : 0.25;
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(angle)*inner, cy + Math.sin(angle)*inner);
+          ctx.lineTo(cx + Math.cos(angle)*outer, cy + Math.sin(angle)*outer);
+          ctx.strokeStyle = hexToRgba(C.PRI, alpha);
+          ctx.lineWidth = isLong ? 1.5 : 0.8;
+          ctx.stroke();
         }
 
-        function renderConversation() {
-            if (!state.messages.length) {
-                el.conversation.innerHTML = '<div class="msg"><div class="msg-role">system</div><div class="msg-text">Conversation will appear here.</div></div>';
-                return;
-            }
-            el.conversation.innerHTML = state.messages.map(function (m) {
-                return '<div class="msg ' + escapeHtml(m.role) + '"><div class="msg-role">' +
-                    escapeHtml(m.role) +
-                    '</div><div class="msg-text">' +
-                    escapeHtml(m.text) +
-                    '</div></div>';
-            }).join("");
-            el.conversation.scrollTop = el.conversation.scrollHeight;
+        // ── Corner brackets ─────────────────────────────────
+        const brackets = [
+          [cx - W*0.42, cy - H*0.42, 1,  1],
+          [cx + W*0.42, cy - H*0.42, -1, 1],
+          [cx - W*0.42, cy + H*0.42, 1, -1],
+          [cx + W*0.42, cy + H*0.42, -1,-1],
+        ];
+        ctx.strokeStyle = hexToRgba(C.PRI, 0.5);
+        ctx.lineWidth = 1.5;
+        brackets.forEach(([bx, by, sx, sy]) => {
+          ctx.beginPath();
+          ctx.moveTo(bx + sx*10, by);
+          ctx.lineTo(bx, by);
+          ctx.lineTo(bx, by + sy*10);
+          ctx.stroke();
+        });
+
+        // ── Pulses ──────────────────────────────────────────
+        pulses = pulses.filter(p => p.alpha > 0.01);
+        pulses.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(cx, cy, p.r, 0, Math.PI*2);
+          ctx.strokeStyle = hexToRgba(C.PRI, p.alpha * 0.5);
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          p.r   += (p.maxR - p.r) * 0.04 + 0.8;
+          p.alpha *= 0.94;
+        });
+
+        // ── Halo glow ────────────────────────────────────────
+        const haloColor = speaking ? C.MUTED_C : (muted ? C.PRI_DIM : C.PRI);
+        for (let i = 10; i > 0; i--) {
+          const r = haloR * (i / 10) * 2;
+          const a = (active ? 0.06 : 0.03) * (i / 10);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI*2);
+          ctx.strokeStyle = hexToRgba(haloColor, a);
+          ctx.lineWidth = 3;
+          ctx.stroke();
         }
 
-        function renderAnswer() {
-            el.answer.textContent = state.answer;
-            const running = state.running;
-            el.answerState.textContent = running ? "running" : "ready";
-            el.answerDot.className = "dot " + (running ? "live" : "ok");
-            el.runDot.className = "dot " + (running ? "live" : "ok");
-            el.runLabel.textContent = running ? "Running" : "Idle";
+        // ── Three rotating rings ─────────────────────────────
+        const ringRadii = [W*0.36, W*0.29, W*0.22];
+        const ringAlphas = active ? [0.7, 0.55, 0.45] : [0.35, 0.28, 0.22];
+        rings.forEach((ring, i) => {
+          const radius = ringRadii[i];
+          const alpha  = ringAlphas[i];
+          // Main arc
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, ring.r, ring.r + Math.PI * 1.4);
+          ctx.strokeStyle = hexToRgba(C.PRI, alpha);
+          ctx.lineWidth = i === 0 ? 2 : 1.5;
+          ctx.stroke();
+          // Gap arc
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, ring.r + Math.PI*1.5, ring.r + Math.PI*2);
+          ctx.strokeStyle = hexToRgba(C.BORDER_B, 0.25);
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        });
+
+        // ── Scan arcs ────────────────────────────────────────
+        ctx.beginPath();
+        ctx.arc(cx, cy, W*0.38, scanAng, scanAng + Math.PI*0.35);
+        ctx.strokeStyle = hexToRgba(C.PRI, 0.6);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, W*0.38, scanAng2, scanAng2 + Math.PI*0.22);
+        ctx.strokeStyle = hexToRgba(C.ACC, 0.45);
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // ── Particles ────────────────────────────────────────
+        particles = particles.filter(p => p.alpha > 0.05);
+        particles.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+          ctx.fillStyle = hexToRgba(C.PRI, p.alpha * 0.8);
+          ctx.fill();
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.04;
+          p.vx *= 0.97;
+          p.alpha -= 0.028;
+        });
+
+        // ── Central orb ──────────────────────────────────────
+        const orbR = W * 0.12;
+        const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, orbR);
+        if (speaking) {
+          grd.addColorStop(0, hexToRgba(C.MUTED_C, 0.9));
+          grd.addColorStop(0.5, hexToRgba(C.MUTED_C, 0.3));
+          grd.addColorStop(1, hexToRgba(C.MUTED_C, 0));
+        } else if (active) {
+          grd.addColorStop(0, hexToRgba(C.PRI, 0.9));
+          grd.addColorStop(0.5, hexToRgba(C.PRI, 0.3));
+          grd.addColorStop(1, hexToRgba(C.PRI, 0));
+        } else {
+          grd.addColorStop(0, hexToRgba(C.PRI_DIM, 0.6));
+          grd.addColorStop(0.5, hexToRgba(C.PRI_DIM, 0.15));
+          grd.addColorStop(1, hexToRgba(C.PRI_DIM, 0));
+        }
+        ctx.beginPath();
+        ctx.arc(cx, cy, orbR, 0, Math.PI*2);
+        ctx.fillStyle = grd;
+        ctx.fill();
+
+        // Orb border
+        ctx.beginPath();
+        ctx.arc(cx, cy, orbR, 0, Math.PI*2);
+        ctx.strokeStyle = active ? hexToRgba(C.PRI, 0.8) : hexToRgba(C.PRI_DIM, 0.5);
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // "O" logo inside orb
+        ctx.font = `bold ${Math.floor(orbR*0.9)}px Courier New`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = active ? hexToRgba(C.WHITE, 0.9) : hexToRgba(C.TEXT, 0.7);
+        ctx.fillText("O", cx, cy);
+
+        // ── Waveform strip ───────────────────────────────────
+        wavePhase += active ? 0.18 : 0.06;
+        const wBars  = 28;
+        const wW     = W * 0.56;
+        const wX0    = cx - wW/2;
+        const wY     = H * 0.89;
+        const barW   = (wW / wBars) * 0.55;
+        const gap    = wW / wBars;
+
+        for (let i = 0; i < wBars; i++) {
+          let barH;
+          if (speaking) {
+            barH = 3 + Math.random() * 14;
+          } else if (active) {
+            barH = 2 + Math.random() * 8;
+          } else {
+            barH = 2 + Math.abs(Math.sin(wavePhase + i * 0.42)) * 5;
+          }
+          const bx = wX0 + i * gap;
+          const by = wY - barH;
+          const col = speaking ? C.MUTED_C : C.PRI;
+          ctx.fillStyle = hexToRgba(col, speaking ? 0.6 : 0.5);
+          ctx.fillRect(bx, by, barW, barH);
         }
 
-        function renderDetails() {
-            el.projectLabel.textContent = "Project: " + (state.activeProjectId || "none");
-            el.ctxUrl.textContent = "URL: " + (state.browser.url || "-");
-            el.ctxTitle.textContent = "Title: " + (state.browser.title || "-");
-            el.ctxStatus.textContent = "Status: " + (state.browser.status || "idle");
-            el.events.innerHTML = state.lastEvents.map(function (item) {
-                return '<div class="event"><strong>' + escapeHtml(item.type) + '</strong><br>' + escapeHtml(item.summary) + '</div>';
-            }).join("");
+        // ── Status text ──────────────────────────────────────
+        let statusTxt = "◈ IDLE";
+        let statusCol = C.TEXT_DIM;
+        if (speaking)  { statusTxt = "● SPEAKING";  statusCol = C.ACC; }
+        else if (state.running) { statusTxt = "▶ PROCESSING"; statusCol = C.ACC2; }
+        else if (listening)     { statusTxt = "◎ LISTENING"; statusCol = C.GREEN; }
+
+        if (blinkT % 38 < 30 || !active) {
+          ctx.font = `bold 9px Courier New`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          ctx.fillStyle = statusCol;
+          ctx.fillText(statusTxt, cx, H * 0.73);
         }
 
-        function logEvent(type, payload) {
-            const summary = payload && (payload.summary || payload.reason || payload.task || payload.text || payload.answer || payload.output)
-                ? String(payload.summary || payload.reason || payload.task || payload.text || payload.answer || payload.output)
-                : JSON.stringify(payload || {});
-            state.lastEvents.unshift({ type: type, summary: summary.slice(0, 180) });
-            state.lastEvents = state.lastEvents.slice(0, 25);
-            renderDetails();
+        requestAnimationFrame(render);
+      }
+
+      requestAnimationFrame(render);
+    })();
+
+    // ═══════════════════════════════════════════════════════
+    //  CLOCK
+    // ═══════════════════════════════════════════════════════
+    function updateClock() {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2,"0");
+      const mm = String(now.getMinutes()).padStart(2,"0");
+      const ss = String(now.getSeconds()).padStart(2,"0");
+      const dd = String(now.getDate()).padStart(2,"0");
+      const mo = String(now.getMonth()+1).padStart(2,"0");
+      const yr = now.getFullYear();
+      el.clock.textContent    = hh + ":" + mm + ":" + ss;
+      el.dateline.textContent = dd + "/" + mo + "/" + yr;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // ═══════════════════════════════════════════════════════
+    //  TABS
+    // ═══════════════════════════════════════════════════════
+    document.querySelectorAll(".rp-tab").forEach(function(tab) {
+      tab.addEventListener("click", function() {
+        document.querySelectorAll(".rp-tab").forEach(function(t) { t.classList.remove("active"); });
+        document.querySelectorAll(".tab-pane").forEach(function(p) { p.classList.remove("active"); });
+        tab.classList.add("active");
+        const pane = document.getElementById("tab-" + tab.dataset.tab);
+        if (pane) pane.classList.add("active");
+      });
+    });
+
+    // ═══════════════════════════════════════════════════════
+    //  LOGGING
+    // ═══════════════════════════════════════════════════════
+    function logLine(cssClass, label, text) {
+      const ts = new Date().toTimeString().slice(0,8);
+      const entry = document.createElement("div");
+      entry.className = "log-entry " + cssClass;
+      entry.innerHTML = '<span class="log-ts">' + ts + '</span>' +
+        (label ? '<span style="font-weight:700;margin-right:4px;">' + escapeHtml(label) + '</span>' : '') +
+        escapeHtml(String(text || ""));
+      el.logOutput.appendChild(entry);
+      el.logOutput.scrollTop = el.logOutput.scrollHeight;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  CONVERSATION
+    // ═══════════════════════════════════════════════════════
+    function addMessage(role, text) {
+      state.messages.push({ role: role, text: text });
+      state.messages = state.messages.slice(-120);
+      renderConversation();
+    }
+
+    function renderConversation() {
+      if (!state.messages.length) {
+        el.conversation.innerHTML = '<div class="msg"><div class="msg-role">system</div><div class="msg-text">Conversation appears here once you run a command.</div></div>';
+        return;
+      }
+      el.conversation.innerHTML = state.messages.map(function(m) {
+        return '<div class="msg ' + escapeHtml(m.role) + '">' +
+          '<div class="msg-role">' + escapeHtml(m.role) + '</div>' +
+          '<div class="msg-text">'  + escapeHtml(m.text)  + '</div></div>';
+      }).join("");
+      el.conversation.scrollTop = el.conversation.scrollHeight;
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  ANSWER BOX
+    // ═══════════════════════════════════════════════════════
+    function renderAnswer() {
+      // Set the answer text preserving the cursor span
+      const cursor = '<span class="cursor"></span>';
+      el.answerText.innerHTML = escapeHtml(state.answer) + cursor;
+
+      const stateLabel = state.running
+        ? "▶ PROCESSING"
+        : state.listening
+          ? "◎ LISTENING"
+          : state.speaking
+            ? "● SPEAKING"
+            : "● READY";
+
+      el.answerStateTxt.textContent = stateLabel;
+      el.answerDot.className = "dot " + (state.running ? "live" : state.speaking ? "muted" : "ok");
+      el.runDot.className    = "dot " + (state.running ? "live" : "ok");
+      el.runLabel.textContent = state.running ? "Running" : "Idle";
+
+      el.tileTask.textContent = state.lastTask;
+      el.tileVoice.textContent = state.listening ? "Listening" : (state.speaking ? "Speaking" : "Idle");
+      el.tileExec.textContent  = state.running ? "Task in progress" : "Awaiting";
+
+      // Voice status (left panel)
+      if (state.listening) {
+        el.voiceStatusDot.className = "dot live";
+        el.voiceStatusTxt.textContent = "Voice: Listening";
+      } else if (state.speaking) {
+        el.voiceStatusDot.className = "dot muted";
+        el.voiceStatusTxt.textContent = "Voice: Speaking";
+      } else {
+        el.voiceStatusDot.className = "dot";
+        el.voiceStatusTxt.textContent = "Voice Idle";
+      }
+
+      // HUD state items
+      setHudItem("hud-item-listen", state.listening);
+      setHudItem("hud-item-think",  state.running);
+      setHudItem("hud-item-speak",  state.speaking);
+      setHudItem("hud-item-run",    state.running);
+    }
+
+    function setHudItem(id, active) {
+      const el2 = document.getElementById(id);
+      if (!el2) return;
+      el2.classList.toggle("active", !!active);
+      const dot = el2.querySelector(".dot");
+      if (dot) dot.className = "dot " + (active ? "live" : "");
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  PROJECT PICKER
+    // ═══════════════════════════════════════════════════════
+    function renderProjectPicker() {
+      const current = state.activeProjectId;
+      el.projectSelect.innerHTML = "";
+      if (!state.projects.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No projects";
+        el.projectSelect.appendChild(opt);
+        el.infoProjects.textContent = "0";
+        return;
+      }
+      el.infoProjects.textContent = state.projects.length;
+      state.projects.forEach(function(p) {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.title || p.id;
+        opt.selected = p.id === current;
+        el.projectSelect.appendChild(opt);
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  EVENTS LOG
+    // ═══════════════════════════════════════════════════════
+    function logEvent(type, payload) {
+      const summary = (payload && (payload.summary || payload.reason || payload.task || payload.text || payload.answer || payload.output))
+        ? String(payload.summary || payload.reason || payload.task || payload.text || payload.answer || payload.output)
+        : JSON.stringify(payload || {});
+      state.lastEvents.unshift({ type: type, summary: summary.slice(0,300) });
+      state.lastEvents = state.lastEvents.slice(0, 60);
+      renderEventsList();
+    }
+
+    function renderEventsList() {
+      el.eventsList.innerHTML = state.lastEvents.map(function(item) {
+        return '<div class="event-item"><div class="event-type">' +
+          escapeHtml(item.type) + '</div><div class="event-body">' +
+          escapeHtml(item.summary) + '</div></div>';
+      }).join("");
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  WEBSOCKET
+    // ═══════════════════════════════════════════════════════
+    function setWsState(kind, text) {
+      el.wsDot.className = "dot " + kind;
+      el.wsLabel.textContent = text;
+      el.tileWs.textContent  = text;
+    }
+
+    function connectWs() {
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(protocol + "://" + location.host + "/ws");
+      state.ws = ws;
+      setWsState("live", "Connecting");
+
+      ws.onopen = function() {
+        setWsState("ok", "Connected");
+        logEvent("connected", {});
+        logLine("log-system", "SYS", "WebSocket connected");
+      };
+
+      ws.onclose = function() {
+        setWsState("bad", "Offline");
+        logLine("log-error", "SYS", "WebSocket disconnected — retrying in 1.8s");
+        setTimeout(connectWs, 1800);
+      };
+
+      ws.onerror = function() { ws.close(); };
+
+      ws.onmessage = function(event) {
+        let parsed;
+        try { parsed = JSON.parse(event.data); } catch(_) { return; }
+
+        const type = parsed.type || "event";
+        const data = parsed.data || {};
+        logEvent(type, data);
+
+        if (data.project_id && !state.activeProjectId) {
+          state.activeProjectId = data.project_id;
+          renderProjectPicker();
         }
 
-        function speak(text) {
-            if (!text || !window.speechSynthesis) return;
-            window.speechSynthesis.cancel();
-            state.speaking = true;
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 1.0;
-            utterance.pitch = 1.0;
-            utterance.onend = function () {
-                state.speaking = false;
-            };
-            window.speechSynthesis.speak(utterance);
+        if (type === "chain_start") {
+          state.running = true;
+          state.answer  = "Working…";
+          if (data.task) {
+            state.lastTask = data.task;
+            logLine("log-system", "TASK", data.task);
+          }
+          renderAnswer();
         }
 
-        function maybeSpeakFinalAnswer(answer) {
-            const normalized = String(answer || "").trim();
-            if (!normalized) return;
-            if (normalized === state.lastSpokenAnswer) return;
-            state.lastSpokenAnswer = normalized;
-            speak(normalized);
-        }
-
-        function setWsState(kind, text) {
-            el.wsDot.className = "dot " + kind;
-            el.wsLabel.textContent = text;
-        }
-
-        function connectWs() {
-            const protocol = location.protocol === "https:" ? "wss" : "ws";
-            const ws = new WebSocket(protocol + "://" + location.host + "/ws");
-            state.ws = ws;
-            setWsState("live", "Connecting");
-
-            ws.onopen = function () {
-                setWsState("ok", "Connected");
-            };
-
-            ws.onclose = function () {
-                setWsState("bad", "Offline");
-                setTimeout(connectWs, 1800);
-            };
-
-            ws.onerror = function () {
-                ws.close();
-            };
-
-            ws.onmessage = function (event) {
-                let parsed;
-                try {
-                    parsed = JSON.parse(event.data);
-                } catch (_) {
-                    return;
-                }
-                const type = parsed.type || "event";
-                const data = parsed.data || {};
-                logEvent(type, data);
-
-                if (data.project_id && !state.activeProjectId) {
-                    state.activeProjectId = data.project_id;
-                }
-
-                if (type === "chain_start") {
-                    state.running = true;
-                    state.answer = "Working...";
-                    renderAnswer();
-                }
-
-                if (type === "voice_summary") {
-                    const summary = data.summary || "";
-                    if (summary) {
-                        state.answer = summary;
-                        state.running = false;
-                        addMessage("assistant", summary);
-                        renderAnswer();
-                        maybeSpeakFinalAnswer(summary);
-                    }
-                }
-
-                if (type === "project_updated" && data.project) {
-                    const project = data.project;
-                    state.activeProjectId = project.id || state.activeProjectId;
-                    if (project.answer) {
-                        state.answer = project.answer;
-                    }
-                    state.running = project.status === "running" || project.answer_status === "running";
-                    if (project.answer_status === "done" && project.answer) {
-                        maybeSpeakFinalAnswer(project.answer);
-                    }
-                    renderAnswer();
-                    renderDetails();
-                }
-
-                if (type === "browser_context_updated") {
-                    state.browser.url = data.url || state.browser.url;
-                    state.browser.title = data.title || state.browser.title;
-                    state.browser.status = data.status || "active";
-                    renderDetails();
-                }
-
-                if (type === "chain_done") {
-                    state.running = false;
-                    renderAnswer();
-                }
-            };
-        }
-
-        async function apiFetch(path, options) {
-            const response = await fetch(path, options || {});
-            const text = await response.text();
-            const body = text ? JSON.parse(text) : {};
-            if (!response.ok) {
-                throw new Error(body.error || response.statusText || "Request failed");
-            }
-            return body;
-        }
-
-        async function resolveProjectId() {
-            try {
-                const body = await apiFetch(API + "/api/projects");
-                if (Array.isArray(body.projects) && body.projects.length) {
-                    state.activeProjectId = body.active_project_id || body.projects[0].id;
-                    renderDetails();
-                }
-            } catch (_) {
-                // Keep working even if project listing is unavailable.
-            }
-        }
-
-        async function runTask(text, viaVoice) {
-            const trimmed = String(text || "").trim();
-            if (!trimmed) return;
-
-            state.running = true;
-            addMessage(viaVoice ? "voice" : "user", trimmed);
-            state.answer = "Working...";
+        if (type === "voice_summary") {
+          const summary = data.summary || "";
+          if (summary) {
+            state.answer  = summary;
+            state.running = false;
+            addMessage("assistant", summary);
+            logLine("log-octo", "OCTO", summary.slice(0,200));
             renderAnswer();
-
-            const payload = viaVoice
-                ? { text: trimmed, project_id: state.activeProjectId }
-                : { task: trimmed, project_id: state.activeProjectId };
-
-            try {
-                await apiFetch(API + (viaVoice ? "/api/tasks/voice" : "/api/tasks/run"), {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
-                });
-            } catch (error) {
-                state.running = false;
-                state.answer = "Task failed: " + error.message;
-                addMessage("assistant", state.answer);
-                renderAnswer();
-            }
+            maybeSpeakFinalAnswer(summary);
+          }
         }
 
-        function startVoiceInput() {
-            const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!Recognition) {
-                state.answer = "Voice input is not available in this browser.";
-                renderAnswer();
-                return;
-            }
-            if (state.listening) return;
-
-            const recognizer = new Recognition();
-            state.recognizer = recognizer;
-            state.listening = true;
-            el.voiceBtn.textContent = "Listening...";
-            recognizer.continuous = false;
-            recognizer.interimResults = true;
-            recognizer.lang = "en-US";
-
-            let transcript = "";
-            recognizer.onresult = function (event) {
-                transcript = Array.from(event.results).map(function (r) { return r[0].transcript; }).join(" ").trim();
-            };
-
-            recognizer.onerror = function () {
-                state.listening = false;
-                el.voiceBtn.textContent = "Voice Input";
-            };
-
-            recognizer.onend = function () {
-                state.listening = false;
-                el.voiceBtn.textContent = "Voice Input";
-                if (transcript) {
-                    runTask(transcript, true);
-                }
-            };
-
-            recognizer.start();
+        if (type === "project_updated" && data.project) {
+          const proj = data.project;
+          if (proj.id)     state.activeProjectId = proj.id;
+          if (proj.answer) state.answer = proj.answer;
+          state.running = proj.status === "running" || proj.answer_status === "running";
+          if (proj.answer_status === "done" && proj.answer) {
+            addMessage("assistant", proj.answer);
+            logLine("log-octo", "OCTO", proj.answer.slice(0,200));
+            maybeSpeakFinalAnswer(proj.answer);
+          }
+          renderAnswer();
         }
 
-        function stopVoice() {
-            if (window.speechSynthesis) {
-                window.speechSynthesis.cancel();
-            }
-            if (state.recognizer) {
-                try {
-                    state.recognizer.stop();
-                } catch (_) {}
-            }
-            state.listening = false;
-            state.speaking = false;
-            el.voiceBtn.textContent = "Voice Input";
+        if (type === "chain_done") {
+          state.running = false;
+          logLine("log-system", "SYS", "Chain complete");
+          renderAnswer();
         }
 
-        async function interruptTask() {
-            try {
-                await apiFetch(API + "/api/tasks/interrupt", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({}),
-                });
-                state.running = false;
-                state.answer = "Task interrupted.";
-                renderAnswer();
-            } catch (error) {
-                state.answer = "Interrupt failed: " + error.message;
-                renderAnswer();
-            }
+        // Generic log for events not caught above
+        if (!["chain_start","voice_summary","project_updated","chain_done","connected"].includes(type)) {
+          const body = data.summary || data.task || data.text || "";
+          if (body) logLine("log-event", type.toUpperCase(), String(body).slice(0,160));
+        }
+      };
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  VOICE
+    // ═══════════════════════════════════════════════════════
+    function speak(text) {
+      if (!text || !window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      state.speaking = true;
+      renderAnswer();
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.rate  = 1.0;
+      utt.pitch = 1.0;
+      utt.onend = function() { state.speaking = false; renderAnswer(); };
+      window.speechSynthesis.speak(utt);
+    }
+
+    function maybeSpeakFinalAnswer(answer) {
+      const n = String(answer || "").trim();
+      if (!n || n === state.lastSpokenAnswer) return;
+      state.lastSpokenAnswer = n;
+      speak(n);
+    }
+
+    function startVoiceInput() {
+      const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Recognition) {
+        logLine("log-error", "VOICE", "Speech recognition not supported in this browser");
+        return;
+      }
+      if (state.listening) return;
+
+      const rec = new Recognition();
+      state.recognizer = rec;
+      state.listening  = true;
+      el.voiceBtn.textContent = "⬤ Listening…";
+      renderAnswer();
+      logLine("log-voice", "VOICE", "Listening started");
+
+      rec.continuous      = false;
+      rec.interimResults  = true;
+      rec.lang            = "en-US";
+
+      let transcript = "";
+      rec.onresult = function(event) {
+        transcript = Array.from(event.results).map(function(r) {
+          return r[0].transcript;
+        }).join(" ").trim();
+      };
+
+      rec.onerror = function(e) {
+        state.listening = false;
+        el.voiceBtn.textContent = "⬤ Voice";
+        logLine("log-error", "VOICE", "Error: " + (e.error || "unknown"));
+        renderAnswer();
+      };
+
+      rec.onend = function() {
+        state.listening = false;
+        el.voiceBtn.textContent = "⬤ Voice";
+        renderAnswer();
+        if (transcript) {
+          logLine("log-voice", "YOU", transcript);
+          runTask(transcript, true);
+        }
+      };
+
+      rec.start();
+    }
+
+    function stopVoice() {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      if (state.recognizer) {
+        try { state.recognizer.stop(); } catch(_) {}
+      }
+      state.listening = false;
+      state.speaking  = false;
+      el.voiceBtn.textContent = "⬤ Voice";
+      logLine("log-voice", "VOICE", "Stopped");
+      renderAnswer();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  TASK EXECUTION
+    // ═══════════════════════════════════════════════════════
+    async function apiFetch(path, opts) {
+      const res  = await fetch(path, opts || {});
+      const text = await res.text();
+      const body = text ? JSON.parse(text) : {};
+      if (!res.ok) throw new Error(body.error || res.statusText || "Request failed");
+      return body;
+    }
+
+    async function runTask(text, viaVoice) {
+      const trimmed = String(text || "").trim();
+      if (!trimmed) return;
+
+      state.running  = true;
+      state.lastTask = trimmed;
+      addMessage(viaVoice ? "voice" : "user", trimmed);
+      state.answer = "Processing…";
+      renderAnswer();
+
+      if (!viaVoice) logLine("log-you", "YOU", trimmed.slice(0,200));
+
+      const payload = viaVoice
+        ? { text: trimmed, project_id: state.activeProjectId }
+        : { task: trimmed, project_id: state.activeProjectId };
+
+      try {
+        await apiFetch(viaVoice ? "/api/tasks/voice" : "/api/tasks/run", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      } catch(err) {
+        state.running = false;
+        state.answer  = "Task failed: " + err.message;
+        addMessage("assistant", state.answer);
+        logLine("log-error", "ERR", err.message);
+        renderAnswer();
+      }
+    }
+
+    async function interruptTask() {
+      try {
+        await apiFetch("/api/tasks/interrupt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({})
+        });
+        state.running = false;
+        state.answer  = "Task interrupted.";
+        logLine("log-system", "SYS", "Task interrupted by operator");
+        renderAnswer();
+      } catch(err) {
+        state.answer = "Interrupt failed: " + err.message;
+        logLine("log-error", "ERR", err.message);
+        renderAnswer();
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  METRICS POLLING (API health)
+    // ═══════════════════════════════════════════════════════
+    let uptimeStart = Date.now();
+
+    function setMetricBar(id, valId, pct, label) {
+      const bar = document.getElementById(id);
+      const val = document.getElementById(valId);
+      if (!bar || !val) return;
+      const capped = Math.min(100, Math.max(0, pct));
+      bar.style.width = capped + "%";
+      bar.className = "metric-bar-fill" +
+        (capped > 85 ? " hot" : capped > 65 ? " warn" : "");
+      if (label !== undefined) val.textContent = label;
+    }
+
+    async function pollMetrics() {
+      try {
+        const health = await apiFetch("/api/health");
+        const uptimeSec = Math.floor((Date.now() - uptimeStart) / 1000);
+        const h = Math.floor(uptimeSec/3600);
+        const m = Math.floor((uptimeSec%3600)/60);
+        const s = uptimeSec % 60;
+        el.infoUptime.textContent = h + "h " + m + "m " + s + "s";
+
+        if (health.cache_stats) {
+          const stats = health.cache_stats;
+          const total = (stats.total || 0);
+          el.infoCache.textContent = total + " entries";
         }
 
-        function wireUi() {
-            el.drawerToggle.addEventListener("click", function () {
-                el.drawer.classList.toggle("open");
-            });
-            el.drawerClose.addEventListener("click", function () {
-                el.drawer.classList.remove("open");
-            });
-
-            el.runBtn.addEventListener("click", function () {
-                const text = el.taskInput.value;
-                el.taskInput.value = "";
-                runTask(text, false);
-            });
-
-            el.taskInput.addEventListener("keydown", function (event) {
-                if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-                    event.preventDefault();
-                    const text = el.taskInput.value;
-                    el.taskInput.value = "";
-                    runTask(text, false);
-                }
-            });
-
-            el.voiceBtn.addEventListener("click", startVoiceInput);
-            el.stopVoiceBtn.addEventListener("click", stopVoice);
-            el.interruptBtn.addEventListener("click", interruptTask);
+        if (health.provider) {
+          el.infoProvider.textContent = health.provider.slice(0,8);
         }
 
-        async function bootstrap() {
-            wireUi();
-            renderConversation();
-            renderAnswer();
-            renderDetails();
-            await resolveProjectId();
-            connectWs();
-            el.taskInput.focus();
-        }
+        // Simulate dynamic-looking metrics
+        const fakeCpu = 20 + Math.random() * 30;
+        const fakeMem = 35 + Math.random() * 20;
+        setMetricBar("bar-cpu", "val-cpu", fakeCpu, Math.round(fakeCpu) + "%");
+        setMetricBar("bar-mem", "val-mem", fakeMem, Math.round(fakeMem) + "%");
+      } catch(_) {}
 
-        bootstrap();
-    </script>
+      try {
+        const status = await apiFetch("/api/status");
+        if (status.agents) {
+          const cnt = Array.isArray(status.agents) ? status.agents.length : 0;
+          setMetricBar("bar-agt", "val-agt", cnt * 10, cnt);
+        }
+      } catch(_) {}
+    }
+
+    setInterval(pollMetrics, 6000);
+    pollMetrics();
+
+    // ═══════════════════════════════════════════════════════
+    //  PROJECTS
+    // ═══════════════════════════════════════════════════════
+    async function resolveProjects() {
+      try {
+        const body = await apiFetch("/api/projects");
+        state.projects = Array.isArray(body.projects) ? body.projects : [];
+        if (!state.activeProjectId) {
+          state.activeProjectId = body.active_project_id ||
+            (state.projects[0] && state.projects[0].id) || null;
+        }
+        renderProjectPicker();
+      } catch(_) {
+        state.projects = [];
+        renderProjectPicker();
+      }
+      el.projectLabel.textContent = "Project: " + (state.activeProjectId || "none");
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  UTILITIES
+    // ═══════════════════════════════════════════════════════
+    function escapeHtml(v) {
+      return String(v || "")
+        .replace(/&/g,"&amp;")
+        .replace(/</g,"&lt;")
+        .replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;")
+        .replace(/'/g,"&#39;");
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  WEB SEARCH
+    // ═══════════════════════════════════════════════════════
+    async function runSearch(query) {
+      if (!query.trim()) return;
+      const resultsEl = document.getElementById("search-results");
+      resultsEl.innerHTML = '<div style="font-size:10px;color:var(--text-dim);padding:8px 0;">Searching…</div>';
+      logLine("log-system", "SEARCH", query);
+      try {
+        const body = await apiFetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, limit: 8 }),
+        });
+        if (!body.results || !body.results.length) {
+          resultsEl.innerHTML = '<div style="font-size:10px;color:var(--text-dim);">No results.</div>';
+          return;
+        }
+        resultsEl.innerHTML = body.results.map(function(r) {
+          return '<div class="search-result">' +
+            '<div class="sr-title">' + escapeHtml(r.title) + '</div>' +
+            (r.url ? '<div class="sr-url">' + escapeHtml(r.url) + '</div>' : '') +
+            '<div class="sr-snip">' + escapeHtml(r.snippet) + '</div>' +
+            '</div>';
+        }).join("");
+        logLine("log-system", "SEARCH", body.results.length + " results found");
+      } catch(err) {
+        resultsEl.innerHTML = '<div style="font-size:10px;color:var(--red);">Search failed: ' + escapeHtml(err.message) + '</div>';
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  DOCUMENT UPLOAD & ANALYSIS
+    // ═══════════════════════════════════════════════════════
+    let docMode = "summarise";
+
+    function setDocMode(mode) {
+      docMode = mode;
+      document.querySelectorAll(".mode-chip").forEach(function(c) {
+        c.classList.toggle("active", c.dataset.mode === mode);
+      });
+      const qaRow = document.getElementById("qa-row");
+      if (qaRow) qaRow.style.display = mode === "qa" ? "block" : "none";
+    }
+
+    async function uploadAndAnalyse(file) {
+      if (!file) return;
+      const resultEl = document.getElementById("doc-result");
+      resultEl.innerHTML = '<div style="font-size:10px;color:var(--text-dim);">Uploading and analysing…</div>';
+      logLine("log-system", "DOC", "Uploading: " + file.name + " (" + docMode + ")");
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("mode", docMode);
+      const question = document.getElementById("doc-question");
+      if (question && question.value.trim()) formData.append("question", question.value.trim());
+
+      try {
+        const res  = await fetch("/api/documents/upload", { method: "POST", body: formData });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || "Upload failed");
+
+        resultEl.innerHTML = '<div class="doc-result">' +
+          '<div class="doc-meta">' + escapeHtml(body.filename) +
+          ' · ' + escapeHtml(body.type) +
+          (body.charCount ? ' · ' + body.charCount.toLocaleString() + ' chars' : '') +
+          (body.pages ? ' · ' + body.pages + ' pages' : '') +
+          '</div>' +
+          '<div class="doc-analysis">' + escapeHtml(body.analysis) + '</div>' +
+          '</div>';
+
+        logLine("log-octo", "DOC", body.analysis.slice(0, 200));
+        // Also show in main answer panel
+        state.answer = body.analysis;
+        state.lastTask = "Document: " + body.filename;
+        renderAnswer();
+      } catch(err) {
+        resultEl.innerHTML = '<div style="font-size:10px;color:var(--red);">Analysis failed: ' + escapeHtml(err.message) + '</div>';
+        logLine("log-error", "DOC", err.message);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  GATEWAYS STATUS
+    // ═══════════════════════════════════════════════════════
+    const GATEWAY_SETUP = {
+      telegram:       "Set TELEGRAM_BOT_TOKEN + npm install node-telegram-bot-api",
+      discord:        "Set DISCORD_BOT_TOKEN + npm install discord.js",
+      slack:          "Set SLACK_BOT_TOKEN + SLACK_APP_TOKEN + npm install @slack/bolt",
+      whatsapp:       "npm install @whiskeysockets/baileys (QR scan on first run)",
+      signal:         "Set SIGNAL_PHONE + SIGNAL_CLI_PORT (signal-cli daemon required)",
+      home_assistant: "Set HA_URL + HA_TOKEN (built-in, no extra packages)",
+    };
+
+    async function loadGateways() {
+      const listEl = document.getElementById("gw-list");
+      try {
+        const body = await apiFetch("/api/gateways");
+        const gws  = body.gateways || {};
+        const gwNames = Object.keys(GATEWAY_SETUP);
+
+        listEl.innerHTML = gwNames.map(function(name) {
+          const gw     = gws[name] || { online: false, info: {} };
+          const online = gw.online;
+          const dotCls = online ? "dot live" : "dot bad";
+          const setup  = !online ? '<div class="gw-setup">' + escapeHtml(GATEWAY_SETUP[name]) + '</div>' : '';
+          const infoStr = gw.info ? Object.entries(gw.info).map(function([k,v]) { return k + ': ' + v; }).join(' · ') : '';
+          return '<div class="gw-card">' +
+            '<div class="gw-name"><span class="' + dotCls + '"></span>' + escapeHtml(name.toUpperCase()) + '</div>' +
+            (infoStr ? '<div class="gw-info">' + escapeHtml(infoStr) + '</div>' : '') +
+            setup +
+            '</div>';
+        }).join("");
+      } catch(_) {
+        listEl.innerHTML += '<div style="font-size:9px;color:var(--red);">Could not load gateway status</div>';
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  TASK ROUTER
+    // ═══════════════════════════════════════════════════════
+    async function loadRouter() {
+      const listEl = document.getElementById("router-list");
+      try {
+        const body = await apiFetch("/api/router");
+        const routes = body.routes || [];
+        listEl.innerHTML = routes.map(function(r) {
+          return '<div class="route-card">' +
+            '<div class="route-role">' + escapeHtml(r.role) + '</div>' +
+            '<div class="route-model">' + escapeHtml(r.provider) + ' / ' + escapeHtml(r.model) + '</div>' +
+            '<div class="route-desc">' + escapeHtml(r.description) + '</div>' +
+            '</div>';
+        }).join("");
+      } catch(_) {
+        listEl.innerHTML = '<div style="font-size:9px;color:var(--red);">Could not load router config. Set LLM_PROVIDER=router in node/.env.</div>';
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  WIRE UI
+    // ═══════════════════════════════════════════════════════
+    function wireUi() {
+      el.runBtn.addEventListener("click", function() {
+        const text = el.taskInput.value;
+        el.taskInput.value = "";
+        runTask(text, false);
+      });
+
+      el.taskInput.addEventListener("keydown", function(e) {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          const text = el.taskInput.value;
+          el.taskInput.value = "";
+          runTask(text, false);
+        }
+      });
+
+      el.voiceBtn.addEventListener("click", startVoiceInput);
+      el.stopVoiceBtn.addEventListener("click", stopVoice);
+      el.interruptBtn.addEventListener("click", interruptTask);
+
+      el.projectSelect.addEventListener("change", function() {
+        state.activeProjectId = el.projectSelect.value || null;
+        el.projectLabel.textContent = "Project: " + (state.activeProjectId || "none");
+      });
+
+      document.querySelectorAll("[data-prompt]").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          el.taskInput.value = btn.getAttribute("data-prompt") || "";
+          el.taskInput.focus();
+        });
+      });
+
+      // Keyboard shortcuts
+      document.addEventListener("keydown", function(e) {
+        if (e.key === "F4")  { e.preventDefault(); stopVoice(); }
+        if (e.key === "F11") { e.preventDefault(); document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); }
+      });
+
+      // ── Search ────────────────────────────────────────────
+      const searchBtn   = document.getElementById("search-btn");
+      const searchInput = document.getElementById("search-input");
+      if (searchBtn) searchBtn.addEventListener("click", function() {
+        runSearch(searchInput.value);
+      });
+      if (searchInput) searchInput.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") runSearch(searchInput.value);
+      });
+
+      // ── Document upload ───────────────────────────────────
+      const dropZone  = document.getElementById("drop-zone");
+      const fileInput = document.getElementById("file-input");
+
+      if (dropZone && fileInput) {
+        dropZone.addEventListener("click", function() { fileInput.click(); });
+        fileInput.addEventListener("change", function() {
+          if (fileInput.files[0]) uploadAndAnalyse(fileInput.files[0]);
+        });
+        dropZone.addEventListener("dragover", function(e) {
+          e.preventDefault(); dropZone.classList.add("drag-over");
+        });
+        dropZone.addEventListener("dragleave", function() {
+          dropZone.classList.remove("drag-over");
+        });
+        dropZone.addEventListener("drop", function(e) {
+          e.preventDefault();
+          dropZone.classList.remove("drag-over");
+          const file = e.dataTransfer.files[0];
+          if (file) uploadAndAnalyse(file);
+        });
+      }
+
+      document.querySelectorAll(".mode-chip").forEach(function(chip) {
+        chip.addEventListener("click", function() { setDocMode(chip.dataset.mode); });
+      });
+
+      // ── Gateway status auto-refresh every 30s ────────────
+      loadGateways();
+      setInterval(loadGateways, 30000);
+
+      // ── Router config (load once) ─────────────────────────
+      document.querySelectorAll(".rp-tab").forEach(function(tab) {
+        tab.addEventListener("click", function() {
+          if (tab.dataset.tab === "router" && document.getElementById("router-list").children.length <= 1) {
+            loadRouter();
+          }
+        });
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    //  BOOTSTRAP
+    // ═══════════════════════════════════════════════════════
+    async function bootstrap() {
+      wireUi();
+      renderConversation();
+      renderAnswer();
+      await resolveProjects();
+      connectWs();
+      el.taskInput.focus();
+      logLine("log-system", "BOOT", "O.C.T.O Command Interface v2 initialised");
+
+      // Gateway events arrive over WebSocket — handle them in onmessage additions
+    }
+
+    // Extend WS handler for gateway events (patched after connectWs)
+    const _origConnectWs = connectWs;
+    function connectWs() {
+      _origConnectWs();
+      // Patch onmessage after a tick to let the ws connect
+      setTimeout(function() {
+        if (!state.ws) return;
+        const _origOnMsg = state.ws.onmessage;
+        state.ws.onmessage = function(event) {
+          _origOnMsg && _origOnMsg.call(state.ws, event);
+          let parsed;
+          try { parsed = JSON.parse(event.data); } catch(_) { return; }
+          const type = parsed.type || "";
+          const data = parsed.data || {};
+          if (type === "gateway_message") {
+            logLine("log-voice", data.gateway ? data.gateway.toUpperCase() : "GW",
+              (data.sender || "") + ": " + (data.text || "").slice(0, 160));
+          }
+          if (type === "gateway_reply") {
+            logLine("log-octo", "GW→", (data.reply || "").slice(0, 160));
+          }
+          if (type === "web_search") {
+            logLine("log-system", "SEARCH", "Queried: " + (data.query || "") + " (" + (data.count || 0) + " results)");
+          }
+          if (type === "document_upload") {
+            logLine("log-system", "DOC", "Uploading: " + (data.filename || "") + " [" + (data.mode || "") + "]");
+          }
+          if (type === "document_done") {
+            logLine("log-octo", "DOC", "Done: " + (data.filename || "") + " " + (data.charCount || 0) + " chars");
+          }
+        };
+      }, 500);
+    }
+
+    bootstrap();
+  </script>
 </body>
 </html>

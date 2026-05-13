@@ -1,6 +1,8 @@
 'use strict';
 const http    = require('http');
 const path    = require('path');
+const os      = require('os');
+const fs      = require('fs');
 const { WebSocketServer } = require('ws');
 const express = require('express');
 const cors    = require('cors');
@@ -10,7 +12,10 @@ const { runTask } = require('./runner');
 const { complete, activeProvider } = require('./llm');
 const { getTools, SUPPORTED_FORMATS } = require('./adapters');
 const skillRegistry = require('./skill_registry');
-const toolLoader = require('./tool_loader');
+const toolLoader    = require('./tool_loader');
+const { search: webSearch, formatResults } = require('./tools/web_search');
+const { processDocument } = require('./tools/document');
+const { initGateways, manager: gatewayManager } = require('./gateways');
 
 // ── HEADLESS_MODE ────────────────────────────────────────────────────────────
 // When true: Cortex does not auto-plan; external LLMs call octopus_* tools directly.
@@ -678,6 +683,174 @@ app.post('/api/plugins/call/:name', async (req, res) => {
   }
 });
 
+// ── Web Search ───────────────────────────────────────────────────────────────
+app.post('/api/search', async (req, res) => {
+  const { query, limit = 8, engine = 'auto' } = req.body || {};
+  if (!query || !query.trim()) {
+    return res.status(400).json({ error: 'query is required' });
+  }
+  try {
+    const results  = await webSearch(query.trim(), { limit, engine });
+    const markdown = formatResults(results);
+    broadcastEvent('web_search', { query, count: results.length });
+    res.json({ query, results, markdown });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Document Upload & Analysis ────────────────────────────────────────────────
+// Uses multer for multipart/form-data. Falls back to raw body buffer if multer
+// is not installed (text files only in that case).
+let upload;
+try {
+  const multer = require('multer');
+  upload = multer({
+    storage: multer.memoryStorage(),
+    limits:  { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  });
+} catch (_) {
+  upload = null; // multer not installed — text-only fallback
+}
+
+function uploadMiddleware(req, res, next) {
+  if (upload) return upload.single('file')(req, res, next);
+  // Fallback: read raw body as Buffer
+  const chunks = [];
+  req.on('data', c => chunks.push(c));
+  req.on('end', () => {
+    req.file = {
+      buffer:   Buffer.concat(chunks),
+      originalname: req.headers['x-filename'] || 'upload.txt',
+      mimetype: req.headers['content-type'] || 'text/plain',
+    };
+    next();
+  });
+}
+
+app.post('/api/documents/upload', uploadMiddleware, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const { mode = 'summarise', question = '' } = req.body || {};
+  const filename = req.file.originalname || 'document';
+
+  broadcastEvent('document_upload', { filename, mode });
+
+  // Run extraction first — always succeeds for supported text types
+  const { extractText } = require('./tools/document');
+  let extracted;
+  try {
+    extracted = await extractText(req.file.buffer, filename);
+  } catch (err) {
+    return res.status(500).json({ error: 'Extraction failed: ' + err.message });
+  }
+
+  // Run LLM analysis — degrade gracefully if LLM is unavailable
+  let analysis = '';
+  let analysisError = null;
+  try {
+    const { analyseText, analyseWithVision } = require('./tools/document');
+    if (extracted.type === 'image') {
+      analysis = await analyseWithVision(extracted.imageBase64, extracted.mimeType,
+        question || 'Describe and extract all information from this image.', { question });
+    } else if (extracted.type !== 'unsupported') {
+      analysis = await analyseText(extracted.text, mode, { question });
+    } else {
+      analysis = extracted.text;
+    }
+  } catch (err) {
+    analysisError = err.message;
+    // Return extracted text with error note so UI is still useful
+    analysis = extracted.text
+      ? `[LLM analysis unavailable: ${err.message}]\n\n--- EXTRACTED TEXT ---\n${extracted.text.slice(0, 8000)}`
+      : `[LLM analysis unavailable: ${err.message}]`;
+  }
+
+  const result = {
+    filename,
+    type:       extracted.type,
+    charCount:  extracted.text ? extracted.text.length : req.file.buffer.length,
+    pages:      extracted.pages,
+    analysis,
+    analysisError,
+  };
+
+  broadcastEvent('document_done', { filename, type: result.type, charCount: result.charCount });
+  res.json({ ok: !analysisError, ...result });
+});
+
+app.get('/api/documents/modes', (_req, res) => {
+  res.json({
+    modes: ['summarise', 'analyse', 'extract', 'code_review', 'explain', 'qa'],
+    supported_extensions: [
+      '.txt','.md','.csv','.json','.xml','.html','.js','.ts','.py','.java',
+      '.go','.rs','.cpp','.c','.sh','.yaml','.yml','.sql','.css','.log',
+    ],
+    optional: {
+      pdf:  'npm install pdf-parse  + ENABLE_PDF=true',
+      docx: 'npm install mammoth    + ENABLE_DOCX=true',
+      xlsx: 'npm install xlsx       + ENABLE_XLSX=true',
+    },
+  });
+});
+
+// ── Streaming Text Completion (SSE) ───────────────────────────────────────────
+// Streams LLM completion via Server-Sent Events for real-time text output.
+app.post('/api/complete/stream', async (req, res) => {
+  const { prompt, role = 'default', maxTokens = 2048 } = req.body || {};
+  if (!prompt) return res.status(400).json({ error: 'prompt is required' });
+
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  send({ type: 'start', role });
+
+  try {
+    const answer = await complete(prompt, { maxTokens, role, timeout: 120000 });
+    // Simulate streaming by chunking the result (real streaming requires per-provider SSE support)
+    const words = answer.split(' ');
+    const CHUNK = 8;
+    for (let i = 0; i < words.length; i += CHUNK) {
+      const chunk = words.slice(i, i + CHUNK).join(' ') + (i + CHUNK < words.length ? ' ' : '');
+      send({ type: 'chunk', text: chunk });
+      await new Promise(r => setTimeout(r, 30));
+    }
+    send({ type: 'done', full: answer });
+  } catch (err) {
+    send({ type: 'error', message: err.message });
+  }
+
+  res.end();
+});
+
+// ── Gateways ─────────────────────────────────────────────────────────────────
+app.get('/api/gateways', (_req, res) => {
+  res.json({ gateways: gatewayManager.status() });
+});
+
+app.post('/api/gateways/:name/send', async (req, res) => {
+  const { name } = req.params;
+  const { channel, text } = req.body || {};
+  if (!channel || !text) return res.status(400).json({ error: 'channel and text required' });
+  try {
+    await gatewayManager.sendTo(name, channel, text);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── Task Router Status ────────────────────────────────────────────────────────
+app.get('/api/router', (_req, res) => {
+  const { summarise } = require('./task_router');
+  res.json({ routes: summarise() });
+});
+
 // ── Web dashboard (power-user UI, no hardware needed) ────────────────────────
 const DASHBOARD_HTML = path.join(__dirname, 'dashboard', 'index.html');
 app.get('/dashboard', (_req, res) => res.sendFile(DASHBOARD_HTML));
@@ -702,10 +875,29 @@ if (require.main === module) {
       process.exit(1);
     }
   });
-  httpServer.listen(PORT, () => {
+  httpServer.listen(PORT, async () => {
     console.error(`Octopus API running on http://localhost:${PORT}`);
     console.error(`WebSocket events:   ws://localhost:${PORT}/ws`);
     console.error(`HEADLESS_MODE:      ${isHeadlessMode()}`);
+
+    // Wire gateways: use the voice/task runner as the task handler
+    const gatewayTaskHandler = async (text, ctx) => {
+      try {
+        const project  = getProject(null);
+        const payload  = { text, project_id: project.id };
+        // Reuse the voice task path which returns a short answer
+        const voiceRes = await require('axios').post(
+          `http://localhost:${PORT}/api/tasks/voice`,
+          payload,
+          { headers: { 'Content-Type': 'application/json' }, timeout: 120000 }
+        );
+        return voiceRes.data?.summary || voiceRes.data?.answer || 'Done.';
+      } catch (err) {
+        return `Error: ${err.message}`;
+      }
+    };
+
+    await initGateways(gatewayTaskHandler, broadcastEvent);
   });
 }
 
