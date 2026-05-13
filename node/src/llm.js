@@ -54,20 +54,33 @@ const CALLER_PRESETS = {
 };
 const preset = CALLER_PRESETS[CALLER] || null;
 
-const PROVIDER = preset
-  ? preset.provider
-  : (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
-
-const MODEL = process.env.LLM_MODEL || (preset ? preset.model : {
+// MODEL_DEFAULTS — used when LLM_MODEL is not set
+const MODEL_DEFAULTS = {
   anthropic:    'claude-sonnet-4-6',
   openai:       'gpt-4o',
   google:       'gemini-2.0-flash',
-  ollama:       'llama3.2',
+  ollama:       'gemma4:e2b',
   nvidia:       'meta/llama-3.1-405b-instruct',
   openrouter:   'nousresearch/hermes-3-llama-3.1-405b',
   huggingface:  'google/gemma-3-4b-it',
-  custom_http:  process.env.CUSTOM_HTTP_MODEL || 'default',
-}[PROVIDER]) || 'claude-sonnet-4-6';
+  custom_http:  '',
+  router:       '',
+};
+
+// Dynamic — re-read process.env every call so setup-wizard hot-reload works
+// without a server restart.  CALLER presets still override everything.
+function getDynamicProvider() {
+  if (CALLER && preset) {
+    return { provider: preset.provider, model: process.env.LLM_MODEL || preset.model };
+  }
+  const p = (process.env.LLM_PROVIDER || 'anthropic').toLowerCase();
+  const m = process.env.LLM_MODEL || MODEL_DEFAULTS[p] || 'claude-sonnet-4-6';
+  return { provider: p, model: m };
+}
+
+// Kept for backward-compat (activeProvider export, log lines, etc.)
+const PROVIDER = getDynamicProvider().provider;
+const MODEL    = getDynamicProvider().model;
 
 if (CALLER && preset) {
   console.error(`[llm] Caller preset: OCTOPUS_CALLER=${CALLER} → ${PROVIDER}/${MODEL}`);
@@ -325,12 +338,13 @@ async function completeCustomHttp(prompt, opts = {}) {
 
 async function completeOllama(prompt, opts = {}) {
   const base  = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-  const model = opts._model || MODEL;
+  const { model: dynModel } = getDynamicProvider();
+  const model = opts._model || dynModel;
   return withRetry(async () => {
     const res = await axios.post(
       `${base}/api/generate`,
       { model, prompt, stream: false, options: { num_predict: opts.maxTokens || 1024 } },
-      { timeout: opts.timeout || 60000 }
+      { timeout: opts.timeout || 10000 }  // fast-fail: Ollama not running = immediate error
     );
     return res.data.response;
   });
@@ -347,9 +361,11 @@ const COMPLETERS = {
   custom_http: completeCustomHttp,
 };
 
-const SOVEREIGN_MODEL = process.env.SOVEREIGN_FALLBACK_MODEL || 'gemma4:e2b';
+// Read sovereign model dynamically so env changes take effect without restart
+function getSovereignModel() { return process.env.SOVEREIGN_FALLBACK_MODEL || 'gemma4:e2b'; }
 
 async function complete(prompt, opts = {}) {
+  const { provider: PROVIDER, model: MODEL } = getDynamicProvider();
   const cappedOpts = { ...opts, maxTokens: Math.min(opts.maxTokens || 1024, MAX_THINKING_TOKENS) };
 
   // ── Task Router: LLM_PROVIDER=router routes per agent role ───────────────
@@ -361,7 +377,7 @@ async function complete(prompt, opts = {}) {
     const routedKey = route.provider !== 'ollama' ? await getSecureKey(route.provider) : 'local';
     if (!routedKey) {
       console.error(`[llm] No key for ${route.provider} — sovereign fallback to Ollama`);
-      return completeOllama(prompt, { ...cappedOpts, _model: SOVEREIGN_MODEL });
+      return completeOllama(prompt, { ...cappedOpts, _model: getSovereignModel() });
     }
     const routedFn = COMPLETERS[route.provider];
     if (!routedFn) throw new Error(`Router: unknown provider "${route.provider}"`);
@@ -385,10 +401,10 @@ async function complete(prompt, opts = {}) {
       }[PROVIDER] || 'API_KEY';
       console.error(
         `[llm] ⚠  No key for "${PROVIDER}" (${envHint} not set). ` +
-        `Sovereign Fallback: routing to local Ollama (${SOVEREIGN_MODEL}). ` +
+        `Sovereign Fallback: routing to local Ollama (${getSovereignModel()}). ` +
         `To fix: set ${envHint} in node/.env or run octopus_login.`
       );
-      return completeOllama(prompt, { ...cappedOpts, _model: SOVEREIGN_MODEL });
+      return completeOllama(prompt, { ...cappedOpts, _model: getSovereignModel() });
     }
   }
 
@@ -396,7 +412,7 @@ async function complete(prompt, opts = {}) {
 }
 
 function activeProvider() {
-  return { provider: PROVIDER, model: MODEL };
+  return getDynamicProvider();
 }
 
 module.exports = { complete, activeProvider, getSecureKey };

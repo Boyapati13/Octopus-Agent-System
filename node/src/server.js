@@ -1,4 +1,7 @@
 'use strict';
+// Load .env FIRST — before any module reads process.env
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+
 const http    = require('http');
 const path    = require('path');
 const os      = require('os');

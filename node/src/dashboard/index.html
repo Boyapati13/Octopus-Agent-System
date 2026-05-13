@@ -1742,7 +1742,6 @@
       ws.onmessage = function(event) {
         let parsed;
         try { parsed = JSON.parse(event.data); } catch(_) { return; }
-
         const type = parsed.type || "event";
         const data = parsed.data || {};
         logEvent(type, data);
@@ -1752,23 +1751,46 @@
           renderProjectPicker();
         }
 
+        // ── Chain lifecycle ─────────────────────────────────
         if (type === "chain_start") {
           state.running = true;
           state.answer  = "Working…";
-          if (data.task) {
-            state.lastTask = data.task;
-            logLine("log-system", "TASK", data.task);
-          }
+          if (data.task) { state.lastTask = data.task; logLine("log-system", "TASK", data.task); }
           renderAnswer();
+          if (Array.isArray(data.plan) && data.plan.length) initPlan(data.plan);
+          if (data.project_id && state.activeProjectId !== data.project_id) {
+            state.activeProjectId = data.project_id;
+            if (typeof renderDetails === "function") renderDetails();
+          }
         }
 
+        if (type === "chain_done") {
+          state.running = false;
+          logLine("log-system", "SYS", "Chain complete");
+          renderAnswer();
+          setTimeout(clearPlan, 3000);
+        }
+
+        // ── Agent plan status ───────────────────────────────
+        if (type === "agent_start") setPlanAgentStatus(data.agent || "", "running");
+        if (type === "agent_done")  setPlanAgentStatus(data.agent || "", data.approved === false ? "failed" : "done");
+        if (type === "gate_fail")   setPlanAgentStatus(data.agent || "", "failed");
+
+        if (type === "agent_output") {
+          const agent = (data.agent || "").toLowerCase();
+          if (agent === "architect" && typeof renderArchitectOutput === "function") renderArchitectOutput(data);
+          const summary = data.advice || (data.findings && data.findings.length + " findings") || "";
+          if (summary) logLine("log-octo", (data.agent || "AGENT").toUpperCase(), summary.slice(0, 200));
+        }
+
+        // ── Voice / answer ──────────────────────────────────
         if (type === "voice_summary") {
           const summary = data.summary || "";
           if (summary) {
             state.answer  = summary;
             state.running = false;
             addMessage("assistant", summary);
-            logLine("log-octo", "OCTO", summary.slice(0,200));
+            logLine("log-octo", "OCTO", summary.slice(0, 200));
             renderAnswer();
             maybeSpeakFinalAnswer(summary);
           }
@@ -1781,22 +1803,41 @@
           state.running = proj.status === "running" || proj.answer_status === "running";
           if (proj.answer_status === "done" && proj.answer) {
             addMessage("assistant", proj.answer);
-            logLine("log-octo", "OCTO", proj.answer.slice(0,200));
+            logLine("log-octo", "OCTO", proj.answer.slice(0, 200));
             maybeSpeakFinalAnswer(proj.answer);
           }
           renderAnswer();
         }
 
-        if (type === "chain_done") {
-          state.running = false;
-          logLine("log-system", "SYS", "Chain complete");
-          renderAnswer();
+        // ── Gateways ────────────────────────────────────────
+        if (type === "gateway_task_start") {
+          logLine("log-voice", (data.gateway || "GW").toUpperCase(),
+            (data.sender || "") + " → \"" + (data.text || "").slice(0, 120) + "\"");
+          if (data.project_id && state.activeProjectId !== data.project_id) {
+            state.activeProjectId = data.project_id;
+            if (el && el.projectLabel) el.projectLabel.textContent = "Project: " + data.project_id;
+          }
         }
+        if (type === "gateway_message") {
+          logLine("log-voice", data.gateway ? data.gateway.toUpperCase() : "GW",
+            (data.sender || "") + ": " + (data.text || "").slice(0, 160));
+        }
+        if (type === "gateway_reply") { logLine("log-octo", "GW→", (data.reply || "").slice(0, 160)); }
+        if (type === "whatsapp_qr")   { showWaQR(data.qr); }
 
-        // Generic log for events not caught above
-        if (!["chain_start","voice_summary","project_updated","chain_done","connected"].includes(type)) {
+        // ── Tools ───────────────────────────────────────────
+        if (type === "web_search")    { logLine("log-system", "SEARCH", "Queried: " + (data.query || "") + " (" + (data.count || 0) + " results)"); }
+        if (type === "document_upload") { logLine("log-system", "DOC", "Uploading: " + (data.filename || "") + " [" + (data.mode || "") + "]"); }
+        if (type === "document_done")   { logLine("log-octo",   "DOC", "Done: " + (data.filename || "") + " — " + (data.charCount || 0) + " chars"); }
+
+        // ── Generic fallback ────────────────────────────────
+        const HANDLED = ["chain_start","chain_done","agent_start","agent_done","gate_fail",
+          "agent_output","voice_summary","project_updated","connected",
+          "gateway_task_start","gateway_message","gateway_reply","whatsapp_qr",
+          "web_search","document_upload","document_done"];
+        if (!HANDLED.includes(type)) {
           const body = data.summary || data.task || data.text || "";
-          if (body) logLine("log-event", type.toUpperCase(), String(body).slice(0,160));
+          if (body) logLine("log-event", type.toUpperCase(), String(body).slice(0, 160));
         }
       };
     }
@@ -2362,78 +2403,6 @@
       logLine("log-system", "BOOT", "O.C.T.O Command Interface v2 initialised");
 
       // Gateway events arrive over WebSocket — handle them in onmessage additions
-    }
-
-    // Extend WS handler for gateway events (patched after connectWs)
-    const _origConnectWs = connectWs;
-    function connectWs() {
-      _origConnectWs();
-      // Patch onmessage after a tick to let the ws connect
-      setTimeout(function() {
-        if (!state.ws) return;
-        const _origOnMsg = state.ws.onmessage;
-        state.ws.onmessage = function(event) {
-          _origOnMsg && _origOnMsg.call(state.ws, event);
-          let parsed;
-          try { parsed = JSON.parse(event.data); } catch(_) { return; }
-          const type = parsed.type || "";
-          const data = parsed.data || {};
-
-          // ── Plan View ──────────────────────────────────────
-          if (type === "chain_start") {
-            if (Array.isArray(data.plan) && data.plan.length) initPlan(data.plan);
-            if (data.project_id && state.activeProjectId !== data.project_id) {
-              // Auto-switch project if task came from a gateway
-              state.activeProjectId = data.project_id;
-              renderDetails && renderDetails();
-            }
-          }
-          if (type === "agent_start")  setPlanAgentStatus(data.agent || "", "running");
-          if (type === "agent_done")   setPlanAgentStatus(data.agent || "", data.approved === false ? "failed" : "done");
-          if (type === "gate_fail")    setPlanAgentStatus(data.agent || "", "failed");
-          if (type === "chain_done")   { setTimeout(clearPlan, 3000); } // keep plan visible 3s after completion
-
-          // ── Full agent output (Architect plan, findings, etc.) ──
-          if (type === "agent_output") {
-            const agent = (data.agent || "").toLowerCase();
-            if (agent === "architect") renderArchitectOutput(data);
-            // Log all agent outputs to the log tab
-            const summary = data.advice || (data.findings && data.findings.length + " findings") || "";
-            if (summary) logLine("log-octo", (data.agent || "AGENT").toUpperCase(), summary.slice(0, 200));
-          }
-
-          // ── Gateway events ─────────────────────────────────
-          if (type === "gateway_task_start") {
-            logLine("log-voice",
-              (data.gateway || "GW").toUpperCase(),
-              (data.sender || "") + " → \"" + (data.text || "").slice(0, 120) + "\"");
-            // Auto-switch dashboard to this project
-            if (data.project_id && state.activeProjectId !== data.project_id) {
-              state.activeProjectId = data.project_id;
-              if (el && el.projectLabel) el.projectLabel.textContent = "Project: " + data.project_id;
-            }
-          }
-          if (type === "gateway_message") {
-            logLine("log-voice", data.gateway ? data.gateway.toUpperCase() : "GW",
-              (data.sender || "") + ": " + (data.text || "").slice(0, 160));
-          }
-          if (type === "gateway_reply") {
-            logLine("log-octo", "GW→", (data.reply || "").slice(0, 160));
-          }
-          if (type === "whatsapp_qr") {
-            showWaQR(data.qr);
-          }
-          if (type === "web_search") {
-            logLine("log-system", "SEARCH", "Queried: " + (data.query || "") + " (" + (data.count || 0) + " results)");
-          }
-          if (type === "document_upload") {
-            logLine("log-system", "DOC", "Uploading: " + (data.filename || "") + " [" + (data.mode || "") + "]");
-          }
-          if (type === "document_done") {
-            logLine("log-octo", "DOC", "Done: " + (data.filename || "") + " " + (data.charCount || 0) + " chars");
-          }
-        };
-      }, 500);
     }
 
     bootstrap();
