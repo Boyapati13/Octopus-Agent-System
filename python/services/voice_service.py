@@ -394,7 +394,7 @@ async def handle_browser_client(ws: websockets.WebSocketServerProtocol) -> None:
 async def main() -> None:
     try:
         api_key = _get_api_key()
-        log.info("API key loaded (starts with %s…)", api_key[:8])
+        log.info("API key loaded from configuration")
     except RuntimeError as e:
         log.error("%s", e)
         sys.exit(1)
