@@ -78,21 +78,6 @@ class TelegramGateway extends EventEmitter {
     return true;
   }
 
-  // Send a message to a chat — used for home channel outbound routing
-  async send(text, chatId) {
-    if (!this.bot || !this.online) return;
-    const target = chatId || this.homeChannel;
-    if (!target) return;
-    try {
-      const chunks = text.match(/[\s\S]{1,4000}/g) || [text];
-      for (const chunk of chunks) {
-        await this.bot.sendMessage(target, chunk);
-      }
-    } catch (err) {
-      console.error(`[telegram] send error: ${err.message}`);
-    }
-  }
-
   _isAllowed(userId) {
     if (!this.allowedIds.size) return true; // no restriction = all allowed
     return this.allowedIds.has(String(userId));
