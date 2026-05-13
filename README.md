@@ -3,11 +3,11 @@
 </p>
 
 <h1 align="center">🐙 Octopus Agent System</h1>
-<h3 align="center">O.C.T.O Command Interface — v4.0</h3>
+<h3 align="center">O.C.T.O Command Interface — v4.1</h3>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <img src="https://img.shields.io/badge/version-4.0.0-brightgreen.svg">
+  <img src="https://img.shields.io/badge/version-4.1.0-brightgreen.svg">
   <img src="https://img.shields.io/badge/agents-14%20specialist-blue.svg">
   <img src="https://img.shields.io/badge/MCP%20tools-26-orange.svg">
   <img src="https://img.shields.io/badge/models-8%20specialist%20AI-blueviolet.svg">
@@ -25,7 +25,7 @@
 
 ---
 
-> **A self-evolving, continuously-learning multi-agent AI system with a J.A.R.V.I.S-style HUD dashboard, 8-specialist model routing, document analysis, live web search, and 6 messaging platform gateways.**
+> **A self-evolving, continuously-learning multi-agent AI system with a J.A.R.V.I.S-style HUD dashboard, voice Q&A, smart task routing, setup wizard, 8-specialist model routing, document analysis, live web search, and 6 messaging platform gateways.**
 
 ---
 
@@ -58,6 +58,7 @@ On first run you are redirected to the **Setup Wizard** automatically. Once conf
 
 ## Table of Contents
 
+- [What's New in v4.1](#whats-new-in-v41)
 - [What's New in v4.0](#whats-new-in-v40)
 - [Setup Wizard](#setup-wizard)
 - [Architecture](#architecture)
@@ -78,10 +79,39 @@ On first run you are redirected to the **Setup Wizard** automatically. Once conf
 
 ---
 
+## What's New in v4.1
+
+### Voice & Conversational Q&A
+- **Welcome voice on boot** — "O.C.T.O Command Interface online. All systems active." spoken on startup (browser TTS, selects best available voice)
+- **Voice answers** — every voice command and conversational question is spoken back via browser speech synthesis
+- **Smart routing** — questions (`what/who/where/when/why/how/is/are/can/...` or ending with `?`) route to `/api/tasks/ask`; engineering commands route to the full agent chain
+- **`POST /api/tasks/ask`** — 2-step lightweight Q&A: web search → LLM synthesis → result displayed and spoken, ~3s round-trip vs ~40s for the full agent chain
+
+### Setup Wizard (first-run configuration)
+- Multi-step wizard at `/setup` runs before the dashboard on first launch
+- Covers: LLM provider (9 options + live connection test), Messaging Gateways (Telegram/Discord/Slack/WhatsApp/Signal/HA), Voice (GEMINI_API_KEY), Advanced (AgentShield, Safe mode, ports, tokens)
+- WhatsApp QR code pairing directly in the wizard and in the dashboard GATES tab
+- Configuration saved to `node/.env` with hot-reload (no restart needed for most settings)
+- Re-run setup at any time: `.\octo setup`
+
+### Launch command
+- `octo.ps1` + `octo.cmd` in repo root — run `.\octo` to start, `.\octo setup` to reconfigure, `.\octo stop` to kill all services
+- One-time alias: `.\octo install-alias` → type `octo` from anywhere in PowerShell
+
+### Bug fixes (v4.1)
+- **WebSocket fixed** — duplicate `connectWs` function declaration caused a temporal dead zone crash; WS never connected; all events were lost
+- **dotenv now loaded** — `process.env.LLM_PROVIDER` was never read from `.env` at startup; server defaulted to Anthropic with no key and hit Ollama sovereign fallback silently
+- **LLM hot-reload** — PROVIDER/MODEL are now read dynamically on every call; setup wizard changes apply instantly without restart
+- **Answer display** — `setProjectAnswer('done')` now broadcasts `project_updated` so the output panel shows the actual answer instead of staying on "Working..."
+- **Ollama fast-fail** — timeout reduced from 60s to 10s so failed connections surface in seconds, not 3 minutes
+
+---
+
 ## What's New in v4.0
 
 ### O.C.T.O Command Interface (HUD Dashboard)
-- **Mark-XXXIX / J.A.R.V.I.S-inspired UI** — animated HUD canvas with rotating rings, particles, waveform, scan arcs
+- **Clean branding** — O.C.T.O header only, no external watermarks
+- **J.A.R.V.I.S-inspired UI** — animated HUD canvas with rotating rings, particles, waveform, scan arcs
 - **3-panel layout** — System Monitor (left) · Animated HUD + Answer (center) · Activity Center (right)
 - **Mark-XXXIX color palette** — deep black `#00060a`, cyan `#00d4ff`, orange accent `#ff6b00`
 - **7 tabbed panels** — Log · Conversation · Web Search · Documents · Gateways · Router · Events
@@ -755,6 +785,7 @@ OCTOPUS_CALLER=hermes4_70b  → openrouter / hermes-4-llama-3.1-70b
 
 | Method | Path | Description |
 |---|---|---|
+| `POST` | `/api/tasks/ask` | **Conversational Q&A** (voice path): web search + LLM synthesis → answer displayed + spoken: `{ text, project_id? }` |
 | `POST` | `/api/search` | Web search: `{ query, limit?, engine? }` |
 | `POST` | `/api/documents/upload` | Upload + analyse a file (multipart/form-data) |
 | `GET` | `/api/documents/modes` | List supported analysis modes + extensions |

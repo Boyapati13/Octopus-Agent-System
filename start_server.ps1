@@ -67,8 +67,12 @@ if (-not (Test-Path (Join-Path $NodeDir "node_modules\ws"))) {
 
 $PythonReqs = Join-Path $ScriptDir "python\requirements.txt"
 if (Test-Path $PythonReqs) {
-    & $pyCmd -m pip install -r $PythonReqs -q --disable-pip-version-check 2>$null
-    OK "Python dependencies up to date"
+    try {
+        & $pyCmd -m pip install -r $PythonReqs -q --disable-pip-version-check 2>&1 | Out-Null
+        OK "Python dependencies up to date"
+    } catch {
+        WARN "Python dependency check returned a warning; continuing startup"
+    }
 }
 
 # -- 2. .env ------------------------------------------------------------------
@@ -183,13 +187,15 @@ if ($ready) {
 Write-Host ""
 Write-Host "  REST API  : http://localhost:$Port/api/health" -ForegroundColor Cyan
 Write-Host "  WebSocket : ws://localhost:$Port/ws"           -ForegroundColor Cyan
-Write-Host "  Dashboard : http://localhost:$Port/dashboard"  -ForegroundColor Cyan
+Write-Host "  Dashboard : http://localhost:$Port/"            -ForegroundColor Cyan
+Write-Host "  Setup     : http://localhost:$Port/setup  (re-run: .\octo setup)" -ForegroundColor Cyan
 Write-Host "  CLI       : node node\src\cli.js               " -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Press Ctrl+C to stop all services." -ForegroundColor DarkGray
 Write-Host ""
 
-if (-not $NoBrowser -and $ready) { Start-Process "http://localhost:$Port/dashboard" }
+# Open root — redirects to /setup on first run, /dashboard thereafter
+if (-not $NoBrowser -and $ready) { Start-Process "http://localhost:$Port/" }
 
 # Keep alive until Node exits or Ctrl+C
 try {
