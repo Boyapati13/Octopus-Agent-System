@@ -515,6 +515,7 @@ L1  Structural Memory     — SQLite + NetworkX graph
 | `CUSTOM_HTTP_URL` | — | OpenAI-compatible endpoint (vLLM, LM Studio, etc.) |
 | `CUSTOM_HTTP_MODEL` | — | Model name for custom HTTP |
 | `MAX_THINKING_TOKENS` | `10000` | Token cap per LLM call |
+| `MEMORY_SERVICE_URL` | `http://localhost:5000` | Python memory service |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram gateway |
 | `DISCORD_BOT_TOKEN` | — | Discord gateway |
@@ -533,6 +534,116 @@ L1  Structural Memory     — SQLite + NetworkX graph
 | `ENABLE_DOCX` | `false` | Word doc extraction (needs `npm install mammoth`) |
 | `ENABLE_XLSX` | `false` | Excel extraction (needs `npm install xlsx`) |
 | `ROUTE_<ROLE>` | — | Override model router: `ROUTE_planner=nvidia:kimi-k2` |
+
+---
+
+## Headless Mode
+
+External LLM as planner, Octopus as tools:
+
+```env
+HEADLESS_MODE=true
+SAFE_MODE=false
+```
+
+Toggle at runtime:
+```
+❯ /headless on
+❯ /headless off
+```
+
+Claude Desktop `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "octopus": {
+      "command": "node",
+      "args": ["/path/to/octopus/node/src/mcp.js"],
+      "env": { "HEADLESS_MODE": "true", "SAFE_MODE": "false" }
+    }
+  }
+}
+```
+
+Full guide: [docs/quickstart-headless.md](docs/quickstart-headless.md)
+
+---
+
+## Voice Input
+
+Octopus now has a **full Gemini Live real-time voice interface** built into the web dashboard — inspired by and compatible with the Mark-XXXIX architecture by FatihMakes.
+
+### Architecture
+
+```
+Browser frontend (Voice tab)
+  ↕  WebSocket  ws://localhost:8765  (PCM audio + JSON control)
+Python voice_service.py
+  ↕  Gemini Live API  (real-time audio streaming + tool-calling)
+  ↕  HTTP → localhost:3001  (Octopus Node.js API → 14 agents / 23 MCP tools)
+```
+
+### Quick Start
+
+**1. Get a Gemini API key** (free tier works)
+```
+https://aistudio.google.com/apikey
+```
+
+**2. Add key to config**
+```json
+// config/api_keys.json
+{ "gemini_api_key": "AIza..." }
+// or: export GEMINI_API_KEY=AIza...
+```
+
+**3. Install voice dependencies**
+```bash
+pip install google-genai aiohttp websockets
+```
+
+**4. Start the voice service**
+```bash
+# macOS / Linux
+./start_voice.sh
+
+# Windows
+.\start_voice.ps1
+
+# Manual
+python python/services/voice_service.py
+```
+
+**5. Open the dashboard → Voice tab → click Start Voice**
+
+### What you can say
+
+| Example | What happens |
+|---|---|
+| *"Review the security of the auth module"* | SecurityReviewer agent runs |
+| *"Write a Redis cache wrapper in TypeScript"* | Forge agent generates code |
+| *"What decisions have been recorded?"* | L2 Decision Memory fetched |
+| *"Search memory for the graph_store"* | L1 Structural Memory queried |
+| *"List all available agents"* | Agent roster returned |
+| *"Plan a feature: JWT refresh tokens"* | Architect + Cortex plan |
+
+### Voice UI Features
+
+- **Animated orb** — colour and pulse reflects state (cyan = listening, amber = thinking, green = speaking, red = muted)
+- **Hybrid input** — speak or type; both route to the same Gemini Live session
+- **Full transcript log** — user speech, Octopus responses, and tool calls shown in real time
+- **Auto-reconnect** — drops reconnect transparently every 5 s
+- **Mute** — silences mic without ending the session
+
+### Legacy text-only voice endpoint
+
+```bash
+curl -X POST http://localhost:3001/api/tasks/voice \
+  -H "Content-Type: application/json" \
+  -d '{"text": "summarize the last architectural decision"}'
+```
+
+Full guide: [docs/quickstart-voice.md](docs/quickstart-voice.md)
 
 ---
 
