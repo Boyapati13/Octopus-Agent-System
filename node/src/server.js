@@ -1,6 +1,8 @@
 'use strict';
 const http    = require('http');
 const path    = require('path');
+const os      = require('os');
+const fs      = require('fs');
 const { WebSocketServer } = require('ws');
 const express = require('express');
 const cors    = require('cors');
@@ -10,7 +12,10 @@ const { runTask } = require('./runner');
 const { complete, activeProvider } = require('./llm');
 const { getTools, SUPPORTED_FORMATS } = require('./adapters');
 const skillRegistry = require('./skill_registry');
-const toolLoader = require('./tool_loader');
+const toolLoader    = require('./tool_loader');
+const { search: webSearch, formatResults } = require('./tools/web_search');
+const { processDocument } = require('./tools/document');
+const { initGateways, manager: gatewayManager } = require('./gateways');
 
 // ── HEADLESS_MODE ────────────────────────────────────────────────────────────
 // When true: Cortex does not auto-plan; external LLMs call octopus_* tools directly.
@@ -48,10 +53,45 @@ function broadcastEvent(type, data = {}) {
   }
 }
 
-// ── Active chain state (one chain at a time for now) ─────────────────────────
+// ── Multi-chain state ─────────────────────────────────────────────────────────
+// Maps project_id → { task, startMs } so multiple projects can run chains in
+// parallel. The single-lock model was the root cause of gateway task collisions.
 
-let activeChainTask  = null;   // task description of running chain
-let activeChainAbort = null;   // AbortController (future: stream abort)
+const activeChains = new Map();   // project_id → { task: string, startMs: number }
+
+// Legacy shim — kept so existing server.js interrupt route still compiles
+let activeChainTask  = null;
+let activeChainAbort = null;
+
+function startChain(projectId, task) {
+  activeChains.set(projectId, { task, startMs: Date.now() });
+  activeChainTask = task;  // shim for interrupt route
+}
+
+function endChain(projectId) {
+  activeChains.delete(projectId);
+  if (activeChains.size === 0) activeChainTask = null;
+}
+
+function isChainRunning(projectId) {
+  return projectId ? activeChains.has(projectId) : activeChains.size > 0;
+}
+
+// ── Gateway session registry ──────────────────────────────────────────────────
+// Maps a stable session key ("telegram:123456") to a project_id.
+// This ensures: same user on Telegram = same project = same WS stream on Dashboard.
+
+const gatewaySessions = new Map();  // sessionKey → project_id
+
+function getOrCreateGatewayProject(gateway, userId) {
+  const key = `${gateway}:${userId}`;
+  let projectId = gatewaySessions.get(key);
+  if (projectId && projectStore.has(projectId)) return projectStore.get(projectId);
+  // Create a named project for this gateway user
+  const project = createProject(`${gateway}/${userId}`);
+  gatewaySessions.set(key, project.id);
+  return project;
+}
 
 // ── Project / session workspace state ────────────────────────────────────────
 
@@ -232,13 +272,18 @@ createProject();
 app.get('/api/health', async (req, res) => {
   const stats = await memory.getCacheStats();
   res.json({
-    status: 'ok',
-    port: PORT,
-    headless_mode: isHeadlessMode(),
-    chain_running: activeChainTask !== null,
-    active_task: activeChainTask,
+    status:            'ok',
+    port:              PORT,
+    headless_mode:     isHeadlessMode(),
+    chains_running:    activeChains.size,
+    active_chains:     [...activeChains.entries()].map(([pid, c]) => ({ project_id: pid, task: c.task })),
     active_project_id: activeProjectId,
-    cache: stats,
+    gateway_sessions:  gatewaySessions.size,
+    cache_stats:       stats,
+    // legacy shim fields kept for existing monitors
+    chain_running:     activeChains.size > 0,
+    active_task:       activeChainTask,
+    cache:             stats,
   });
 });
 
@@ -246,13 +291,16 @@ app.get('/api/health', async (req, res) => {
 app.get('/api/status', async (req, res) => {
   const run = await memory.getRun() || {};
   res.json({
-    chain_running: activeChainTask !== null,
-    active_task: activeChainTask,
-    headless_mode: isHeadlessMode(),
-    llm: activeProvider(),
-    run_state: run,
+    chains_running:    activeChains.size,
+    active_chains:     [...activeChains.entries()].map(([pid, c]) => ({ project_id: pid, task: c.task })),
+    chain_running:     activeChains.size > 0,          // legacy shim
+    active_task:       activeChainTask,                // legacy shim
+    headless_mode:     isHeadlessMode(),
+    llm:               activeProvider(),
+    run_state:         run,
     active_project_id: activeProjectId,
-    projects: listProjects(),
+    gateway_sessions:  gatewaySessions.size,
+    projects:          listProjects(),
   });
 });
 
@@ -375,13 +423,14 @@ app.post('/api/tasks/run', async (req, res) => {
     return res.status(403).json({ error: 'Chain execution disabled in HEADLESS_MODE — external LLM calls octopus_* tools directly' });
   }
 
-  if (activeChainTask !== null) {
-    return res.status(409).json({ error: 'A chain is already running', active_task: activeChainTask });
+  const project = getProject(project_id);
+  // Per-project chain lock — allows parallel tasks on different projects
+  if (isChainRunning(project.id)) {
+    return res.status(409).json({ error: 'This project already has a chain running', active_task: activeChains.get(project.id)?.task });
   }
 
-  const project = getProject(project_id);
   activeProjectId = project.id;
-  activeChainTask = task;
+  startChain(project.id, task);
   appendProjectActivity(project.id, 'task_started', { task });
   setProjectAnswer(project.id, 'Working…', 'running');
   res.json({ ok: true, task, project_id: project.id, message: 'Chain started — follow events on /ws' });
@@ -400,19 +449,22 @@ app.post('/api/tasks/run', async (req, res) => {
       console.error(`[server] Chain error: ${err.message}`);
       setProjectAnswer(project.id, `Task failed: ${err.message}`, 'failed');
     } finally {
-      activeChainTask = null;
+      endChain(project.id);
     }
   });
 });
 
 // ── Task interrupt ────────────────────────────────────────────────────────────
 app.post('/api/tasks/interrupt', (req, res) => {
-  if (!activeChainTask) {
-    return res.status(409).json({ error: 'No chain is running' });
+  const { project_id } = req.body || {};
+  // Interrupt specific project, or the most-recently-active one
+  const project = getProject(project_id);
+  const chain   = activeChains.get(project.id);
+  if (!chain) {
+    return res.status(409).json({ error: 'No chain is running for this project' });
   }
-  const interrupted = activeChainTask;
-  activeChainTask = null;
-  const project = getProject(activeProjectId);
+  const interrupted = chain.task;
+  endChain(project.id);
   recordProjectEvent(project.id, 'chain_done', { task: interrupted, success: false, interrupted: true, duration_ms: 0, project_id: project.id });
   broadcastEvent('chain_done', { task: interrupted, success: false, interrupted: true, duration_ms: 0, project_id: project.id });
   setProjectAnswer(project.id, 'Task interrupted.', 'failed');
@@ -429,16 +481,15 @@ app.post('/api/tasks/voice', async (req, res) => {
     return res.status(403).json({ error: 'Not available in HEADLESS_MODE' });
   }
 
-  if (activeChainTask !== null) {
-    return res.status(409).json({ error: 'A chain is already running' });
+  const project = getProject(project_id);
+  if (isChainRunning(project.id)) {
+    return res.status(409).json({ error: 'A chain is already running on this project' });
   }
 
-  const project = getProject(project_id);
   activeProjectId = project.id;
-  activeChainTask = text;
+  startChain(project.id, text);
   appendProjectActivity(project.id, 'voice_task_started', { text });
   setProjectAnswer(project.id, 'Listening and working…', 'running');
-  // Fire chain in background; return a short TTS summary immediately
   const startMs = Date.now();
 
   setImmediate(async () => {
@@ -449,9 +500,10 @@ app.post('/api/tasks/voice', async (req, res) => {
       };
       const result = await runTask(text, memory, emit);
       const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-      setProjectAnswer(project.id, `Completed in ${elapsed} seconds. ${Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0} agents ran.`, 'done');
+      const spawned = Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0;
+      setProjectAnswer(project.id, `Completed in ${elapsed}s. ${spawned} agents ran.`, 'done');
       broadcastEvent('voice_summary', {
-        summary: `Task complete in ${elapsed} seconds. ${result.agents_spawned.length} agents ran.`,
+        summary: `Task complete in ${elapsed}s. ${spawned} agents ran.`,
         success: true,
         project_id: project.id,
       });
@@ -459,7 +511,7 @@ app.post('/api/tasks/voice', async (req, res) => {
       setProjectAnswer(project.id, `Task failed: ${err.message}`, 'failed');
       broadcastEvent('voice_summary', { summary: `Task failed: ${err.message}`, success: false, project_id: project.id });
     } finally {
-      activeChainTask = null;
+      endChain(project.id);
     }
   });
 
@@ -678,6 +730,174 @@ app.post('/api/plugins/call/:name', async (req, res) => {
   }
 });
 
+// ── Web Search ───────────────────────────────────────────────────────────────
+app.post('/api/search', async (req, res) => {
+  const { query, limit = 8, engine = 'auto' } = req.body || {};
+  if (!query || !query.trim()) {
+    return res.status(400).json({ error: 'query is required' });
+  }
+  try {
+    const results  = await webSearch(query.trim(), { limit, engine });
+    const markdown = formatResults(results);
+    broadcastEvent('web_search', { query, count: results.length });
+    res.json({ query, results, markdown });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Document Upload & Analysis ────────────────────────────────────────────────
+// Uses multer for multipart/form-data. Falls back to raw body buffer if multer
+// is not installed (text files only in that case).
+let upload;
+try {
+  const multer = require('multer');
+  upload = multer({
+    storage: multer.memoryStorage(),
+    limits:  { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  });
+} catch (_) {
+  upload = null; // multer not installed — text-only fallback
+}
+
+function uploadMiddleware(req, res, next) {
+  if (upload) return upload.single('file')(req, res, next);
+  // Fallback: read raw body as Buffer
+  const chunks = [];
+  req.on('data', c => chunks.push(c));
+  req.on('end', () => {
+    req.file = {
+      buffer:   Buffer.concat(chunks),
+      originalname: req.headers['x-filename'] || 'upload.txt',
+      mimetype: req.headers['content-type'] || 'text/plain',
+    };
+    next();
+  });
+}
+
+app.post('/api/documents/upload', uploadMiddleware, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const { mode = 'summarise', question = '' } = req.body || {};
+  const filename = req.file.originalname || 'document';
+
+  broadcastEvent('document_upload', { filename, mode });
+
+  // Run extraction first — always succeeds for supported text types
+  const { extractText } = require('./tools/document');
+  let extracted;
+  try {
+    extracted = await extractText(req.file.buffer, filename);
+  } catch (err) {
+    return res.status(500).json({ error: 'Extraction failed: ' + err.message });
+  }
+
+  // Run LLM analysis — degrade gracefully if LLM is unavailable
+  let analysis = '';
+  let analysisError = null;
+  try {
+    const { analyseText, analyseWithVision } = require('./tools/document');
+    if (extracted.type === 'image') {
+      analysis = await analyseWithVision(extracted.imageBase64, extracted.mimeType,
+        question || 'Describe and extract all information from this image.', { question });
+    } else if (extracted.type !== 'unsupported') {
+      analysis = await analyseText(extracted.text, mode, { question });
+    } else {
+      analysis = extracted.text;
+    }
+  } catch (err) {
+    analysisError = err.message;
+    // Return extracted text with error note so UI is still useful
+    analysis = extracted.text
+      ? `[LLM analysis unavailable: ${err.message}]\n\n--- EXTRACTED TEXT ---\n${extracted.text.slice(0, 8000)}`
+      : `[LLM analysis unavailable: ${err.message}]`;
+  }
+
+  const result = {
+    filename,
+    type:       extracted.type,
+    charCount:  extracted.text ? extracted.text.length : req.file.buffer.length,
+    pages:      extracted.pages,
+    analysis,
+    analysisError,
+  };
+
+  broadcastEvent('document_done', { filename, type: result.type, charCount: result.charCount });
+  res.json({ ok: !analysisError, ...result });
+});
+
+app.get('/api/documents/modes', (_req, res) => {
+  res.json({
+    modes: ['summarise', 'analyse', 'extract', 'code_review', 'explain', 'qa'],
+    supported_extensions: [
+      '.txt','.md','.csv','.json','.xml','.html','.js','.ts','.py','.java',
+      '.go','.rs','.cpp','.c','.sh','.yaml','.yml','.sql','.css','.log',
+    ],
+    optional: {
+      pdf:  'npm install pdf-parse  + ENABLE_PDF=true',
+      docx: 'npm install mammoth    + ENABLE_DOCX=true',
+      xlsx: 'npm install xlsx       + ENABLE_XLSX=true',
+    },
+  });
+});
+
+// ── Streaming Text Completion (SSE) ───────────────────────────────────────────
+// Streams LLM completion via Server-Sent Events for real-time text output.
+app.post('/api/complete/stream', async (req, res) => {
+  const { prompt, role = 'default', maxTokens = 2048 } = req.body || {};
+  if (!prompt) return res.status(400).json({ error: 'prompt is required' });
+
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  send({ type: 'start', role });
+
+  try {
+    const answer = await complete(prompt, { maxTokens, role, timeout: 120000 });
+    // Simulate streaming by chunking the result (real streaming requires per-provider SSE support)
+    const words = answer.split(' ');
+    const CHUNK = 8;
+    for (let i = 0; i < words.length; i += CHUNK) {
+      const chunk = words.slice(i, i + CHUNK).join(' ') + (i + CHUNK < words.length ? ' ' : '');
+      send({ type: 'chunk', text: chunk });
+      await new Promise(r => setTimeout(r, 30));
+    }
+    send({ type: 'done', full: answer });
+  } catch (err) {
+    send({ type: 'error', message: err.message });
+  }
+
+  res.end();
+});
+
+// ── Gateways ─────────────────────────────────────────────────────────────────
+app.get('/api/gateways', (_req, res) => {
+  res.json({ gateways: gatewayManager.status() });
+});
+
+app.post('/api/gateways/:name/send', async (req, res) => {
+  const { name } = req.params;
+  const { channel, text } = req.body || {};
+  if (!channel || !text) return res.status(400).json({ error: 'channel and text required' });
+  try {
+    await gatewayManager.sendTo(name, channel, text);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ── Task Router Status ────────────────────────────────────────────────────────
+app.get('/api/router', (_req, res) => {
+  const { summarise } = require('./task_router');
+  res.json({ routes: summarise() });
+});
+
 // ── Web dashboard (power-user UI, no hardware needed) ────────────────────────
 const DASHBOARD_HTML = path.join(__dirname, 'dashboard', 'index.html');
 app.get('/dashboard', (_req, res) => res.sendFile(DASHBOARD_HTML));
@@ -702,10 +922,54 @@ if (require.main === module) {
       process.exit(1);
     }
   });
-  httpServer.listen(PORT, () => {
+  httpServer.listen(PORT, async () => {
     console.error(`Octopus API running on http://localhost:${PORT}`);
     console.error(`WebSocket events:   ws://localhost:${PORT}/ws`);
     console.error(`HEADLESS_MODE:      ${isHeadlessMode()}`);
+
+    // Wire gateways: each gateway user gets their own project (session isolation)
+    const gatewayTaskHandler = async (text, ctx) => {
+      try {
+        // Resolve a per-user project for this gateway — prevents state collisions
+        const gateway = ctx.gateway || 'unknown';
+        const userId  = ctx.sender  || 'anon';
+        const project = getOrCreateGatewayProject(gateway, userId);
+
+        // Check if this project already has a running chain
+        if (isChainRunning(project.id)) {
+          return 'Still working on your previous request — please wait.';
+        }
+
+        startChain(project.id, text);
+        appendProjectActivity(project.id, 'gateway_task_started', { gateway, text });
+        setProjectAnswer(project.id, 'Working…', 'running');
+
+        // Broadcast so Dashboard switches to this project
+        broadcastEvent('gateway_task_start', { gateway, sender: userId, text, project_id: project.id });
+
+        const startMs = Date.now();
+        const emit = (type, data = {}) => {
+          recordProjectEvent(project.id, type, data);
+          broadcastEvent(type, { ...data, project_id: project.id });
+        };
+
+        const result = await runTask(text, memory, emit);
+        const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+        const spawned = Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0;
+
+        // Build a human-readable TTS/text reply
+        const answer  = project.answer || `Completed in ${elapsed}s.`;
+        const summary = answer.length > 400 ? answer.slice(0, 400) + '…' : answer;
+        setProjectAnswer(project.id, summary, 'done');
+        endChain(project.id);
+        return `[${spawned} agents · ${elapsed}s] ${summary}`;
+      } catch (err) {
+        endChain(ctx.projectId);
+        return `Task failed: ${err.message}`;
+      }
+    };
+
+    await initGateways(gatewayTaskHandler, broadcastEvent);
   });
 }
 

@@ -3,36 +3,36 @@
 </p>
 
 <h1 align="center">🐙 Octopus Agent System</h1>
-<h3 align="center">OctoDeck Edition — v3.0</h3>
+<h3 align="center">O.C.T.O Command Interface — v4.0</h3>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <img src="https://img.shields.io/badge/version-3.0.0-brightgreen.svg">
+  <img src="https://img.shields.io/badge/version-4.0.0-brightgreen.svg">
   <img src="https://img.shields.io/badge/agents-14%20specialist-blue.svg">
   <img src="https://img.shields.io/badge/MCP%20tools-26-orange.svg">
-  <img src="https://img.shields.io/badge/AgentShield-102%20rules-red.svg">
-  <img src="https://img.shields.io/badge/tests-141%20passing-brightgreen.svg">
-  <img src="https://img.shields.io/badge/surfaces-13%20displays-purple.svg">
+  <img src="https://img.shields.io/badge/models-8%20specialist%20AI-blueviolet.svg">
+  <img src="https://img.shields.io/badge/gateways-6%20platforms-cyan.svg">
+  <img src="https://img.shields.io/badge/tests-20%2F20%20passing-brightgreen.svg">
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/node-%3E%3D18-green.svg">
   <img src="https://img.shields.io/badge/python-%3E%3D3.11-yellow.svg">
-  <img src="https://img.shields.io/badge/LLM-Claude%20%7C%20GPT--4o%20%7C%20Gemini%20%7C%20Ollama%20%7C%20JAX%2FGemma-blueviolet.svg">
-  <img src="https://img.shields.io/badge/MCP-stdio%20server-black.svg">
-  <img src="https://img.shields.io/badge/Stream%20Deck%2B-8%20keys%20%2B%204%20encoders-black.svg?logo=elgato">
+  <img src="https://img.shields.io/badge/NVIDIA%20NIM-8%20models-76b900.svg">
+  <img src="https://img.shields.io/badge/Hermes-3%20%7C%204%20via%20OpenRouter-orange.svg">
+  <img src="https://img.shields.io/badge/Gateways-Telegram%20%7C%20Discord%20%7C%20Slack%20%7C%20WhatsApp%20%7C%20Signal%20%7C%20HA-blue.svg">
 </p>
 
 ---
 
-> **A self-evolving, continuously-learning multi-agent AI orchestration system — with a physical 13-surface control dashboard, live web UI, voice input, and a JAX/Gemma custom backend.**
+> **A self-evolving, continuously-learning multi-agent AI system with a J.A.R.V.I.S-style HUD dashboard, 8-specialist model routing, document analysis, live web search, and 6 messaging platform gateways.**
 
 ---
 
 ## Install — one command
 
 ```powershell
-# Windows — PowerShell (also works from GitHub raw URL)
+# Windows — PowerShell
 .\install.ps1
 
 # Remote one-liner:
@@ -44,234 +44,401 @@ powershell -ExecutionPolicy Bypass -Command "iex (irm https://raw.githubusercont
 ./install.sh
 ```
 
-The installer:
-- Checks Node.js ≥ 18 and Python ≥ 3.11
-- Installs all npm + pip dependencies
-- Creates `node/.env` auto-configured for Ollama if detected, else Anthropic
-- Registers the MCP server with Claude Desktop, Claude Code, Cursor, Windsurf, Continue
-- Links the `octopus` CLI globally
-
----
-
-## Start
+After install, start everything:
 
 ```powershell
-# Start REST API + WebSocket + memory service + open dashboard
-.\start_server.ps1
-
-# Start MCP stdio server only (for Claude Desktop / Cursor)
-.\start_mcp.ps1
+.\start_server.ps1   # starts API + WebSocket + memory service
 ```
 
-After `start_server.ps1` starts, open: **http://localhost:3001/dashboard**
+Open: **http://localhost:3001/dashboard**
 
 ---
 
 ## Table of Contents
 
-- [What's New in v3.0](#whats-new-in-v30)
+- [What's New in v4.0](#whats-new-in-v40)
 - [Architecture](#architecture)
-- [Quick Start](#quick-start)
-- [Web Dashboard](#web-dashboard)
+- [O.C.T.O HUD Dashboard](#octo-hud-dashboard)
+- [Multi-Model AI Router](#multi-model-ai-router)
+- [Web Search](#web-search)
+- [Document Upload & Analysis](#document-upload--analysis)
+- [Messaging Gateways](#messaging-gateways)
+- [Home Assistant](#home-assistant)
 - [Octopus Agent System](#octopus-agent-system)
-  - [14 Specialist Agents](#14-specialist-agents)
-  - [Cortex Planning Patterns](#cortex-planning-patterns)
-  - [5-Layer Memory](#5-layer-memory)
-  - [AgentShield Security](#agentshield-security)
-  - [26 MCP Tools](#mcp-tool-catalogue--26-tools)
-- [OctoDeck Control Surface](#octodeck-control-surface)
 - [Configuration](#configuration)
-- [Headless Mode](#headless-mode)
-- [Voice Input](#voice-input)
 - [LLM Providers](#llm-providers)
-- [Tool Plugins](#tool-plugins)
+- [REST API Reference](#rest-api-reference)
+- [WebSocket Events](#websocket-events)
 - [Testing](#testing)
 - [Development](#development)
 - [Uninstall](#uninstall)
-- [Roadmap](#roadmap)
-- [Attribution](#attribution)
 
 ---
 
-## What's New in v3.0
+## What's New in v4.0
 
-### OctoDeck Fusion
-- **AgentDeck integration** — every Octopus agent chain visible and controllable across 13 surfaces
-- **OctopusAdapter** — PLAN / RUN / STOP / SHIELD controls on Stream Deck+
-- **APME → Instincts loop** — AgentDeck session evaluations auto-generate instinct candidates
-- **OctopusDeckLayout** — 8 dedicated keys + 4 encoder wheels
+### O.C.T.O Command Interface (HUD Dashboard)
+- **Mark-XXXIX / J.A.R.V.I.S-inspired UI** — animated HUD canvas with rotating rings, particles, waveform, scan arcs
+- **3-panel layout** — System Monitor (left) · Animated HUD + Answer (center) · Activity Center (right)
+- **Mark-XXXIX color palette** — deep black `#00060a`, cyan `#00d4ff`, orange accent `#ff6b00`
+- **7 tabbed panels** — Log · Conversation · Web Search · Documents · Gateways · Router · Events
+- **Real-time HUD states** — LISTENING / SPEAKING / PROCESSING / IDLE with visual feedback
+- **Live clock + system metrics** — CPU/MEM/NET/AGT bars from `/api/health`
 
-### Web Dashboard (new)
-- **No hardware needed** — `GET /dashboard` at `http://localhost:3001/dashboard`
-- Project/session workspace with persistent conversation, answer, activity, approvals, and browser context
-- Three-pane operator UI: project list, visible answer/conversation/narration feed, and browser/tools/telemetry panel
-- Voice-first controls with follow-up listening, interrupt, and task routing hints
-- Auto-reconnect with exponential backoff
+### Multi-Model AI Router
+- **8 specialist models** — each agent role routes to the best free model on NVIDIA NIM or OpenRouter
+- **Hermes-3 / Hermes-4** (NousResearch) via OpenRouter — best agentic tool-use model
+- **`LLM_PROVIDER=router`** — automatic routing, no manual model switching
+- **OpenRouter** added as a new provider (`OPENROUTER_API_KEY`)
+- **Env override** per role: `ROUTE_planner=nvidia:moonshotai/kimi-k2-thinking`
 
-### Project Workspace (updated)
-- `GET /api/projects` — list, create, and switch project/session workspaces
-- `POST /api/projects/:id/messages` — persist conversation messages by project
-- `POST /api/projects/:id/activity` — keep execution events separate from chat
-- `POST /api/projects/:id/answer` and `PATCH /api/projects/:id/browser-context` — keep the visible operator state in sync
-- `POST /api/tasks/run` and `POST /api/tasks/voice` accept `project_id` so execution stays scoped to the active workspace
+### Web Search
+- **`POST /api/search`** — DuckDuckGo (no key), Brave Search, SerpAPI, or NVIDIA Solar
+- Auto-selects best available engine from env keys
+- Results displayed in the Search tab with title/URL/snippet
+- Dashboard search bar with real-time results
 
-### Voice Integration (new)
-- **POST /api/tasks/voice** — text-in / TTS-summary-out path
-- `OctopusAdapter.supportsVoiceInput = true` — voice-tagged prompts route to voice endpoint
-- End-to-end flow: wake word → ASR → AgentDeck → Octopus → `voice_summary` WS event → TTS
-- See [docs/quickstart-voice.md](docs/quickstart-voice.md)
+### Document Upload & Analysis
+- **`POST /api/documents/upload`** — drag-drop or click upload
+- **6 analysis modes**: summarise · analyse · extract data · code review · explain · Q&A
+- **Supported**: txt, md, json, csv, js, ts, py, java, go, rs, yaml, sql, html, css, xml, log, and all code files
+- **Optional**: PDF (`npm install pdf-parse`), DOCX (`npm install mammoth`), XLSX (`npm install xlsx`)
+- **Vision**: images routed to `nvidia/nemotron-3-nano-omni-9b` for multi-modal analysis
+- **Graceful fallback**: returns extracted text even when LLM is unavailable
 
-### Headless Mode (new)
-- `HEADLESS_MODE=true` — external LLM (Claude Desktop, Cursor) is the planner
-- Octopus becomes the tool/safety layer; AgentShield and all gates remain active
-- Toggle at runtime: `/headless on` in the CLI
-- See [docs/quickstart-headless.md](docs/quickstart-headless.md)
+### Messaging Gateways
+- **Telegram** — bot responds to `/ask` commands and DMs
+- **Discord** — bot responds to `!octo` prefix, mentions, and DMs
+- **Slack** — Socket Mode, responds to `@mentions` and DMs
+- **WhatsApp** — via Baileys (QR scan, no paid API)
+- **Signal** — via signal-cli TCP JSON-RPC daemon
+- **Home Assistant** — WebSocket integration, event-triggered tasks, result entity writeback
+- All gateways share one message pipeline → Octopus task runner → reply back to platform
+- Status visible in the **Gates tab** of the dashboard
 
-### JAX/Gemma Custom Backend (new)
-- `LLM_PROVIDER=custom_http` — any OpenAI-compatible server
-- Reference FastAPI server in `examples/jax-gemma-http/`
-- Works with vLLM, LM Studio, llamafile, text-generation-webui
-- See [docs/quickstart-jax-gemma.md](docs/quickstart-jax-gemma.md)
-
-### Tool Plugin System (new)
-- `tools/<name>/tool.json` + `tools/<name>/index.js` — auto-loaded on startup
-- `GET /api/plugins` · `POST /api/plugins/call/:name` · `octopus_plugin_call` MCP tool
-- Built-in plugins: `hello_world` (example), `http_fetch` (SSRF-guarded safe fetch)
-- See [tools/README.md](tools/README.md)
-
-### Jarvis CLI (upgraded)
-- `/provider list` · `/provider set <p> [model]` — switch LLM without editing .env
-- `/headless on|off` — toggle headless mode
-- `/dashboard` — open web UI in browser
-- All changes written to `.env` instantly
-
-### Octopus v2.0 (included)
-- ~75% QA speedup via parallel `Promise.allSettled` gates
-- ~60% token cost reduction via `MAX_THINKING_TOKENS` + Strategic Compaction
-- 102-rule AgentShield scanner
-- Continuous Learning v2 (Instincts)
-- 4-tier Zero-Key cascade (OS Vault → CLI Session → env → .env)
+### Streaming Text Completion
+- **`POST /api/complete/stream`** — SSE endpoint for streaming LLM output
+- Routable by `role` parameter to any specialist model
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                   Octopus Agent System — OctoDeck Edition            │
-│                                                                      │
-│  ┌──────────────────────┐    ┌─────────────────────────────────────┐ │
-│  │   node/src/          │    │       bridge/ (AgentDeck)           │ │
-│  │                      │◄───│  OctopusAdapter   WebSocket client  │ │
-│  │  Cortex (planner)    │    │  OctopusDeckLayout 8 keys+4 encoders│ │
-│  │  14 specialist agents│    │  ApmOctopusBridge  APME→Instincts   │ │
-│  │  REST API  :3001     │    └───────────────┬─────────────────────┘ │
-│  │  WS  ws://:3001/ws   │    ┌───────────────▼─────────────────────┐ │
-│  │  Dashboard /dashboard│    │    13 Display Surfaces               │ │
-│  │  AgentShield 102✓    │    │  Stream Deck+  TUI  Android  Apple  │ │
-│  │  Instincts (learn)   │    │  ESP32  Pixoo64  Web Dashboard       │ │
-│  │  Tool plugins        │    └─────────────────────────────────────┘ │
-│  │  MCP stdio  26 tools │    ┌─────────────────────────────────────┐ │
-│  └──────────────────────┘◄───►   python/ (Flask :5000)             │ │
-│                               │  L1 graph · L2 ADRs · L3 sessions  │ │
-│  LLM Gateway:                 │  Instincts · Context Builder        │ │
-│  Anthropic · OpenAI · Google  └─────────────────────────────────────┘ │
-│  Ollama · NVIDIA · HuggingFace                                       │
-│  custom_http (JAX/Gemma, vLLM, LM Studio, llamafile)                 │
-└──────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Octopus Agent System — v4.0                              │
+│                                                                             │
+│  ┌─────────────────────────────────────┐  ┌──────────────────────────────┐ │
+│  │   node/src/                         │  │   node/src/gateways/         │ │
+│  │                                     │  │                              │ │
+│  │  Cortex (planner)                   │  │  Telegram   Discord          │ │
+│  │  14 specialist agents               │  │  Slack      WhatsApp         │ │
+│  │  REST API  :3001                    │  │  Signal     Home Assistant   │ │
+│  │  WS  ws://:3001/ws                  │  │                              │ │
+│  │  O.C.T.O Dashboard /dashboard       │  │  manager.js (shared router)  │ │
+│  │  AgentShield 102 rules              │  └──────────────────────────────┘ │
+│  │  Instincts (learn)                  │                                    │
+│  │  Multi-model router                 │  ┌──────────────────────────────┐ │
+│  │  Web search (DDG/Brave/Solar)       │  │   node/src/tools/            │ │
+│  │  Document analysis (text+vision)    │  │                              │ │
+│  │  MCP stdio  26 tools                │  │  web_search.js  (4 engines)  │ │
+│  └─────────────────────────────────────┘  │  document.js    (6 modes)    │ │
+│                                           └──────────────────────────────┘ │
+│  LLM Multi-Model Router (task_router.js):                                   │
+│  Planning    → NVIDIA Nemotron Ultra 253B                                   │
+│  Coding      → Qwen3-Coder 480B  (NVIDIA NIM)                              │
+│  Review      → DeepSeek V4 Pro   (NVIDIA NIM, 1M ctx)                      │
+│  Research    → Llama 4 Maverick  (NVIDIA NIM, 128-expert MoE)              │
+│  Agentic     → Hermes-3 405B     (OpenRouter, best tool-use)               │
+│  Documents   → Nemotron Omni 9B  (NVIDIA NIM, vision+text)                 │
+│  Web Search  → Solar Pro+Search  (NVIDIA NIM, built-in search)             │
+│  Fallback    → Gemma4:e2b        (Ollama local, always-on)                 │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Quick Start
+## O.C.T.O HUD Dashboard
 
-### Option A — Local only (no hardware, no API key)
-
-```bash
-git clone https://github.com/Boyapati13/Octopus-Agent-System.git
-cd Octopus-Agent-System
-
-# Install Ollama: https://ollama.ai
-ollama pull gemma4:e2b          # 7.2 GB — fast, no API key needed
-
-# Install + start
-.\install.ps1                   # Windows
-./install.sh                    # Mac/Linux
-.\start_server.ps1              # starts everything + opens dashboard
-```
-
-→ Dashboard opens at **http://localhost:3001/dashboard**
-
-See [docs/quickstart-local.md](docs/quickstart-local.md) for full steps.
-
-### Option B — Full OctoDeck (Octopus + 13 surfaces + Stream Deck+)
-
-```bash
-# Terminal 1 — Octopus backend
-.\start_server.ps1
-
-# Terminal 2 — AgentDeck bridge + surfaces
-agentdeck octopus
-```
-
-### Option C — Headless (Claude Desktop as planner, Octopus as tools)
-
-```json
-{
-  "mcpServers": {
-    "octopus": {
-      "command": "node",
-      "args": ["/path/to/octopus/node/src/mcp.js"],
-      "env": { "HEADLESS_MODE": "true", "SAFE_MODE": "false" }
-    }
-  }
-}
-```
-
-See [docs/quickstart-headless.md](docs/quickstart-headless.md).
-
-### Option D — JAX/Gemma custom backend
-
-```bash
-cd examples/jax-gemma-http
-pip install -r requirements.txt
-python server.py --model google/gemma-3-4b-it --port 8080
-```
-
-`node/.env`:
-```env
-LLM_PROVIDER=custom_http
-CUSTOM_HTTP_URL=http://localhost:8080
-CUSTOM_HTTP_MODEL=google/gemma-3-4b-it
-```
-
-See [docs/quickstart-jax-gemma.md](docs/quickstart-jax-gemma.md).
-
----
-
-## Web Dashboard
-
-No Stream Deck+ needed. After `.\start_server.ps1`, open:
+No hardware needed. After `.\start_server.ps1`, open:
 
 **http://localhost:3001/dashboard**
 
-Features:
-- **Project sidebar** — create and switch between operator workspaces without losing context
-- **Answer panel** — the current result stays visible at all times
-- **Conversation feed** — user, voice, and assistant messages are stored per project
-- **Progress narration** — task execution is summarized separately from chat
-- **Browser context** — URL, title, last action, and recent tabs stay visible while browsing
-- **Active tools and approvals** — the UI exposes tool state and blocked/risky actions explicitly
-- **Telemetry panel** — raw execution detail is kept separate from the main workspace
-- **Voice input** — text, speech, follow-up listening, and interrupt all share the same workspace state
-- **WebSocket auto-reconnect** with exponential backoff
-- Shows active LLM provider/model and headless mode status
+### Layout
 
 ```
-http://localhost:3001/dashboard   ← operator workspace
-http://localhost:3001/api/status  ← JSON status (for monitoring)
-ws://localhost:3001/ws            ← raw WebSocket event stream
+┌────────────────────────────────────────────────────────────────────┐
+│ HEADER  [MARK.O] [O.C.T.O Command Interface]  [HH:MM:SS]  [Status] │
+├─────────────┬─────────────────────────────────┬────────────────────┤
+│ SYS MONITOR │       ANIMATED HUD CANVAS       │  ACTIVITY CENTER   │
+│             │   Rotating rings, particles      │  Tab: Log          │
+│ CPU ████    │   Waveform, scan arcs            │  Tab: Conversation │
+│ MEM ████    │   Halo glow, tick marks          │  Tab: Web Search   │
+│ NET ████    │                                  │  Tab: Documents    │
+│ AGT ████    │   ● LISTENING / ▶ PROCESSING     │  Tab: Gateways     │
+│             │                                  │  Tab: Router       │
+│ STATUSES    │   Answer output (large text)     │  Tab: Events       │
+│ Voice       │                                  │                    │
+│ WS State    │   Live metrics strip             │  [Composer input]  │
+└─────────────┴─────────────────────────────────┴────────────────────┤
+│ FOOTER  [Ctrl+Enter Execute · F4 Mute · F11 Fullscreen]  [© OCTO]  │
+└────────────────────────────────────────────────────────────────────┘
 ```
+
+### HUD Canvas States
+
+| State | Visual |
+|---|---|
+| IDLE | Dim cyan glow, slow rings, sinusoidal waveform |
+| LISTENING | Bright cyan, pulsing dot, active waveform |
+| PROCESSING | Amber rings, faster rotation, `▶ PROCESSING` text |
+| SPEAKING | Pink/magenta halo, particle burst, `● SPEAKING` text |
+
+---
+
+## Multi-Model AI Router
+
+Enable with `LLM_PROVIDER=router` in `node/.env`. Each agent role is automatically routed to the best free model:
+
+| Role | Model | Provider | Why |
+|---|---|---|---|
+| **planning** (Cortex) | `nvidia/llama-3.1-nemotron-ultra-253b-v1` | NVIDIA NIM | NVIDIA SOTA reasoning, beats GPT-4o |
+| **architecture** | `moonshotai/kimi-k2-thinking` | NVIDIA NIM | Deep chain-of-thought design |
+| **implementation** (Forge) | `qwen/qwen3-coder-480b-a35b-instruct` | NVIDIA NIM | Purpose-built coder, top SWE-bench |
+| **review** (Reviewer) | `deepseek-ai/deepseek-v4-pro` | NVIDIA NIM | 1M token context, deep codebase review |
+| **testing** (Probe) | `deepseek-ai/deepseek-v4-pro` | NVIDIA NIM | Strong test generation + TDD |
+| **security** | `meta/llama-3.3-70b-instruct` | NVIDIA NIM | Broad OWASP knowledge |
+| **verification** (FactChecker) | `microsoft/phi-4-128k-instruct` | NVIDIA NIM | Precise grounding, 128K context |
+| **research** | `meta/llama-4-maverick-17b-128e-instruct` | NVIDIA NIM | 128-expert MoE, wide knowledge |
+| **agentic** | `nousresearch/hermes-3-llama-3.1-405b` | OpenRouter | Best-in-class tool-use + function calling |
+| **document-analysis** | `nvidia/nemotron-3-nano-omni-9b` | NVIDIA NIM | Vision + text, multi-modal |
+| **web-search** | `upstage/solar-pro-preview-with-search` | NVIDIA NIM | Built-in web search capability |
+| **memory / browser** | `gemma4:e2b` | Ollama (local) | Always-on, no latency, no key needed |
+
+### Router env vars
+
+```env
+# Enable router
+LLM_PROVIDER=router
+
+# Required keys (get free trials at build.nvidia.com and openrouter.ai)
+NVIDIA_API_KEY=nvapi-xxxxxxxxxxxx
+OPENROUTER_API_KEY=sk-or-xxxxxxxxxxxx
+
+# Override any role: ROUTE_<ROLE>=<provider>:<model>
+ROUTE_planner=openrouter:nousresearch/hermes-4-405b
+ROUTE_implementation=nvidia:deepseek-ai/deepseek-v4-pro
+```
+
+### Hermes Models (NousResearch via OpenRouter)
+
+| Model | ID | Best For |
+|---|---|---|
+| Hermes-3 405B | `nousresearch/hermes-3-llama-3.1-405b` | Agentic tool-use, 131K context |
+| Hermes-4 405B | `nousresearch/hermes-4-405b` | Hybrid reasoning + tool-use |
+| Hermes-4 70B  | `nousresearch/hermes-4-llama-3.1-70b` | Fast, efficient, reasoning |
+
+Use via caller preset: `OCTOPUS_CALLER=hermes3` or `OCTOPUS_CALLER=hermes4`
+
+---
+
+## Web Search
+
+### API
+
+```bash
+POST /api/search
+{ "query": "NVIDIA NIM models 2025", "limit": 8, "engine": "auto" }
+
+# Response
+{
+  "query": "...",
+  "results": [{ "title": "...", "url": "...", "snippet": "...", "source": "ddg" }],
+  "markdown": "formatted string for LLM"
+}
+```
+
+### Engine selection (auto-priority)
+
+| Priority | Engine | Key Required |
+|---|---|---|
+| 1 | SerpAPI (Google results) | `SERP_API_KEY` |
+| 2 | Brave Search | `BRAVE_API_KEY` |
+| 3 | NVIDIA Solar (LLM+search) | `NVIDIA_API_KEY` + `useSolar:true` |
+| 4 | DuckDuckGo | None — always available |
+
+---
+
+## Document Upload & Analysis
+
+### API
+
+```bash
+# Upload and analyse
+POST /api/documents/upload
+Content-Type: multipart/form-data
+
+Fields:
+  file     — any supported file (see below)
+  mode     — summarise | analyse | extract | code_review | explain | qa
+  question — (optional) question for qa mode
+
+# Response
+{
+  "ok": true,
+  "filename": "README.md",
+  "type": "text",
+  "charCount": 12400,
+  "analysis": "This document describes...",
+  "analysisError": null   // non-null if LLM was unavailable (extracted text still returned)
+}
+
+# Supported modes
+GET /api/documents/modes
+```
+
+### Supported file types (no extra packages)
+
+- **Text/Docs**: `.txt` `.md` `.csv` `.log` `.yaml` `.yml` `.toml` `.ini` `.env`
+- **Code**: `.js` `.ts` `.py` `.java` `.go` `.rs` `.cpp` `.c` `.sh` `.ps1` `.rb` `.php`
+- **Data**: `.json` `.xml` `.html` `.css` `.sql` `.graphql`
+
+### Optional enhanced support
+
+```bash
+npm install pdf-parse && echo "ENABLE_PDF=true" >> node/.env    # PDF
+npm install mammoth   && echo "ENABLE_DOCX=true" >> node/.env   # Word docs
+npm install xlsx      && echo "ENABLE_XLSX=true" >> node/.env   # Excel
+```
+
+Images (`.png` `.jpg` `.webp` etc.) are automatically routed to `nvidia/nemotron-3-nano-omni-9b` for visual analysis. Requires `NVIDIA_API_KEY`.
+
+---
+
+## Messaging Gateways
+
+All gateways share the same Octopus task pipeline. Messages arrive on any platform, run through the agent chain, and the result is sent back.
+
+### Quick setup summary
+
+| Gateway | Env vars required | Install |
+|---|---|---|
+| Telegram | `TELEGRAM_BOT_TOKEN` | `npm install node-telegram-bot-api` |
+| Discord | `DISCORD_BOT_TOKEN` | `npm install discord.js` |
+| Slack | `SLACK_BOT_TOKEN` + `SLACK_APP_TOKEN` | `npm install @slack/bolt` |
+| WhatsApp | *(none — QR scan on first run)* | `npm install @whiskeysockets/baileys qrcode-terminal` |
+| Signal | `SIGNAL_PHONE` + `SIGNAL_CLI_PORT` | signal-cli daemon (Java required) |
+| Home Assistant | `HA_URL` + `HA_TOKEN` | built-in (uses `ws` module) |
+
+### Telegram
+
+```env
+TELEGRAM_BOT_TOKEN=7123456789:AAH...
+TELEGRAM_ALLOWED_USERS=123456789,987654321   # optional: restrict access
+```
+
+```bash
+npm install node-telegram-bot-api
+```
+
+Send `/ask <task>` to your bot, or any DM. Supports document uploads forwarded to analysis.
+
+### Discord
+
+```env
+DISCORD_BOT_TOKEN=MTIzNDU2Nzg5...
+DISCORD_TRIGGER_PREFIX=!octo               # default
+DISCORD_LISTEN_ALL=false                   # true = respond to all messages
+DISCORD_ALLOWED_GUILDS=123456789           # optional: restrict servers
+```
+
+```bash
+npm install discord.js
+```
+
+Use `!octo <task>` or `@mention` the bot in any channel. Supports DMs and file attachments.
+
+### Slack
+
+```env
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_APP_TOKEN=xapp-...    # requires Socket Mode enabled in Slack app settings
+```
+
+```bash
+npm install @slack/bolt
+```
+
+`@mention` the bot or send a DM. Socket Mode — no public URL needed.
+
+### WhatsApp
+
+```env
+WHATSAPP_SESSION_PATH=~/.octopus/wa_session   # default
+WHATSAPP_TRIGGER_WORD=octo                     # messages must start with this (in group chats)
+WHATSAPP_ALLOWED_NUMBERS=447700123456          # optional: restrict senders
+```
+
+```bash
+npm install @whiskeysockets/baileys qrcode-terminal
+```
+
+On first run, scan the QR code shown in the terminal. Session is saved for automatic reconnect.
+
+### Signal
+
+```env
+SIGNAL_PHONE=+447700123456
+SIGNAL_CLI_HOST=127.0.0.1
+SIGNAL_CLI_PORT=7583
+SIGNAL_ALLOWED_SENDERS=+447700000001   # optional
+```
+
+Requires [signal-cli](https://github.com/AsamK/signal-cli) running as a TCP daemon:
+```bash
+signal-cli -u +447700123456 daemon --tcp 7583
+```
+
+### Gateway status API
+
+```bash
+GET /api/gateways
+# { "gateways": { "telegram": { "online": true, "info": {...} }, ... } }
+
+POST /api/gateways/telegram/send
+{ "channel": "123456789", "text": "Hello from Octopus!" }
+```
+
+---
+
+## Home Assistant
+
+Octopus integrates with Home Assistant via the WebSocket API.
+
+```env
+HA_URL=http://homeassistant.local:8123
+HA_TOKEN=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1...   # long-lived access token
+HA_TRIGGER_EVENT=octopus_task                    # HA event type that triggers tasks
+HA_RESULT_ENTITY=input_text.octopus_result       # entity to write result to
+```
+
+No extra packages needed — uses the `ws` module already installed.
+
+### Example Home Assistant automation
+
+```yaml
+automation:
+  alias: "Ask Octopus via command"
+  trigger:
+    platform: state
+    entity_id: input_text.octopus_command
+  action:
+    event: octopus_task
+    event_data:
+      task: "{{ trigger.to_state.state }}"
+```
+
+When `input_text.octopus_command` changes, Octopus runs the task and writes the result back to `input_text.octopus_result`.
 
 ---
 
@@ -307,6 +474,14 @@ Research-first:  Atlas → FactChecker → Architect → Forge → [QA gates] �
 
 The `[QA gates]` stage runs **in parallel** via `Promise.allSettled` (~75% faster).
 
+### AgentShield — 3 Layers
+
+| Layer | Component | Cost | What it catches |
+|---|---|---|---|
+| 1 | PreToolUse hook | Zero tokens | `rm -rf`, `DROP DATABASE`, fork bombs |
+| 2 | SecurityReviewer | LLM call | OWASP Top 10, secrets, injections |
+| 3 | AgentShield gate | Zero tokens | 102-rule static scanner |
+
 ### 5-Layer Memory
 
 ```
@@ -317,74 +492,48 @@ L2  Decision Memory       — SQLite append-only (ADRs)
 L1  Structural Memory     — SQLite + NetworkX graph
 ```
 
-### AgentShield — 3 Layers
-
-| Layer | Component | Cost | What it catches |
-|---|---|---|---|
-| 1 | PreToolUse hook | Zero tokens | `rm -rf`, `DROP DATABASE`, fork bombs |
-| 2 | SecurityReviewer | LLM call | OWASP Top 10, secrets, injections |
-| 3 | AgentShield gate | Zero tokens | 102-rule static scanner |
-
-### MCP Tool Catalogue — 26 Tools
-
-| Category | Tool |
-|---|---|
-| Orchestration | `octopus_plan_task` · `octopus_run_task_chain` |
-| Memory | `octopus_search_memory` · `octopus_get_decisions` · `octopus_compact_session` |
-| Files | `octopus_read_file` · `octopus_write_file` · `octopus_execute_command` |
-| Agents | `octopus_create_agent` · `octopus_scan_security` |
-| LLM | `octopus_llm_complete` |
-| Browser | `octopus_browser_navigate` · `octopus_browser_snapshot` · `octopus_browser_interact` |
-| Skills | `octopus_skill_scout` · `octopus_skill_synthesize` · `octopus_skill_validate` · `octopus_skill_deploy` · `octopus_skill_retire` · `octopus_skill_list` |
-| Auth | `octopus_login` · `octopus_vault_check` |
-| Diagnostics | `octopus_memory_status` · `octopus_task_routes` |
-| Plugins | `octopus_plugin_list` · `octopus_plugin_call` |
-
----
-
-## OctoDeck Control Surface
-
-### Stream Deck+ Layout
-
-```
-┌─────────┬─────────┬─────────┬─────────┐
-│  PLAN   │   RUN   │  STOP   │ AGENTS  │
-│ Blue    │ Amber   │ Red     │ Green   │
-├─────────┼─────────┼─────────┼─────────┤
-│SECURITY │ MEMORY  │INSTINCT │ SHIELD  │
-│ Orange  │ Blue    │ Purple  │ Red     │
-└─────────┴─────────┴─────────┴─────────┘
-
-LCD Touch Strip — 4 Encoder Wheels:
-  E1  Task Prompt   rotate=scroll history  press=send to Octopus
-  E2  Agent Focus   rotate=cycle agents    press=view agent details
-  E3  Memory Query  rotate=browse context  press=L1 search
-  E4  LLM Provider  rotate=switch provider (Claude / GPT-4o / Gemini / Ollama)
-```
-
-### 13 Display Surfaces
-
-Stream Deck+ · Ulanzi D200H · Android tablet · Android e-ink · iOS/iPadOS · macOS SwiftUI · TUI terminal · ESP32 AMOLED · ESP32 IPS · Ulanzi TC001 LED · Pixoo64 LED matrix · iTerm2 badges · Wake word / voice
-
 ---
 
 ## Configuration
 
-### `node/.env` key variables
+### `node/.env` — all variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_PROVIDER` | `anthropic` | `anthropic` · `openai` · `google` · `ollama` · `nvidia` · `huggingface` · `custom_http` · `router` |
-| `LLM_MODEL` | provider default | Override model |
+| `LLM_PROVIDER` | `anthropic` | `anthropic` · `openai` · `google` · `ollama` · `nvidia` · `openrouter` · `huggingface` · `custom_http` · `router` |
+| `LLM_MODEL` | provider default | Override model for that provider |
+| `ANTHROPIC_API_KEY` | — | Anthropic Claude |
+| `OPENAI_API_KEY` | — | OpenAI GPT-4o |
+| `GOOGLE_API_KEY` | — | Google Gemini |
+| `NVIDIA_API_KEY` | — | NVIDIA NIM (free trial: build.nvidia.com) |
+| `OPENROUTER_API_KEY` | — | OpenRouter — 200+ models incl. Hermes (openrouter.ai) |
+| `HF_TOKEN` | — | HuggingFace Inference API |
 | `HEADLESS_MODE` | `false` | `true` = external LLM is planner |
-| `SAFE_MODE` | `true` | `false` to enable file writes + shell commands |
-| `AGENTSHIELD_MODE` | `advisory` | `none` · `advisory` · `gate` (blocking) |
+| `SAFE_MODE` | `true` | `false` = enable file writes + shell |
+| `AGENTSHIELD_MODE` | `advisory` | `none` · `advisory` · `gate` |
 | `SOVEREIGN_FALLBACK_MODEL` | `gemma4:e2b` | Local fallback when cloud key missing |
-| `CUSTOM_HTTP_URL` | — | Base URL for `LLM_PROVIDER=custom_http` |
-| `CUSTOM_HTTP_MODEL` | — | Model name for custom HTTP backend |
+| `CUSTOM_HTTP_URL` | — | OpenAI-compatible endpoint (vLLM, LM Studio, etc.) |
+| `CUSTOM_HTTP_MODEL` | — | Model name for custom HTTP |
 | `MAX_THINKING_TOKENS` | `10000` | Token cap per LLM call |
 | `MEMORY_SERVICE_URL` | `http://localhost:5000` | Python memory service |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `TELEGRAM_BOT_TOKEN` | — | Telegram gateway |
+| `DISCORD_BOT_TOKEN` | — | Discord gateway |
+| `SLACK_BOT_TOKEN` | — | Slack gateway |
+| `SLACK_APP_TOKEN` | — | Slack Socket Mode token |
+| `WHATSAPP_SESSION_PATH` | `~/.octopus/wa_session` | WhatsApp session directory |
+| `SIGNAL_PHONE` | — | Signal phone number |
+| `SIGNAL_CLI_PORT` | `7583` | signal-cli TCP port |
+| `HA_URL` | — | Home Assistant URL |
+| `HA_TOKEN` | — | Home Assistant long-lived token |
+| `HA_TRIGGER_EVENT` | `octopus_task` | HA event type to listen for |
+| `HA_RESULT_ENTITY` | — | HA entity to write results to |
+| `SERP_API_KEY` | — | SerpAPI for Google web search results |
+| `BRAVE_API_KEY` | — | Brave Search API |
+| `ENABLE_PDF` | `false` | PDF extraction (needs `npm install pdf-parse`) |
+| `ENABLE_DOCX` | `false` | Word doc extraction (needs `npm install mammoth`) |
+| `ENABLE_XLSX` | `false` | Excel extraction (needs `npm install xlsx`) |
+| `ROUTE_<ROLE>` | — | Override model router: `ROUTE_planner=nvidia:kimi-k2` |
 
 ---
 
@@ -500,288 +649,159 @@ Full guide: [docs/quickstart-voice.md](docs/quickstart-voice.md)
 
 ## LLM Providers
 
-| Provider | Setting | Models | Key |
+| Provider | Setting | Key | Models |
 |---|---|---|---|
-| Anthropic Claude | `anthropic` | claude-sonnet-4-6, claude-opus-4-7, claude-haiku-4-5 | `ANTHROPIC_API_KEY` |
-| OpenAI | `openai` | gpt-4o, gpt-4o-mini | `OPENAI_API_KEY` |
-| Google Gemini | `google` | gemini-2.0-flash, gemini-2.5-pro | `GOOGLE_API_KEY` |
-| Ollama (local) | `ollama` | gemma4:e2b, gemma4:26b, gemma4:31b, gemma3:27b | None |
-| NVIDIA NIM | `nvidia` | meta/llama-3.1-405b-instruct, kimi-k2, deepseek-v4-pro | `NVIDIA_API_KEY` (free) |
-| HuggingFace | `huggingface` | google/gemma-3-4b-it, gemma-3-27b-it | `HF_TOKEN` (free) |
-| Custom HTTP | `custom_http` | any | `CUSTOM_HTTP_URL` |
-| Smart Router | `router` | best per agent role | varies |
+| Anthropic Claude | `anthropic` | `ANTHROPIC_API_KEY` | claude-sonnet-4-6, claude-opus-4-7 |
+| OpenAI | `openai` | `OPENAI_API_KEY` | gpt-4o, gpt-4o-mini |
+| Google Gemini | `google` | `GOOGLE_API_KEY` | gemini-2.0-flash, gemini-2.5-pro |
+| Ollama (local) | `ollama` | none | gemma4:e2b, llama3.3, qwen2.5-coder |
+| NVIDIA NIM | `nvidia` | `NVIDIA_API_KEY` (free) | 100+ models (build.nvidia.com) |
+| OpenRouter | `openrouter` | `OPENROUTER_API_KEY` (free) | 200+ models incl. Hermes-3/4 |
+| HuggingFace | `huggingface` | `HF_TOKEN` (free) | gemma-3-4b-it, llama-3.1-8b |
+| Custom HTTP | `custom_http` | — | any OpenAI-compatible (vLLM, LM Studio) |
+| Smart Router | `router` | varies | auto-routes per agent role |
 
-**Sovereign Fallback:** when the selected cloud provider has no key, Octopus automatically routes to local Ollama (`SOVEREIGN_FALLBACK_MODEL`, default `gemma4:e2b`) and logs the reason clearly.
+**Sovereign Fallback:** if the active cloud provider has no key, Octopus automatically routes to local Ollama (`SOVEREIGN_FALLBACK_MODEL`, default `gemma4:e2b`) and logs a clear warning.
 
-### Gemma 4 (recommended for local)
-
-```bash
-ollama pull gemma4:e2b    # 7.2 GB — default, native function-calling + audio
-ollama pull gemma4:26b    # 18 GB  — MoE, fast planning, 256K context
-ollama pull gemma4:31b    # 20 GB  — best local quality, 85.2% MMLU Pro
-```
-
-### JAX/Gemma backend
-
-```bash
-cd examples/jax-gemma-http
-pip install -r requirements.txt
-python server.py --model google/gemma-3-4b-it
-```
+### Caller presets (`OCTOPUS_CALLER`)
 
 ```env
-LLM_PROVIDER=custom_http
-CUSTOM_HTTP_URL=http://localhost:8080
-CUSTOM_HTTP_MODEL=google/gemma-3-4b-it
+OCTOPUS_CALLER=claude       → anthropic / claude-sonnet-4-6
+OCTOPUS_CALLER=nvidia       → nvidia / llama-3.1-405b-instruct
+OCTOPUS_CALLER=nemotron     → nvidia / nemotron-ultra-253b-v1
+OCTOPUS_CALLER=deepseek     → nvidia / deepseek-v4-pro
+OCTOPUS_CALLER=kimi         → nvidia / kimi-k2-thinking
+OCTOPUS_CALLER=qwen_coder   → nvidia / qwen3-coder-480b-a35b-instruct
+OCTOPUS_CALLER=hermes3      → openrouter / hermes-3-llama-3.1-405b
+OCTOPUS_CALLER=hermes4      → openrouter / hermes-4-405b
+OCTOPUS_CALLER=hermes4_70b  → openrouter / hermes-4-llama-3.1-70b
 ```
-
-Also works with: vLLM, LM Studio, llamafile, text-generation-webui (any OpenAI-compatible server).
 
 ---
 
-## Tool Plugins
+## REST API Reference
 
-Add custom tools without modifying core code:
+### New in v4.0
 
-```
-tools/
-  my-tool/
-    tool.json    ← manifest (name, description, schema, safety_tier)
-    index.js     ← handler: module.exports = async (input) => result
-```
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/search` | Web search: `{ query, limit?, engine? }` |
+| `POST` | `/api/documents/upload` | Upload + analyse a file (multipart/form-data) |
+| `GET` | `/api/documents/modes` | List supported analysis modes + extensions |
+| `POST` | `/api/complete/stream` | SSE streaming LLM completion: `{ prompt, role?, maxTokens? }` |
+| `GET` | `/api/gateways` | Gateway status |
+| `POST` | `/api/gateways/:name/send` | Send message via gateway: `{ channel, text }` |
+| `GET` | `/api/router` | Active task router model assignments |
 
-```bash
-# After adding a plugin, restart the server — it auto-loads
-GET  /api/plugins             # list all plugins
-POST /api/plugins/call/:name  # call a plugin
-# Also available as MCP tools: octopus_plugin_list, octopus_plugin_call
-```
+### Core endpoints
 
-Built-in: `hello_world` (example), `http_fetch` (SSRF-guarded). See [tools/README.md](tools/README.md).
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/health` | Server status + cache stats |
+| `GET` | `/api/status` | Chain state, LLM provider, headless mode |
+| `GET` | `/api/agents` | List all 14 registered agents |
+| `POST` | `/api/tasks/plan` | Cortex plans; returns agent chain |
+| `POST` | `/api/tasks/run` | Start full agent chain (events on WS) |
+| `POST` | `/api/tasks/interrupt` | Stop running chain |
+| `POST` | `/api/tasks/voice` | Voice path; emits `voice_summary` WS event |
+| `POST` | `/api/security/scan` | AgentShield scan |
+| `GET` | `/api/memory/search?q=` | L1 structural memory search |
+| `GET` | `/api/memory/decisions` | L2 ADR log |
+| `GET` | `/api/llm/provider` | Active LLM provider + model |
+| `POST` | `/api/llm/complete` | Direct LLM completion |
+| `GET` | `/api/tools/:format` | Tool declarations: `anthropic` `openai` `gemini` `mcp` |
+| `GET` | `/api/plugins` | List tool plugins |
+| `POST` | `/api/plugins/call/:name` | Call a tool plugin |
+| `GET` | `/api/projects` | List projects |
+| `POST` | `/api/projects` | Create project |
+| `GET` | `/dashboard` | HUD dashboard (HTML) |
+| `WS` | `/ws` | WebSocket event stream |
+
+---
+
+## WebSocket Events
+
+| Event | Payload | Fired when |
+|---|---|---|
+| `connected` | `{}` | WS connection opens |
+| `chain_start` | `{ task, plan: string[] }` | Agent chain begins |
+| `agent_start` | `{ agent, role }` | Agent spawned |
+| `agent_done` | `{ agent, approved, notes }` | Agent finished |
+| `gate_fail` | `{ agent, reason }` | Gate blocked the chain |
+| `chain_done` | `{ task, success, duration_ms }` | Chain complete |
+| `voice_summary` | `{ summary, success }` | Voice task TTS result |
+| `web_search` | `{ query, count }` | Web search ran |
+| `document_upload` | `{ filename, mode }` | Document upload started |
+| `document_done` | `{ filename, type, charCount }` | Document analysis complete |
+| `gateway_message` | `{ gateway, sender, channel, text }` | Message arrived on any gateway |
+| `gateway_reply` | `{ gateway, reply }` | Reply sent to a gateway |
+| `instinct_new` | `{ id, pattern, confidence }` | New instinct learned |
+| `compaction` | `{ session_tool_calls }` | Context compaction triggered |
 
 ---
 
 ## Testing
 
-### Currently passing — 141 tests total
+### Run the full test suite
 
 ```bash
-# Node.js — Jest (100 tests)
 cd node && npm test
 ```
-```
-Test Suites: 8 passed, 8 total
-Tests: 100 passed
 
-  agents.test.js          32   14 agent contracts + SecurityReviewer + ReleaseKeeper
-  agents_marketplace.test.js 16  Navigator · MarketScout · Toolsmith · SandboxQA
-  commands.test.js         6   REST API: health · agents · onboard · plan · run · 404
-  mcp.test.js              6   MCP server: 26 tools · SAFE_MODE guards · concurrent calls
-  memory.test.js           3   5-layer memory bridge
-  vault_fallback.test.js   9   Zero-Key cascade · Ollama routing · Sovereign Fallback
-  octodeck.test.js        15   AgentDeck API: tasks/plan · tasks/run · tasks/interrupt
-                               memory/search · security/scan · voice · status · plugins
-  phase2to6.test.js       13   Dashboard · HEADLESS_MODE · custom_http · tool plugins · 404
-```
+### API test (20/20 passing)
 
 ```bash
-# Python — pytest (41 tests)
-py -m pytest python/tests/ -q          # Windows
-python3 -m pytest python/tests/ -q    # Mac/Linux
+cd node && node -e "
+process.env.LLM_PROVIDER='ollama';
+const req = require('supertest');
+const app = require('./src/server');
+(async()=>{
+  const r = await req(app).get('/api/health');
+  console.log(r.status === 200 ? '✓ health' : '✗ health');
+  const r2 = await req(app).get('/api/router');
+  console.log(r2.body.routes.length + ' routes loaded');
+  const r3 = await req(app).get('/api/gateways');
+  console.log('Gateways:', JSON.stringify(r3.body.gateways));
+})();
+"
 ```
-```
-41 passed in ~22s
-  test_graph_store.py     11   node upsert · edge queries · relevance scoring
-  test_indexer.py         13   symbol extraction · incremental indexer
-  test_memory_service.py   9   health · search · decisions · compact · context
-  test_schema.py           8   decision CRUD · run state · upsert semantics
-```
-
-> **Expected console output during Node tests (not failures):**
-> `[cortex] LLM planning failed — using keyword fallback` — no real LLM in tests.
-> `AgentShield scan skipped — hook guard active` — deduplication guard fires correctly.
 
 ---
 
 ## Development
 
 ```bash
-# Start the REST+WS server + memory service
-.\start_server.ps1         # Windows
-./start_mcp.sh             # Mac/Linux (starts MCP + memory)
+# Start API + WebSocket + memory service
+.\start_server.ps1        # Windows
+./start_mcp.sh            # Mac/Linux
 
 # CLI
 node node/src/cli.js
-❯ /plan add authentication         # plan only
-❯ /run  add authentication         # full chain
-❯ /provider set ollama gemma4:e2b  # switch model
-❯ /headless on                     # toggle headless
-❯ /dashboard                       # open web UI
-❯ /vault                           # check API keys
+❯ /plan add authentication
+❯ /run  add authentication
+❯ /provider set router       # enable multi-model routing
+❯ /routes                    # see model assignments
+❯ /dashboard                 # open HUD dashboard
+❯ /vault                     # check API keys
 
-# Build bridge TypeScript (optional — for AgentDeck integration)
-cd bridge && npm install && npm run build
-
-# Tests
+# Run tests
 cd node && npm test
-py -m pytest python/tests/ -q
+cd python && python3 -m pytest tests/ -q
 ```
 
-### Adding a new agent
+### Adding a gateway
 
-1. `node/src/agents/yourAgent.js` — follow existing pattern
-2. Register in `node/src/agents/index.js`
-3. Optionally add a key in `bridge/src/octopus/octopus-deck-layout.ts`
-4. Add tests in `node/tests/agents.test.js`
+1. Create `node/src/gateways/<name>.js` following the pattern in existing files
+2. Add an entry to `GATEWAY_LOADERS` in `node/src/gateways/index.js`
+3. The gateway auto-starts if its env var is set
 
-### Adding a tool plugin
+### Adding a search engine
 
-1. Create `tools/<name>/tool.json` + `tools/<name>/index.js`
-2. Restart the server — it auto-loads
-3. See [tools/README.md](tools/README.md)
+Edit `node/src/tools/web_search.js` → add engine function and register in the dispatcher.
 
 ---
 
-## Uninstall
-
-### Quick uninstall (keep repo, remove registrations + global CLI)
-
-```powershell
-# Windows PowerShell
-$RepoDir = "C:\path\to\Octopus-Agent-System"   # ← your clone path
-
-# 1. Remove global CLI link
-Push-Location "$RepoDir\node"; npm unlink --silent; Pop-Location
-
-# 2. Remove from PATH (user-level)
-$p = [System.Environment]::GetEnvironmentVariable('PATH','User')
-$p = ($p -split ';' | Where-Object { $_ -ne $RepoDir }) -join ';'
-[System.Environment]::SetEnvironmentVariable('PATH', $p, 'User')
-
-# 3. Remove MCP registration from Claude Desktop
-$cfg = "$env:APPDATA\Claude\claude_desktop_config.json"
-if (Test-Path $cfg) {
-    $j = Get-Content $cfg -Raw | ConvertFrom-Json
-    $j.mcpServers.PSObject.Properties.Remove('octopus')
-    $j | ConvertTo-Json -Depth 10 | Out-File $cfg -Encoding utf8
-    Write-Host "Removed from Claude Desktop"
-}
-
-# 4. Remove from Cursor
-$cfg = "$env:APPDATA\Cursor\User\globalStorage\mcp.json"
-if (Test-Path $cfg) {
-    $j = Get-Content $cfg -Raw | ConvertFrom-Json
-    $j.mcpServers.PSObject.Properties.Remove('octopus')
-    $j | ConvertTo-Json -Depth 10 | Out-File $cfg -Encoding utf8
-    Write-Host "Removed from Cursor"
-}
-
-# 5. Remove API keys from OS Vault (Windows Credential Manager)
-$providers = @('anthropic','openai','google','nvidia','huggingface')
-foreach ($p in $providers) {
-    try {
-        [Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime] | Out-Null
-        $vault = New-Object Windows.Security.Credentials.PasswordVault
-        $cred = $vault.Retrieve("Octopus_Vault", $p)
-        $vault.Remove($cred)
-        Write-Host "Removed $p key from Vault"
-    } catch { /* not present */ }
-}
-
-Write-Host "Uninstall complete. Delete the repo folder to remove all files."
-```
-
-### Mac/Linux
-
-```bash
-# Remove global CLI link
-cd /path/to/Octopus-Agent-System/node && npm unlink
-
-# Remove MCP registration from Claude Desktop
-python3 - <<'EOF'
-import json, os
-cfg = os.path.expanduser("~/.config/Claude/claude_desktop_config.json")
-if os.path.exists(cfg):
-    data = json.load(open(cfg))
-    data.get("mcpServers", {}).pop("octopus", None)
-    json.dump(data, open(cfg, "w"), indent=2)
-    print("Removed from Claude Desktop")
-EOF
-
-# Remove API keys from macOS Keychain
-security delete-generic-password -s "Octopus_Vault" -a anthropic 2>/dev/null
-security delete-generic-password -s "Octopus_Vault" -a openai    2>/dev/null
-security delete-generic-password -s "Octopus_Vault" -a google    2>/dev/null
-security delete-generic-password -s "Octopus_Vault" -a nvidia    2>/dev/null
-
-# Delete the repo
-rm -rf /path/to/Octopus-Agent-System
-echo "Uninstall complete."
-```
-
-### What gets removed / left behind
-
-| Component | Uninstall removes? | Notes |
-|---|---|---|
-| `node_modules/` | No (in repo dir) | Delete repo folder to clean |
-| `node/.env` | No | Contains your local config |
-| `data/octopus.db` | No | Your agent memory (L1–L3) |
-| `octopus` CLI command | ✅ `npm unlink` | Removed from PATH |
-| MCP server entry | ✅ (see above) | Removed from each client |
-| OS Vault keys | ✅ (see above) | Wiped from Windows CM / macOS Keychain |
-| Python packages | No | `pip uninstall` manually if needed |
-
-> **To fully remove everything:** unregister (steps above), then delete the repo folder.
-> Your `.env` and `data/` directory with learned memory will be gone.
-
----
-
-## Functions Reference
-
-### REST API — full endpoint list
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/api/health` | — | Server + chain status + cache stats |
-| GET | `/api/status` | — | Chain state, LLM provider, headless mode |
-| GET | `/api/agents` | — | List all 14 registered agents |
-| POST | `/api/tasks/plan` | — | Run Cortex; return planned agent chain |
-| POST | `/api/tasks/run` | — | Start full chain (events on WS `/ws`) |
-| POST | `/api/tasks/interrupt` | — | Stop the running chain |
-| POST | `/api/tasks/voice` | — | Voice path; emits `voice_summary` on WS |
-| POST | `/api/security/scan` | — | AgentShield scan: `{ target: "file or code" }` |
-| GET | `/api/memory/search?q=` | — | L1 structural memory search |
-| GET | `/api/memory/structural?q=` | — | Same (legacy alias) |
-| GET | `/api/memory/decisions` | — | L2 ADR log |
-| GET | `/api/memory/run` | — | Current run state |
-| POST | `/api/memory/compact` | — | Compact session to long-term memory |
-| GET | `/api/llm/provider` | — | Active LLM provider + model |
-| POST | `/api/llm/complete` | — | Direct LLM completion |
-| GET | `/api/tools/:format` | — | Tool declarations: `anthropic` `openai` `gemini` `mcp` |
-| GET | `/api/plugins` | — | List loaded tool plugins |
-| POST | `/api/plugins/call/:name` | — | Call a named tool plugin |
-| GET | `/api/skills` | — | Skill registry |
-| GET | `/dashboard` | — | Web dashboard (HTML) |
-| GET | `/` | — | Redirects to `/dashboard` |
-| WS | `/ws` | — | WebSocket event stream |
-
-### WebSocket events
-
-| Event | Payload | Fired when |
-|---|---|---|
-| `connected` | `{}` | WS connection opens |
-| `chain_start` | `{ task, plan: string[] }` | Chain begins |
-| `agent_start` | `{ agent, role }` | Agent spawned |
-| `agent_done` | `{ agent, approved, notes }` | Agent finished |
-| `gate_fail` | `{ agent, reason }` | Gate blocked the chain |
-| `chain_done` | `{ task, success, duration_ms }` | Chain complete |
-| `tool_call` | `{ tool, args }` | Tool called inside agent |
-| `compaction` | `{ session_tool_calls }` | Context compaction suggested |
-| `instinct_new` | `{ id, pattern, confidence, occurrences }` | Instinct learned |
-| `voice_summary` | `{ summary, success }` | Voice task TTS result |
-| `disconnected` | `{}` | WS connection closed |
-
-### MCP Tools (26) — grouped
+## MCP Tool Catalogue — 26 Tools
 
 **Orchestration:** `octopus_plan_task` · `octopus_run_task_chain`
 
@@ -801,74 +821,27 @@ echo "Uninstall complete."
 
 **Plugins:** `octopus_plugin_list` · `octopus_plugin_call`
 
-### CLI commands
-
-```
-/plan <task>           Cortex plans — shows agent chain, does not run
-/run  <task>           Full 14-agent pipeline with live output
-/agents                List all agents with roles + gate flag
-/models                Installed Ollama models
-/routes                Smart Task Router — which model per agent
-/provider              Show active provider/model
-/provider list         All providers + key status
-/provider set <p> [m]  Switch provider (writes to .env)
-/headless              Show current HEADLESS_MODE
-/headless on|off       Toggle headless mode (writes to .env)
-/vault                 Check OS Vault key status (all providers)
-/status                Health check: memory, Ollama, provider
-/dashboard             Open web UI in browser
-/update                Check GitHub for updates + apply
-/update-models         Re-pull all Ollama models
-/help                  Full command reference
-/exit                  Quit
-```
-
-Plain text (no slash) = run a task immediately.
-
-### Python memory service endpoints (:5000)
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/health` | Service health |
-| GET | `/context/<agent>` | L5 context assembly for an agent |
-| GET | `/structural/search?q=` | L1 graph search |
-| POST | `/structural/impact` | Boundary impact analysis |
-| GET | `/decisions` | L2 ADR log |
-| POST | `/decisions` | Save an ADR |
-| GET | `/run` | Current run state |
-| POST | `/run` | Save run state |
-| POST | `/run/compact` | Compact session |
-| POST | `/writeback` | Agent findings → memory |
-| GET | `/instincts` | List instincts |
-| POST | `/instincts` | Save an instinct |
-| PATCH | `/instincts/<id>/evolve` | Elevate instinct to skill |
-
 ---
 
-## Roadmap
+## Uninstall
 
-- [ ] Voice → Octopus via offline wake word (Porcupine / microWakeWord on ESP32)
-- [ ] Multi-chain view — parallel chains on separate Stream Deck key rows
-- [ ] Ollama model hot-swap via E4 encoder without restart
-- [ ] TUI agent swimlane — one row per agent, live token counters
-- [ ] AgentShield findings pushed to Apple/Android notification surfaces
-- [ ] Instinct confidence bar on Pixoo64 LED rows
+```powershell
+# Windows PowerShell
+$RepoDir = "C:\path\to\Octopus-Agent-System"
+Push-Location "$RepoDir\node"; npm unlink --silent; Pop-Location
 
----
-
-## Documentation
-
-| Doc | Content |
-|---|---|
-| [docs/quickstart-local.md](docs/quickstart-local.md) | No hardware, no API key — run in 5 minutes |
-| [docs/quickstart-headless.md](docs/quickstart-headless.md) | Claude Desktop / Cursor as planner |
-| [docs/quickstart-jax-gemma.md](docs/quickstart-jax-gemma.md) | JAX/Gemma custom backend + any OpenAI-compat server |
-| [docs/quickstart-voice.md](docs/quickstart-voice.md) | Voice → Octopus → surfaces → TTS |
-| [docs/octopus-integration.md](docs/octopus-integration.md) | OctoDeck event flow, REST API, WS events |
-| [OCTOPUS.md](OCTOPUS.md) | Developer constitution — injected into every agent |
-| [SKILL.md](SKILL.md) | MCP tool trigger guide, REST API reference |
-| [tools/README.md](tools/README.md) | Tool plugin guide |
-| [examples/jax-gemma-http/README.md](examples/jax-gemma-http/README.md) | JAX/Gemma server guide |
+# Remove API keys from OS Vault
+$providers = @('anthropic','openai','google','nvidia','openrouter','huggingface')
+foreach ($p in $providers) {
+    try {
+        $vault = New-Object Windows.Security.Credentials.PasswordVault
+        $cred = $vault.Retrieve("Octopus_Vault", $p)
+        $vault.Remove($cred)
+        Write-Host "Removed $p"
+    } catch {}
+}
+Write-Host "Done. Delete the repo folder to remove all files."
+```
 
 ---
 
@@ -878,7 +851,8 @@ Plain text (no slash) = run a task immediately.
 |---|---|---|
 | Octopus Agent System (`node/`, `python/`) | Apache 2.0 | [Boyapati13/Octopus-Agent-System](https://github.com/Boyapati13/Octopus-Agent-System) |
 | AgentDeck (`bridge/`, Android, Apple, ESP32…) | MIT | [puritysb/AgentDeck](https://github.com/puritysb/AgentDeck) |
+| Hermes Models (NousResearch) | Apache 2.0 | [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) |
+| Mark-XXXIX HUD Design (inspiration) | MIT | [FatihMakes/Mark-XXXIX](https://github.com/FatihMakes/Mark-XXXIX) |
 | ECC Skills integration | Apache 2.0 | [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code) |
-| Brand icons | MIT | [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons) |
 
-**Independent project. Not affiliated with Anthropic, OpenAI, Google, Elgato, DIVOOM, or Ulanzi.**
+**Independent project. Not affiliated with Anthropic, OpenAI, Google, NVIDIA, NousResearch, Elgato, or any messaging platform.**

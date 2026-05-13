@@ -30,14 +30,26 @@ const axios = require('axios');
 // OCTOPUS_CALLER is set in the MCP client's env block — MCP stdio has no built-in caller identity
 const CALLER = (process.env.OCTOPUS_CALLER || '').toLowerCase();
 const CALLER_PRESETS = {
-  claude:       { provider: 'anthropic',   model: 'claude-sonnet-4-6'                },
-  openai:       { provider: 'openai',      model: 'gpt-4o'                           },
-  gemini:       { provider: 'google',      model: 'gemini-2.5-pro'                   },
-  ollama:       { provider: 'ollama',      model: 'gemma4:e2b'                       },
-  nvidia:       { provider: 'nvidia',      model: 'meta/llama-3.1-405b-instruct'                },
-  nemotron:     { provider: 'nvidia',      model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' },
-  huggingface:  { provider: 'huggingface', model: 'google/gemma-3-4b-it'             },
-  custom:       { provider: 'custom_http', model: process.env.CUSTOM_HTTP_MODEL || 'default' },
+  claude:       { provider: 'anthropic',    model: 'claude-sonnet-4-6'                          },
+  openai:       { provider: 'openai',       model: 'gpt-4o'                                     },
+  gemini:       { provider: 'google',       model: 'gemini-2.5-pro'                             },
+  ollama:       { provider: 'ollama',       model: 'gemma4:e2b'                                 },
+  // NVIDIA NIM — free trial at build.nvidia.com, OpenAI-compatible
+  nvidia:       { provider: 'nvidia',       model: 'meta/llama-3.1-405b-instruct'               },
+  nemotron:     { provider: 'nvidia',       model: 'nvidia/llama-3.1-nemotron-ultra-253b-v1'    },
+  deepseek:     { provider: 'nvidia',       model: 'deepseek-ai/deepseek-v4-pro'                },
+  deepseek_r1:  { provider: 'nvidia',       model: 'deepseek-ai/deepseek-r1'                    },
+  kimi:         { provider: 'nvidia',       model: 'moonshotai/kimi-k2-thinking'                },
+  qwen_coder:   { provider: 'nvidia',       model: 'qwen/qwen3-coder-480b-a35b-instruct'        },
+  llama4:       { provider: 'nvidia',       model: 'meta/llama-4-maverick-17b-128e-instruct'    },
+  // Hermes models via OpenRouter (NousResearch agentic specialist)
+  hermes3:      { provider: 'openrouter',   model: 'nousresearch/hermes-3-llama-3.1-405b'       },
+  hermes4:      { provider: 'openrouter',   model: 'nousresearch/hermes-4-405b'                 },
+  hermes4_70b:  { provider: 'openrouter',   model: 'nousresearch/hermes-4-llama-3.1-70b'        },
+  // Hugging Face free inference
+  huggingface:  { provider: 'huggingface',  model: 'google/gemma-3-4b-it'                       },
+  // Custom OpenAI-compatible endpoint (LM Studio, vLLM, llamafile, etc.)
+  custom:       { provider: 'custom_http',  model: process.env.CUSTOM_HTTP_MODEL || 'default'   },
   // cursor/windsurf/continue defer to LLM_PROVIDER/LLM_MODEL env vars
 };
 const preset = CALLER_PRESETS[CALLER] || null;
@@ -52,6 +64,7 @@ const MODEL = process.env.LLM_MODEL || (preset ? preset.model : {
   google:       'gemini-2.0-flash',
   ollama:       'llama3.2',
   nvidia:       'meta/llama-3.1-405b-instruct',
+  openrouter:   'nousresearch/hermes-3-llama-3.1-405b',
   huggingface:  'google/gemma-3-4b-it',
   custom_http:  process.env.CUSTOM_HTTP_MODEL || 'default',
 }[PROVIDER]) || 'claude-sonnet-4-6';
@@ -70,6 +83,7 @@ const ENV_KEY_MAP    = {
   openai:      'OPENAI_API_KEY',
   google:      'GOOGLE_API_KEY',
   nvidia:      'NVIDIA_API_KEY',
+  openrouter:  'OPENROUTER_API_KEY',
   huggingface: 'HF_TOKEN',
 };
 
@@ -197,6 +211,36 @@ async function completeHuggingFace(prompt, opts = {}) {
   });
 }
 
+// OpenRouter — unified gateway for 200+ models including Hermes, DeepSeek, Llama, etc.
+// Sign up at openrouter.ai → API Keys (free tier available)
+// Set OPENROUTER_API_KEY in node/.env or OS Vault.
+// Hermes-3/4 are the best agentic / tool-use models via this endpoint.
+async function completeOpenRouter(prompt, opts = {}) {
+  const model  = opts._model || MODEL;
+  const apiKey = await getSecureKey('openrouter');
+  return withRetry(async () => {
+    const res = await axios.post(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        model,
+        max_tokens: opts.maxTokens || 4096,
+        messages:   [{ role: 'user', content: prompt }],
+        stream:     false,
+      },
+      {
+        headers: {
+          Authorization:  `Bearer ${apiKey || ''}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer':  'https://octopus-agent.local',
+          'X-Title':       'Octopus Agent System',
+        },
+        timeout: opts.timeout || 60000,
+      }
+    );
+    return res.data.choices[0].message.content;
+  });
+}
+
 // NVIDIA NIM — OpenAI-compatible, free trial at build.nvidia.com
 // Reasoning models (nemotron-*-reasoning, kimi-k2-thinking, deepseek-*-thinking)
 // require stream:true and return chunks with delta.content.
@@ -298,6 +342,7 @@ const COMPLETERS = {
   google:      completeGoogle,
   ollama:      completeOllama,
   nvidia:      completeNvidia,
+  openrouter:  completeOpenRouter,
   huggingface: completeHuggingFace,
   custom_http: completeCustomHttp,
 };
@@ -335,6 +380,7 @@ async function complete(prompt, opts = {}) {
         openai:      'OPENAI_API_KEY',
         google:      'GOOGLE_API_KEY',
         nvidia:      'NVIDIA_API_KEY',
+        openrouter:  'OPENROUTER_API_KEY',
         huggingface: 'HF_TOKEN',
       }[PROVIDER] || 'API_KEY';
       console.error(
