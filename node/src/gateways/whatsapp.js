@@ -47,20 +47,18 @@ class WhatsAppGateway extends EventEmitter {
       return false;
     }
 
-    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason,
-            makeInMemoryStore } = baileys;
+    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = baileys;
 
     const { state, saveCreds } = await useMultiFileAuthState(this.sessionPath);
-    const store = makeInMemoryStore({});
 
     const connect = async () => {
+      const noop = () => {};
+      const silentLog = { level: 'silent', info: noop, warn: noop, error: noop, debug: noop, trace: noop, fatal: noop };
+      silentLog.child = () => silentLog;
       this.sock = makeWASocket({
         auth:             state,
-        printQRInTerminal: true,
-        logger:           { level: 'silent', child: () => ({ level: 'silent', info: () => {}, warn: () => {}, error: () => {}, debug: () => {}, trace: () => {}, fatal: () => {} }) },
+        logger:           silentLog,
       });
-
-      store.bind(this.sock.ev);
 
       this.sock.ev.on('creds.update', saveCreds);
 

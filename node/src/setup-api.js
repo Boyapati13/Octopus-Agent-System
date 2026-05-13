@@ -33,17 +33,22 @@ function parseEnv(filePath) {
 }
 
 function writeEnv(newVars) {
-  let content = fs.existsSync(ENV_EXAMPLE)
-    ? fs.readFileSync(ENV_EXAMPLE, 'utf8')
-    : '';
+  // Always read the live .env as base so existing keys are never wiped.
+  // Fall back to .env.example only when .env doesn't exist yet (first run).
+  const basePath = fs.existsSync(ENV_PATH) ? ENV_PATH
+                 : fs.existsSync(ENV_EXAMPLE) ? ENV_EXAMPLE
+                 : null;
+  let content = basePath ? fs.readFileSync(basePath, 'utf8') : '';
 
   const applied = new Set();
 
+  // Update lines that already exist in the file
   content = content.replace(/^([A-Z_][A-Z0-9_]*)=(.*)$/gm, (match, key) => {
     if (key in newVars) { applied.add(key); return `${key}=${newVars[key]}`; }
     return match;
   });
 
+  // Append brand-new keys that weren't in the file at all
   for (const [key, val] of Object.entries(newVars)) {
     if (!applied.has(key)) content += `\n${key}=${val}`;
   }
@@ -123,6 +128,8 @@ router.get('/status', (_req, res) => {
       hasGitHubToken:     !!c.GITHUB_TOKEN,
       // Gateway presence
       hasTelegramToken:   !!c.TELEGRAM_BOT_TOKEN,
+      telegramTokenValid: /^\d+:[A-Za-z0-9_-]{20,}$/.test((c.TELEGRAM_BOT_TOKEN || '').replace(/\s+/g, '')),
+      telegramHomeChannel: c.TELEGRAM_HOME_CHANNEL || '',
       hasDiscordToken:    !!c.DISCORD_BOT_TOKEN,
       hasSlackToken:      !!c.SLACK_BOT_TOKEN,
       hasSlackAppToken:   !!c.SLACK_APP_TOKEN,
@@ -242,6 +249,35 @@ router.post('/test-service', async (req, res) => {
   }
 });
 
+// ── GET /api/setup/test-service (query-param form for GET requests) ───────────
+router.get('/test-service', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.json({ ok: false, hint: 'No URL' });
+  try {
+    const r = await httpGet(url, 3000);
+    res.json({ ok: r.status < 400, hint: `HTTP ${r.status}` });
+  } catch (err) {
+    res.json({ ok: false, hint: err.message });
+  }
+});
+
+// ── GET /api/setup/test-telegram — tests saved token without exposing it ──────
+router.get('/test-telegram', async (req, res) => {
+  const tok = (process.env.TELEGRAM_BOT_TOKEN || '').replace(/\s+/g, '');
+  if (!tok) return res.json({ ok: false, hint: 'No token saved in .env' });
+  try {
+    const r = await httpGet(`https://api.telegram.org/bot${tok}/getMe`, 5000);
+    const body = safeJson(r.body);
+    if (r.status === 200 && body.ok) {
+      res.json({ ok: true, hint: `Bot: @${body.result.username}` });
+    } else {
+      res.json({ ok: false, hint: body.description || `HTTP ${r.status}` });
+    }
+  } catch (err) {
+    res.json({ ok: false, hint: err.message });
+  }
+});
+
 // ── POST /api/setup/save ──────────────────────────────────────────────────────
 router.post('/save', (req, res) => {
   const { config, complete } = req.body;
@@ -250,7 +286,9 @@ router.post('/save', (req, res) => {
   try {
     const toWrite = {};
     for (const [k, v] of Object.entries(config)) {
-      if (v && v !== '***') toWrite[k] = v;
+      // Skip blank strings — keep the current value in .env unchanged.
+      // Skip '***' masked placeholders — they mean "value already saved, don't overwrite".
+      if (v !== '' && v !== '***' && v !== undefined && v !== null) toWrite[k] = v;
     }
     writeEnv(toWrite);
 

@@ -23,18 +23,24 @@ const EventEmitter = require('events');
 class TelegramGateway extends EventEmitter {
   constructor() {
     super();
-    this.bot        = null;
-    this.online     = false;
-    this.lastMsg    = new Map(); // rate limiting: userId → timestamp
-    this.allowedIds = new Set(
+    this.bot         = null;
+    this.online      = false;
+    this.homeChannel = process.env.TELEGRAM_HOME_CHANNEL || null;  // hermes-style home channel
+    this.lastMsg     = new Map();
+    this.allowedIds  = new Set(
       (process.env.TELEGRAM_ALLOWED_USERS || '').split(',').filter(Boolean)
     );
   }
 
   async init(manager) {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const token = (process.env.TELEGRAM_BOT_TOKEN || '').replace(/\s+/g, '');
     if (!token) {
       console.error('[telegram] TELEGRAM_BOT_TOKEN not set — gateway disabled');
+      return false;
+    }
+    // Validate token format: numeric_id:alphanumeric_secret
+    if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) {
+      console.error('[telegram] TELEGRAM_BOT_TOKEN format invalid — expected "123456:ABC..." with no spaces. Re-enter via /setup.');
       return false;
     }
 
@@ -47,17 +53,44 @@ class TelegramGateway extends EventEmitter {
     }
 
     this.bot = new TelegramBot(token, { polling: true });
-    this.online = true;
 
     this.bot.on('message', (msg) => this._onMessage(msg));
     this.bot.on('polling_error', (err) => {
-      console.error(`[telegram] Polling error: ${err.message}`);
-      this.online = false;
+      console.error(`[telegram] Polling error: ${err.code || err.message}`);
+      if (err.code === 'ETELEGRAM' && String(err.message).includes('401')) {
+        console.error('[telegram] 401 Unauthorized — token is invalid. Re-enter via /setup.');
+        this.online = false;
+      }
     });
 
-    console.error('[telegram] Bot started. Waiting for messages…');
+    // Verify token with getMe before marking online
+    try {
+      const me = await this.bot.getMe();
+      this.online = true;
+      console.error(`[telegram] Bot @${me.username} online.`);
+    } catch (err) {
+      console.error(`[telegram] getMe failed: ${err.message} — check token in /setup`);
+      this.bot.stopPolling();
+      return false;
+    }
+
     manager.register('telegram', this);
     return true;
+  }
+
+  // Send a message to a chat — used for home channel outbound routing
+  async send(text, chatId) {
+    if (!this.bot || !this.online) return;
+    const target = chatId || this.homeChannel;
+    if (!target) return;
+    try {
+      const chunks = text.match(/[\s\S]{1,4000}/g) || [text];
+      for (const chunk of chunks) {
+        await this.bot.sendMessage(target, chunk);
+      }
+    } catch (err) {
+      console.error(`[telegram] send error: ${err.message}`);
+    }
   }
 
   _isAllowed(userId) {

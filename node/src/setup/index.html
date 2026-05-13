@@ -716,10 +716,19 @@ body{
               <input type="password" id="inp-telegram-token" placeholder="123456789:ABCdef…" autocomplete="off"
                 oninput="updateGwStatus('telegram')">
             </div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <button class="btn btn-test" onclick="testTelegramBot()">⚡ Test Connection</button>
+              <span id="tg-test-status" style="font-size:11px;color:var(--text-dim)"></span>
+            </div>
             <div class="field">
               <label>Allowed User IDs (optional — comma separated)</label>
               <input type="text" id="inp-telegram-users" placeholder="123456, 789012">
               <div class="hint">Leave blank to allow all users. Find your ID via @userinfobot</div>
+            </div>
+            <div class="field">
+              <label>Home Channel (optional — chat ID for outbound OCTO answers)</label>
+              <input type="text" id="inp-telegram-home" placeholder="-1001234567890">
+              <div class="hint">OCTO will forward answers here. Find chat ID via @userinfobot or send a message to the bot first.</div>
             </div>
           </div>
         </div>
@@ -1143,7 +1152,11 @@ function preloadConfig(cfg) {
   if (cfg.safeMode === 'false') document.getElementById('tog-safe').checked = false;
   if (cfg.headlessMode === 'true') document.getElementById('tog-headless').checked = true;
   // Gateway presence hints
-  if (cfg.hasTelegramToken) setGwStatus('telegram', 'Configured (token already set)');
+  if (cfg.hasTelegramToken) {
+    const status = cfg.telegramTokenValid ? 'Configured (token already set)' : '⚠ Token saved but format invalid — re-enter';
+    setGwStatus('telegram', status);
+    if (cfg.telegramHomeChannel) val('inp-telegram-home', cfg.telegramHomeChannel);
+  }
   if (cfg.hasDiscordToken)  setGwStatus('discord',  'Configured (token already set)');
   if (cfg.hasSlackToken)    setGwStatus('slack',     'Configured (token already set)');
   if (cfg.hasSignalPhone)   setGwStatus('signal',    'Configured');
@@ -1422,7 +1435,11 @@ function buildConfig() {
   cfg.OPENROUTER_API_KEY  = get('inp-openrouter-key');
 
   // Gateways
-  if (S.gateways.telegram)  cfg.TELEGRAM_BOT_TOKEN   = get('inp-telegram-token');
+  if (S.gateways.telegram) {
+    cfg.TELEGRAM_BOT_TOKEN   = get('inp-telegram-token');
+    cfg.TELEGRAM_ALLOWED_USERS = get('inp-telegram-users');
+    if (get('inp-telegram-home')) cfg.TELEGRAM_HOME_CHANNEL = get('inp-telegram-home');
+  }
   if (S.gateways.discord)   cfg.DISCORD_BOT_TOKEN    = get('inp-discord-token');
   if (S.gateways.slack)   { cfg.SLACK_BOT_TOKEN      = get('inp-slack-bot'); cfg.SLACK_APP_TOKEN = get('inp-slack-app'); }
   if (S.gateways.whatsapp)  cfg.WHATSAPP_SESSION_PATH = get('inp-whatsapp-path');
@@ -1463,6 +1480,29 @@ async function api(path, body) {
   return r.json();
 }
 
+// ── Telegram test ─────────────────────────────────────────────────────────────
+async function testTelegramBot() {
+  const stat  = document.getElementById('tg-test-status');
+  const typed = document.getElementById('inp-telegram-token').value.trim();
+  stat.textContent = 'Testing…'; stat.style.color = 'var(--cyan)';
+  try {
+    // If user typed a NEW token (looks like valid format), test that specific value.
+    // Otherwise always test the saved token on the server — never send the saved key to the browser.
+    const isNewToken = typed && /^\d+:[A-Za-z0-9_-]{20,}$/.test(typed.replace(/\s+/g, ''));
+    let ok = false, hint = '';
+    if (isNewToken) {
+      const clean = typed.replace(/\s+/g, '');
+      const r = await fetch(`/api/setup/test-service?url=${encodeURIComponent('https://api.telegram.org/bot' + clean + '/getMe')}`).then(x => x.json());
+      ok = r.ok; hint = r.hint || '';
+    } else {
+      const r = await fetch('/api/setup/test-telegram').then(x => x.json());
+      ok = r.ok; hint = r.hint || '';
+    }
+    stat.textContent = ok ? '✓ ' + (hint || 'Bot connected') : ('✗ ' + (hint || 'Token invalid — re-enter from @BotFather'));
+    stat.style.color  = ok ? 'var(--green)' : 'var(--red)';
+  } catch(e) { stat.textContent = '✗ ' + e.message; stat.style.color = 'var(--red)'; }
+}
+
 // ── WhatsApp pairing ──────────────────────────────────────────────────────────
 let waQRInterval = null;
 
@@ -1470,28 +1510,42 @@ async function startWaPair() {
   const path = get('inp-whatsapp-path') || '../data/whatsapp-session';
   const btn  = document.getElementById('btn-wa-pair');
   const stat = document.getElementById('wa-pair-status');
+  const qrBox = document.getElementById('wa-qr-box');
   btn.disabled = true;
-  stat.textContent = 'Starting WhatsApp gateway…';
+  if (waQRInterval) { clearInterval(waQRInterval); waQRInterval = null; }
+  stat.textContent = '⏳ Connecting to WhatsApp servers…';
   stat.style.color = 'var(--cyan)';
-
+  // Show the QR box immediately with a placeholder so the user knows it's coming
+  if (qrBox) {
+    qrBox.style.display = '';
+    document.getElementById('wa-qr-img-setup').src = '';
+    qrBox.querySelector('div').textContent = '⏳ Generating QR code — please wait…';
+  }
   try {
     const r = await api('/api/gateways/whatsapp/pair', { sessionPath: path });
     if (r.ok) {
       if (r.status === 'connected') {
         stat.textContent = '✓ Already connected';
         stat.style.color = 'var(--green)';
+        if (qrBox) qrBox.style.display = 'none';
       } else {
-        stat.textContent = 'Waiting for QR scan…';
-        pollWaQR();
-        waQRInterval = setInterval(pollWaQR, 8000);
+        stat.textContent = '📱 Scan the QR code below';
+        stat.style.color = 'var(--gold)';
+        if (qrBox) qrBox.querySelector('div').textContent = '📱 Scan with WhatsApp → Linked Devices → Link a Device';
+        // Poll aggressively at first (every 3s), then slow down
+        let fast = 10;
+        const doPoll = () => { pollWaQR(); if (--fast > 0) setTimeout(doPoll, 3000); else waQRInterval = setInterval(pollWaQR, 8000); };
+        setTimeout(doPoll, 2000);
       }
     } else {
       stat.textContent = '✗ ' + (r.error || 'Failed');
       stat.style.color = 'var(--red)';
+      if (qrBox) qrBox.style.display = 'none';
     }
   } catch (err) {
     stat.textContent = '✗ ' + err.message;
     stat.style.color = 'var(--red)';
+    if (qrBox) qrBox.style.display = 'none';
   }
   btn.disabled = false;
 }

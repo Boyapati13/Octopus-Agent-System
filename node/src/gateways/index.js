@@ -32,7 +32,6 @@ const GATEWAY_LOADERS = [
     name:     'whatsapp',
     envCheck: 'WHATSAPP_SESSION_PATH',
     load:     () => require('./whatsapp'),
-    optional: true, // doesn't need env var to attempt (will QR scan)
   },
   {
     name:     'signal',

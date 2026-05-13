@@ -340,11 +340,19 @@ async function completeOllama(prompt, opts = {}) {
   const base  = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   const { model: dynModel } = getDynamicProvider();
   const model = opts._model || dynModel;
+
+  // Fast connectivity check before committing to a long generation timeout
+  try {
+    await axios.get(`${base}/api/tags`, { timeout: 3000 });
+  } catch (_) {
+    throw new Error('Ollama is not running — start it with: ollama serve');
+  }
+
   return withRetry(async () => {
     const res = await axios.post(
       `${base}/api/generate`,
       { model, prompt, stream: false, options: { num_predict: opts.maxTokens || 1024 } },
-      { timeout: opts.timeout || 10000 }  // fast-fail: Ollama not running = immediate error
+      { timeout: opts.timeout || 120000 }  // 120s: large models need time to cold-load
     );
     return res.data.response;
   });

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Octopus — O.C.T.O Command Interface</title>
+  <title>Octopus — OCTO Command Interface</title>
   <style>
     /* ═══════════════════════════════════════════
        DESIGN TOKENS — Mark-XXXIX × Octopus Adapted
@@ -922,7 +922,7 @@
     <header class="header">
       <div class="header-left">
         <div>
-          <div class="header-title">O.C.T.O Command Interface</div>
+          <div class="header-title">OCTO Command Interface</div>
           <div class="header-sub">Optimized Cognitive Task Orchestrator — Octopus Industries</div>
         </div>
       </div>
@@ -1163,6 +1163,13 @@
           <button id="voice-btn"       class="btn orange">⬤ Voice</button>
           <button id="stop-voice-btn"  class="btn">◼ Stop</button>
           <button id="interrupt-btn"   class="btn danger">⊘ Kill</button>
+          <select id="voice-select" title="Voice" style="
+            background:var(--bg2,#0d1117);color:var(--text,#c9d1d9);
+            border:1px solid var(--border-b,#30363d);border-radius:4px;
+            font-family:inherit;font-size:9px;letter-spacing:.06em;
+            padding:3px 6px;cursor:pointer;max-width:130px">
+            <option value="">🔊 Voice…</option>
+          </select>
         </div>
       </div>
 
@@ -1180,7 +1187,7 @@
     <!-- ══════════════════ FOOTER ══════════════════ -->
     <footer class="footer">
       <span>[Ctrl+Enter] Execute · [F4] Mute · [F11] Fullscreen</span>
-      <span class="footer-center">Octopus Industries · O.C.T.O v2.0 · CLASSIFIED</span>
+      <span class="footer-center">Octopus Industries · OCTO v2.0 · CLASSIFIED</span>
       <span>© OCTOPUS AGENT SYSTEM</span>
     </footer>
   </div>
@@ -1222,6 +1229,8 @@
       listening: false,
       speaking: false,
       recognizer: null,
+      wakeRec: null,      // shared wake-word recognizer instance
+      wakeEnabled: true,  // false = wake word permanently paused until next Voice click
       lastSpokenAnswer: "",
       lastEvents: [],
       lastTask: "Idle",
@@ -1846,21 +1855,70 @@
     //  VOICE
     // ═══════════════════════════════════════════════════════
     // Speak using best available browser voice
+    function toSpeechText(text) {
+      return String(text || "")
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")   // [label](url) → label
+        .replace(/https?:\/\/\S+/g, "")             // bare URLs
+        .replace(/[*_`#~>]+/g, "")                  // markdown symbols
+        .replace(/\s{2,}/g, " ")                     // collapse whitespace
+        .trim();
+    }
+
+    // ── Voice selector ───────────────────────────────────────
+    function populateVoiceSelect() {
+      const sel = document.getElementById("voice-select");
+      if (!sel || !window.speechSynthesis) return;
+      const voices = window.speechSynthesis.getVoices().filter(function(v) {
+        return v.lang.startsWith("en");
+      });
+      if (!voices.length) return;
+      const saved = localStorage.getItem("octo_voice");
+      sel.innerHTML = '<option value="">🔊 Auto</option>' +
+        voices.map(function(v) {
+          const sel2 = saved === v.name ? ' selected' : '';
+          return '<option value="' + v.name + '"' + sel2 + '>' + v.name.replace(/Microsoft |Google /, '') + '</option>';
+        }).join("");
+    }
+    if (window.speechSynthesis) {
+      populateVoiceSelect();
+      window.speechSynthesis.onvoiceschanged = populateVoiceSelect;
+    }
+    document.addEventListener("change", function(e) {
+      if (e.target && e.target.id === "voice-select") {
+        localStorage.setItem("octo_voice", e.target.value);
+        if (e.target.value) {
+          const v = window.speechSynthesis.getVoices().find(function(v) { return v.name === e.target.value; });
+          if (v) { const t = new SpeechSynthesisUtterance("Voice changed to " + v.name.replace(/Microsoft |Google /, '')); t.voice = v; window.speechSynthesis.speak(t); }
+        }
+      }
+    });
+
+    function getSelectedVoice() {
+      const name = localStorage.getItem("octo_voice");
+      if (!name) return null;
+      return window.speechSynthesis.getVoices().find(function(v) { return v.name === name; }) || null;
+    }
+
     function speak(text) {
       if (!text || !window.speechSynthesis) return;
       window.speechSynthesis.cancel();
       state.speaking = true;
       renderAnswer();
-      const utt = new SpeechSynthesisUtterance(text);
+      const utt = new SpeechSynthesisUtterance(toSpeechText(text));
       utt.rate   = 0.92;
       utt.pitch  = 0.88;
       utt.volume = 1.0;
-      const voices = window.speechSynthesis.getVoices();
-      // Prefer Google/Microsoft natural voices over robotic defaults
-      const preferred = voices.find(function(v) {
-        return /Google.*en|Microsoft.*Natural|Samantha|Alex|Daniel|Karen/i.test(v.name);
-      }) || voices.find(function(v) { return v.lang.startsWith('en') && !v.localService; });
-      if (preferred) utt.voice = preferred;
+      const chosen = getSelectedVoice();
+      if (chosen) {
+        utt.voice = chosen;
+      } else {
+        // Auto: prefer natural-sounding voices
+        const voices = window.speechSynthesis.getVoices();
+        const preferred = voices.find(function(v) {
+          return /Google.*en|Microsoft.*Natural|Samantha|Alex|Daniel|Karen/i.test(v.name);
+        }) || voices.find(function(v) { return v.lang.startsWith('en') && !v.localService; });
+        if (preferred) utt.voice = preferred;
+      }
       utt.onend = function() { state.speaking = false; renderAnswer(); };
       window.speechSynthesis.speak(utt);
     }
@@ -1888,48 +1946,75 @@
       }
       if (state.listening) return;
 
-      const rec = new Recognition();
-      state.recognizer = rec;
-      state.listening  = true;
-      el.voiceBtn.textContent = "⬤ Listening…";
-      renderAnswer();
-      logLine("log-voice", "VOICE", "Listening started");
+      // Re-enable wake word for this session
+      state.wakeEnabled = true;
 
-      rec.continuous      = false;
-      rec.interimResults  = true;
-      rec.lang            = "en-US";
+      // Chrome only allows ONE SpeechRecognition at a time.
+      // Stop the wake-word listener before starting capture.
+      if (state.wakeRec) {
+        try { state.wakeRec.abort(); } catch(_) {}
+        state.wakeRec = null;
+      }
 
-      let transcript = "";
-      rec.onresult = function(event) {
-        transcript = Array.from(event.results).map(function(r) {
-          return r[0].transcript;
-        }).join(" ").trim();
-      };
-
-      rec.onerror = function(e) {
-        state.listening = false;
-        el.voiceBtn.textContent = "⬤ Voice";
-        logLine("log-error", "VOICE", "Error: " + (e.error || "unknown"));
+      // Give the browser one tick to release the mic before opening a new one.
+      setTimeout(function() {
+        const rec = new Recognition();
+        state.recognizer = rec;
+        state.listening  = true;
+        el.voiceBtn.textContent = "⬤ Listening…";
         renderAnswer();
-      };
+        logLine("log-voice", "VOICE", "Listening started");
 
-      rec.onend = function() {
-        state.listening = false;
-        el.voiceBtn.textContent = "⬤ Voice";
-        renderAnswer();
-        if (transcript) {
-          logLine("log-voice", "YOU", transcript);
-          runAsk(transcript);  // voice always uses Q&A path → synthesized answer + spoken
-        }
-      };
+        rec.continuous      = false;
+        rec.interimResults  = true;
+        rec.lang            = "en-US";
 
-      rec.start();
+        let transcript = "";
+        rec.onresult = function(event) {
+          transcript = Array.from(event.results).map(function(r) {
+            return r[0].transcript;
+          }).join(" ").trim();
+        };
+
+        rec.onerror = function(e) {
+          state.listening = false;
+          el.voiceBtn.textContent = "⬤ Voice";
+          logLine("log-error", "VOICE", "Error: " + (e.error || "unknown"));
+          renderAnswer();
+          if (state.wakeEnabled) setTimeout(startWakeWord, 1500);
+        };
+
+        rec.onend = function() {
+          state.listening = false;
+          el.voiceBtn.textContent = "⬤ Voice";
+          renderAnswer();
+          if (transcript) {
+            logLine("log-voice", "YOU", transcript);
+            runAsk(transcript);
+          }
+          if (state.wakeEnabled) setTimeout(startWakeWord, 1500);
+        };
+
+        rec.start();
+      }, 200);
     }
 
     function stopVoice() {
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      // Disable wake word before aborting so onend doesn't restart it
+      state.wakeEnabled = false;
+
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        // Chrome bug: cancel() sometimes doesn't work on first call
+        setTimeout(function() { window.speechSynthesis.cancel(); }, 50);
+      }
+      if (state.wakeRec) {
+        try { state.wakeRec.abort(); } catch(_) {}
+        state.wakeRec = null;
+      }
       if (state.recognizer) {
-        try { state.recognizer.stop(); } catch(_) {}
+        try { state.recognizer.abort(); } catch(_) {}  // abort is harder stop than stop()
+        state.recognizer = null;
       }
       state.listening = false;
       state.speaking  = false;
@@ -2289,15 +2374,87 @@
           const dotCls = online ? "dot live" : "dot bad";
           const setup  = !online ? '<div class="gw-setup">' + escapeHtml(GATEWAY_SETUP[name]) + '</div>' : '';
           const infoStr = gw.info ? Object.entries(gw.info).map(function([k,v]) { return k + ': ' + v; }).join(' · ') : '';
+          const testBtn = '<button onclick="testGateway(\'' + name + '\')" style="' +
+            'margin-top:5px;font-family:inherit;font-size:9px;letter-spacing:.08em;' +
+            'background:transparent;border:1px solid var(--border-b);color:var(--acc2);' +
+            'padding:2px 8px;cursor:pointer;border-radius:3px" id="gw-test-btn-' + name + '">' +
+            '⚡ Test</button>' +
+            '<span id="gw-test-result-' + name + '" style="font-size:9px;margin-left:8px;color:var(--text-dim)"></span>';
+          const waQR = name === 'whatsapp' ? (
+            '<div id="gw-wa-qr" style="display:none;margin-top:8px;text-align:center">' +
+            '<img id="gw-wa-qr-img" src="" style="width:160px;height:160px;background:#fff;border-radius:4px"><br>' +
+            '<span style="font-size:9px;color:var(--text-dim)">WhatsApp → Linked Devices → Link a Device</span>' +
+            '</div>'
+          ) : '';
           return '<div class="gw-card">' +
             '<div class="gw-name"><span class="' + dotCls + '"></span>' + escapeHtml(name.toUpperCase()) + '</div>' +
             (infoStr ? '<div class="gw-info">' + escapeHtml(infoStr) + '</div>' : '') +
-            setup +
+            setup + testBtn + waQR +
             '</div>';
         }).join("");
       } catch(_) {
         listEl.innerHTML += '<div style="font-size:9px;color:var(--red);">Could not load gateway status</div>';
       }
+    }
+
+    async function testGateway(name) {
+      const resultEl = document.getElementById("gw-test-result-" + name);
+      const btn      = document.getElementById("gw-test-btn-" + name);
+      if (!resultEl) return;
+      btn.disabled = true;
+      resultEl.textContent = "Testing…";
+      resultEl.style.color = "var(--acc2)";
+      try {
+        if (name === "telegram") {
+          // Verify bot token via Telegram getMe
+          const r = await apiFetch("/api/setup/test-service?url=" + encodeURIComponent("https://api.telegram.org/bot" + (document.getElementById("gw-test-btn-telegram") ? await getTelegramToken() : "") + "/getMe"));
+          resultEl.textContent = r.ok ? "✓ Bot connected" : "✗ Invalid token";
+          resultEl.style.color = r.ok ? "var(--green)" : "var(--red)";
+        } else if (name === "whatsapp") {
+          // Try to start WhatsApp and show QR
+          resultEl.textContent = "Starting…";
+          const r = await apiFetch("/api/gateways/whatsapp/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionPath: "../data/whatsapp-session" }) });
+          if (r.status === "connected") {
+            resultEl.textContent = "✓ Connected";
+            resultEl.style.color = "var(--green)";
+          } else {
+            resultEl.textContent = "Scan QR below";
+            resultEl.style.color = "var(--acc2)";
+            pollDashboardWaQR();
+          }
+        } else {
+          resultEl.textContent = "✓ Module loaded";
+          resultEl.style.color = "var(--green)";
+        }
+      } catch (err) {
+        resultEl.textContent = "✗ " + err.message.slice(0, 40);
+        resultEl.style.color = "var(--red)";
+      }
+      btn.disabled = false;
+    }
+
+    async function getTelegramToken() {
+      try { const r = await apiFetch("/api/setup/status"); return r.config && r.config.hasTelegramToken ? "configured" : ""; } catch(_) { return ""; }
+    }
+
+    async function pollDashboardWaQR() {
+      try {
+        const r = await apiFetch("/api/gateways/whatsapp/qr");
+        const qrDiv = document.getElementById("gw-wa-qr");
+        const qrImg = document.getElementById("gw-wa-qr-img");
+        if (!qrDiv) return;
+        if (r.online) {
+          qrDiv.style.display = "none";
+          const res = document.getElementById("gw-test-result-whatsapp");
+          if (res) { res.textContent = "✓ Connected"; res.style.color = "var(--green)"; }
+        } else if (r.qr) {
+          qrImg.src = "https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=" + encodeURIComponent(r.qr);
+          qrDiv.style.display = "";
+          setTimeout(pollDashboardWaQR, 10000);
+        } else {
+          setTimeout(pollDashboardWaQR, 3000);
+        }
+      } catch(_) {}
     }
 
     function showWaQR(qr) {
@@ -2361,6 +2518,41 @@
       el.voiceBtn.addEventListener("click", startVoiceInput);
       el.stopVoiceBtn.addEventListener("click", stopVoice);
       el.interruptBtn.addEventListener("click", interruptTask);
+
+      // ── Wake word: "hello octo" ───────────────────────────
+      function startWakeWord() {
+        if (!state.wakeEnabled) return;           // stopped by ◼ Stop button
+        if (state.listening || state.wakeRec) return;
+        const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!Recognition) return;
+        const wakeRec = new Recognition();
+        state.wakeRec          = wakeRec;
+        wakeRec.continuous     = true;
+        wakeRec.interimResults = true;
+        wakeRec.lang           = "en-US";
+        wakeRec.onresult = function(event) {
+          const said = Array.from(event.results)
+            .map(function(r) { return r[0].transcript.toLowerCase(); })
+            .join(" ");
+          if (said.includes("hello octo")) {
+            try { wakeRec.abort(); } catch(_) {}
+            state.wakeRec = null;
+            logLine("log-voice", "WAKE", "Wake word detected — listening…");
+            speak("Yes?");
+            setTimeout(startVoiceInput, 700);
+          }
+        };
+        wakeRec.onerror = function() {
+          state.wakeRec = null;
+          if (state.wakeEnabled && !state.listening) setTimeout(startWakeWord, 3000);
+        };
+        wakeRec.onend = function() {
+          if (state.wakeRec === wakeRec) state.wakeRec = null;
+          if (state.wakeEnabled && !state.listening) setTimeout(startWakeWord, 500);
+        };
+        try { wakeRec.start(); } catch(_) { state.wakeRec = null; }
+      }
+      startWakeWord();
 
       el.projectSelect.addEventListener("change", function() {
         state.activeProjectId = el.projectSelect.value || null;
@@ -2441,11 +2633,11 @@
       await resolveProjects();
       connectWs();
       el.taskInput.focus();
-      logLine("log-system", "BOOT", "O.C.T.O Command Interface v2 initialised");
+      logLine("log-system", "BOOT", "OCTO Command Interface v2 initialised");
 
       // Welcome voice — fires after voices load (Chrome loads async)
       function doWelcome() {
-        speak("O.C.T.O Command Interface online. All systems active. How can I help you?");
+        speak("OCTO online. All systems active. How can I help you?");
       }
       if (window.speechSynthesis) {
         const voices = window.speechSynthesis.getVoices();

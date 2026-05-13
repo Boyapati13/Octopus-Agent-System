@@ -3,11 +3,11 @@
 </p>
 
 <h1 align="center">🐙 Octopus Agent System</h1>
-<h3 align="center">O.C.T.O Command Interface — v4.1</h3>
+<h3 align="center">OCTO Command Interface — v4.2</h3>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <img src="https://img.shields.io/badge/version-4.1.0-brightgreen.svg">
+  <img src="https://img.shields.io/badge/version-4.2.0-brightgreen.svg">
   <img src="https://img.shields.io/badge/agents-14%20specialist-blue.svg">
   <img src="https://img.shields.io/badge/MCP%20tools-26-orange.svg">
   <img src="https://img.shields.io/badge/models-8%20specialist%20AI-blueviolet.svg">
@@ -25,7 +25,7 @@
 
 ---
 
-> **A self-evolving, continuously-learning multi-agent AI system with a J.A.R.V.I.S-style HUD dashboard, voice Q&A, smart task routing, setup wizard, 8-specialist model routing, document analysis, live web search, and 6 messaging platform gateways.**
+> **A self-evolving, continuously-learning multi-agent AI system with a J.A.R.V.I.S-style HUD dashboard, wake-word voice Q&A ("hello octo"), persistent local memory, self-coding capabilities, smart task routing, setup wizard, 8-specialist model routing, document analysis, live web search, and 6 messaging platform gateways with home-channel routing.**
 
 ---
 
@@ -58,6 +58,7 @@ On first run you are redirected to the **Setup Wizard** automatically. Once conf
 
 ## Table of Contents
 
+- [What's New in v4.2](#whats-new-in-v42)
 - [What's New in v4.1](#whats-new-in-v41)
 - [What's New in v4.0](#whats-new-in-v40)
 - [Setup Wizard](#setup-wizard)
@@ -79,10 +80,56 @@ On first run you are redirected to the **Setup Wizard** automatically. Once conf
 
 ---
 
+## What's New in v4.2
+
+### Wake Word & Voice Improvements
+- **"Hello Octo" wake word** — say "hello octo" at any time to activate voice input without clicking. OCTO replies "Yes?" and immediately listens for your question
+- **Voice selector** — dropdown next to the Voice button lets you choose from all browser TTS voices. Selection persists across reloads via `localStorage`
+- **Stop actually stops** — the ◼ Stop button now fully halts TTS, recognition, and the wake word listener. Wake word re-enables on the next Voice click
+- **Voice answer cleaning** — answers strip markdown, URLs, and link syntax before TTS reads them so you hear "It's 18 degrees in London" not "you can find it at https://..."
+
+### OCTO Name — no more dots
+- Renamed from "O.C.T.O" to **OCTO** throughout the dashboard, title bar, footer, boot log, and welcome TTS
+
+### Persistent Local Memory
+- **`data/octo_memory.json`** — OCTO stores every Q&A exchange and remembers user facts across restarts
+- **"remember that X"** — say or type `remember that my city is London` and OCTO confirms and stores it
+- Last 8 memories are automatically injected into every Q&A prompt as context
+- Memory API: `GET /api/octo/memory` · `POST /api/octo/memory` · `DELETE /api/octo/memory/:id`
+
+### Self-Coding Capability
+- **`POST /api/tasks/self-code`** — OCTO can read its own source files, generate a targeted fix using the LLM, and apply it to disk. Say "fix the Ollama timeout in llm.js" and OCTO patches itself
+- Allowed files: `server.js`, `llm.js`, `octo_memory.js`, `setup-api.js`, `tools/web_search.js`
+
+### Hermes-Agent Style Messaging (NousResearch pattern)
+- **Home Channel** — set `TELEGRAM_HOME_CHANNEL=<chat_id>` and OCTO automatically forwards every answer to your Telegram chat
+- **Outbound `send()`** — all gateways now expose a `send(text, chatId)` method for proactive delivery
+- **`/api/setup/test-telegram`** — server-side Telegram test that verifies the saved token without exposing it to the browser. Shows bot username on success
+
+### Gateway & Setup Fixes
+- **WhatsApp 500 fixed** — three bugs removed: `makeInMemoryStore` (removed in Baileys v6.7), broken singleton usage (`new waModule()` → singleton), and incorrect logger stub that crashed Baileys. WhatsApp now correctly starts and emits a QR code
+- **WhatsApp auto-start fixed** — WhatsApp no longer crashes the server on boot; only starts when `WHATSAPP_SESSION_PATH` is set
+- **Telegram token stripping** — spaces in the saved token are stripped before connection; `getMe()` verification runs at startup so the bot only marks `online=true` when Telegram actually accepts the token
+- **Test Connection fixed** — button uses the server-side saved token (no blank field required); shows bot username `✓ Bot: @yourbot`
+- **Home Channel field** — new field in the Telegram setup section to configure outbound OCTO answer routing
+- **Gateway test buttons** — every gateway card in the dashboard now has an ⚡ Test button
+
+### API Key Persistence (critical bug fix)
+- **`writeEnv()` rewritten** — previously read `.env.example` (blank template) as base on every save, wiping all existing keys. Now reads the live `.env` and merges only new values on top — existing keys survive every save and restart
+- **`***` masking fixed** — masked values in the wizard UI no longer cause keys to be erased on save
+- **dotenv path fixed** — server was loading dotenv from `node/src/.env` (wrong); now correctly loads from `node/.env`
+
+### LLM Performance
+- **Fast Ollama model** — switched default from `gemma4:e2b` (5 GB, hangs) to `qwen2.5-coder:1.5b-base` (1.5 GB, responds in ~10s)
+- **Ollama connectivity check** — 3-second ping to `/api/tags` before attempting generation; surfaces "Ollama not running" immediately instead of a 120s timeout
+- **Voice-optimised prompt** — few-shot format that base models can follow (no instruction-following required), producing direct spoken answers
+
+---
+
 ## What's New in v4.1
 
 ### Voice & Conversational Q&A
-- **Welcome voice on boot** — "O.C.T.O Command Interface online. All systems active." spoken on startup (browser TTS, selects best available voice)
+- **Welcome voice on boot** — "OCTO online. All systems active." spoken on startup (browser TTS, selects best available voice)
 - **Voice answers** — every voice command and conversational question is spoken back via browser speech synthesis
 - **Smart routing** — questions (`what/who/where/when/why/how/is/are/can/...` or ending with `?`) route to `/api/tasks/ask`; engineering commands route to the full agent chain
 - **`POST /api/tasks/ask`** — 2-step lightweight Q&A: web search → LLM synthesis → result displayed and spoken, ~3s round-trip vs ~40s for the full agent chain

@@ -1,6 +1,6 @@
 'use strict';
 // Load .env FIRST — before any module reads process.env
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const http    = require('http');
 const path    = require('path');
@@ -20,6 +20,39 @@ const { search: webSearch, formatResults } = require('./tools/web_search');
 const { processDocument } = require('./tools/document');
 const { initGateways, manager: gatewayManager } = require('./gateways');
 const { router: setupRouter, isSetupComplete, SETUP_HTML } = require('./setup-api');
+const octoMemory = require('./octo_memory');
+
+// ── Hermes-style home channel delivery ───────────────────────────────────────
+// When OCTO answers, push to any gateway that has a home_channel configured.
+// Pattern from NousResearch/hermes-agent: each platform has a "home_channel"
+// for outbound delivery of proactive messages.
+async function deliverToHomeChannels(text) {
+  const gws = gatewayManager && gatewayManager.gateways ? gatewayManager.gateways : new Map();
+  for (const [name, gw] of gws) {
+    if (gw && gw.online && typeof gw.send === 'function' && gw.homeChannel) {
+      await gw.send(text).catch(e => console.error(`[${name}] home delivery failed:`, e.message));
+    }
+  }
+}
+
+// ── Voice answer cleaner ─────────────────────────────────────────────────────
+// Strips URLs, markdown, and filler openings so TTS only reads the bare fact.
+function cleanVoiceAnswer(text) {
+  return text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')              // [label](url) → label
+    .replace(/https?:\/\/\S+/g, '')                        // bare URLs
+    .replace(/\*\*?([^*]+)\*\*?/g, '$1')                   // **bold** / *italic*
+    .replace(/`[^`]+`/g, '')                               // `code`
+    .replace(/^#+\s*/gm, '')                               // # headings
+    .replace(/^[-*]\s+/gm, '')                             // bullet points
+    .replace(/^To (?:get|find|check|see|view)\b[^.!?\n]*?[?!,]\s*/im, '')  // "To get X?"
+    .replace(/You can (?:use|find|check|visit|see)\b[^.!?\n]*?[.!?]\s*/ig, '')
+    .replace(/,?\s*which you can find at\b[^.!?\n]*?[.!?]/ig, '.')
+    .replace(/\s*at\s+https?:\/\/\S+/g, '')
+    .replace(/\.\s*\./g, '.')                              // double periods
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
 
 // ── HEADLESS_MODE ────────────────────────────────────────────────────────────
 // When true: Cortex does not auto-plan; external LLMs call octopus_* tools directly.
@@ -497,6 +530,16 @@ app.post('/api/tasks/ask', async (req, res) => {
     return res.status(409).json({ error: 'A chain is already running' });
   }
 
+  // ── Handle "remember X" commands immediately ──────────────
+  const toRemember = octoMemory.detectRemember(text);
+  if (toRemember) {
+    octoMemory.add(toRemember);
+    const answer = `Got it, I'll remember that: "${toRemember}"`;
+    setProjectAnswer(project.id, answer, 'done');
+    broadcastEvent('voice_summary', { summary: answer, success: true, project_id: project.id });
+    return res.json({ ok: true, text, project_id: project.id, remembered: toRemember });
+  }
+
   activeProjectId = project.id;
   startChain(project.id, text);
   setProjectAnswer(project.id, 'Searching…', 'running');
@@ -516,13 +559,22 @@ app.post('/api/tasks/ask', async (req, res) => {
       } catch (_) { /* no search key — LLM answers from training data */ }
       broadcastEvent('agent_done', { agent: 'search', approved: true, project_id: project.id });
 
-      // ── Step 2: LLM synthesis ─────────────────────────────
+      // ── Step 2: LLM synthesis (with memory context) ───────
       broadcastEvent('agent_start', { agent: 'answer', role: 'answer', project_id: project.id });
+      const memCtx  = octoMemory.format(8);
+      const memBlock = memCtx ? `Known context: ${memCtx}\n` : '';
+
+      // Few-shot prompt — base models learn from examples, not rules
       const prompt = snippet
-        ? `You are a concise assistant. Use the search results below to answer the question in 2-3 clear sentences.\n\nSearch results:\n${snippet}\n\nQuestion: ${text}\n\nAnswer:`
-        : `Answer this question concisely in 2-3 sentences: ${text}`;
-      const answer = await complete(prompt, { maxTokens: 350 });
+        ? `Q: What is the capital of France?\nA: Paris is the capital of France.\n\nQ: What is 15 celsius in fahrenheit?\nA: 15 degrees Celsius equals 59 degrees Fahrenheit.\n\nQ: What is the weather in London?\nSearch data: London: 18°C, partly cloudy, light winds.\nA: It is 18 degrees in London right now, partly cloudy with light winds.\n\n${memBlock}Q: ${text}\nSearch data: ${snippet}\nA:`
+        : `Q: What is the capital of France?\nA: Paris is the capital of France.\n\nQ: What is 15 celsius in fahrenheit?\nA: 15 degrees Celsius equals 59 degrees Fahrenheit.\n\n${memBlock}Q: ${text}\nA:`;
+
+      const raw    = await complete(prompt, { maxTokens: 120 });
+      const answer = cleanVoiceAnswer(raw);
       broadcastEvent('agent_done', { agent: 'answer', approved: true, project_id: project.id });
+
+      // ── Auto-store this Q&A as a memory snippet ───────────
+      octoMemory.add(`Q: ${text.slice(0, 120)} → A: ${answer.slice(0, 200)}`, 'qa');
 
       // ── Broadcast answer + speak ──────────────────────────
       setProjectAnswer(project.id, answer, 'done');
@@ -532,6 +584,10 @@ app.post('/api/tasks/ask', async (req, res) => {
       });
       broadcastEvent('chain_done', { task: text, success: true, duration_ms: Date.now() - startMs, project_id: project.id });
       broadcastEvent('voice_summary', { summary: answer, success: true, project_id: project.id });
+
+      // ── Hermes-style home channel delivery ───────────────
+      // Route answer to any gateway that has a home_channel configured
+      deliverToHomeChannels(`Q: ${text}\nA: ${answer}`).catch(() => {});
     } catch (err) {
       const msg = `Sorry, I couldn't answer that: ${err.message}`;
       setProjectAnswer(project.id, msg, 'failed');
@@ -684,6 +740,87 @@ app.post('/api/memory/compact', async (req, res) => {
 
 app.get('/api/memory/cache-stats', async (req, res) => {
   res.json(await memory.getCacheStats() || {});
+});
+
+// ── OCTO persistent memory (Q&A memory + user facts) ─────────────────────────
+
+app.get('/api/octo/memory', (_req, res) => {
+  res.json(octoMemory.all());
+});
+
+app.post('/api/octo/memory', (req, res) => {
+  const { text, context } = req.body || {};
+  if (!text) return res.status(400).json({ error: 'text required' });
+  res.json(octoMemory.add(text, context));
+});
+
+app.delete('/api/octo/memory/:id', (req, res) => {
+  octoMemory.remove(req.params.id);
+  res.json({ ok: true });
+});
+
+// ── OCTO self-code: read + patch own source files ─────────────────────────────
+app.post('/api/tasks/self-code', async (req, res) => {
+  const { instruction, files } = req.body || {};
+  if (!instruction) return res.status(400).json({ error: 'instruction required' });
+
+  const SRC = path.join(__dirname);
+  const allowed = ['server.js', 'llm.js', 'octo_memory.js', 'setup-api.js', 'tools/web_search.js'];
+  const targets = (files || ['server.js']).filter(f => allowed.includes(f));
+  if (!targets.length) return res.status(400).json({ error: 'No valid files specified. Allowed: ' + allowed.join(', ') });
+
+  try {
+    const fileDumps = targets.map(f => {
+      const src = fs.readFileSync(path.join(SRC, f), 'utf8');
+      return `=== FILE: ${f} ===\n${src}\n=== END ${f} ===`;
+    }).join('\n\n');
+
+    const prompt = `You are OCTO's self-improvement engine. You will receive source files and an instruction for what to change.
+Respond with ONLY a JSON object in this exact format (no markdown fences, no explanation):
+{"changes":[{"file":"<filename>","old":"<exact old string>","new":"<replacement string>"}]}
+
+RULES:
+- Each "old" string must appear EXACTLY once in the file — include enough context to be unique
+- "new" replaces "old" exactly — preserve indentation
+- Make minimal targeted changes only
+- If no change is needed, return {"changes":[]}
+
+${fileDumps}
+
+INSTRUCTION: ${instruction}`;
+
+    const raw = await complete(prompt, { maxTokens: 2000 });
+
+    let parsed;
+    try {
+      const jsonStr = raw.replace(/^```[a-z]*\n?/m, '').replace(/```$/m, '').trim();
+      parsed = JSON.parse(jsonStr);
+    } catch (_) {
+      return res.status(422).json({ error: 'LLM returned unparseable JSON', raw: raw.slice(0, 500) });
+    }
+
+    const applied = [];
+    for (const change of (parsed.changes || [])) {
+      if (!allowed.includes(change.file)) continue;
+      const filePath = path.join(SRC, change.file);
+      const src = fs.readFileSync(filePath, 'utf8');
+      if (!src.includes(change.old)) {
+        applied.push({ file: change.file, status: 'skipped', reason: 'old string not found' });
+        continue;
+      }
+      fs.writeFileSync(filePath, src.replace(change.old, change.new), 'utf8');
+      applied.push({ file: change.file, status: 'applied' });
+    }
+
+    const summary = applied.length
+      ? `Applied ${applied.filter(a => a.status === 'applied').length} change(s) to: ${applied.map(a => a.file).join(', ')}`
+      : 'No changes applied';
+
+    broadcastEvent('voice_summary', { summary, success: true });
+    res.json({ ok: true, applied, summary });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Missing proxy routes (audited) ────────────────────────────────────────────
@@ -991,8 +1128,7 @@ app.post('/api/gateways/whatsapp/pair', async (req, res) => {
     return res.json({ ok: true, status: wa.online ? 'connected' : 'waiting_qr' });
   }
   try {
-    const waModule = require('./gateways/whatsapp');
-    const instance = new waModule();
+    const instance = require('./gateways/whatsapp');  // singleton — never use new
     const ok = await instance.init(gatewayManager);
     if (ok) instance.on('qr', (qr) => broadcastEvent('whatsapp_qr', { qr }));
     res.json({ ok, status: ok ? 'started' : 'failed' });
