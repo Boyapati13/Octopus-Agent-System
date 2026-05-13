@@ -1845,16 +1845,32 @@
     // ═══════════════════════════════════════════════════════
     //  VOICE
     // ═══════════════════════════════════════════════════════
+    // Speak using best available browser voice
     function speak(text) {
       if (!text || !window.speechSynthesis) return;
       window.speechSynthesis.cancel();
       state.speaking = true;
       renderAnswer();
       const utt = new SpeechSynthesisUtterance(text);
-      utt.rate  = 1.0;
-      utt.pitch = 1.0;
+      utt.rate   = 0.92;
+      utt.pitch  = 0.88;
+      utt.volume = 1.0;
+      const voices = window.speechSynthesis.getVoices();
+      // Prefer Google/Microsoft natural voices over robotic defaults
+      const preferred = voices.find(function(v) {
+        return /Google.*en|Microsoft.*Natural|Samantha|Alex|Daniel|Karen/i.test(v.name);
+      }) || voices.find(function(v) { return v.lang.startsWith('en') && !v.localService; });
+      if (preferred) utt.voice = preferred;
       utt.onend = function() { state.speaking = false; renderAnswer(); };
       window.speechSynthesis.speak(utt);
+    }
+
+    // Detect conversational questions (route to /api/tasks/ask, not agent chain)
+    function isQuestion(text) {
+      const q = text.trim().toLowerCase();
+      if (q.length > 180) return false;
+      if (q.endsWith("?")) return true;
+      return /^(what|who|where|when|why|how|is|are|can|could|does|do|will|would|was|were|has|have|tell me|explain|describe|define|give me|show me|find|search for|look up|weather|news|latest|current)\b/.test(q);
     }
 
     function maybeSpeakFinalAnswer(answer) {
@@ -1903,7 +1919,7 @@
         renderAnswer();
         if (transcript) {
           logLine("log-voice", "YOU", transcript);
-          runTask(transcript, true);
+          runAsk(transcript);  // voice always uses Q&A path → synthesized answer + spoken
         }
       };
 
@@ -1958,6 +1974,31 @@
       } catch(err) {
         state.running = false;
         state.answer  = "Task failed: " + err.message;
+        addMessage("assistant", state.answer);
+        logLine("log-error", "ERR", err.message);
+        renderAnswer();
+      }
+    }
+
+    // Quick Q&A path — web search + LLM synthesis, result is spoken
+    async function runAsk(text) {
+      const trimmed = String(text || "").trim();
+      if (!trimmed) return;
+      state.running  = true;
+      state.lastTask = trimmed;
+      addMessage("user", trimmed);
+      state.answer = "Searching…";
+      renderAnswer();
+      logLine("log-you", "YOU", trimmed.slice(0, 200));
+      try {
+        await apiFetch("/api/tasks/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: trimmed, project_id: state.activeProjectId }),
+        });
+      } catch(err) {
+        state.running = false;
+        state.answer  = "Ask failed: " + err.message;
         addMessage("assistant", state.answer);
         logLine("log-error", "ERR", err.message);
         renderAnswer();
@@ -2303,17 +2344,17 @@
     // ═══════════════════════════════════════════════════════
     function wireUi() {
       el.runBtn.addEventListener("click", function() {
-        const text = el.taskInput.value;
+        const text = el.taskInput.value.trim();
         el.taskInput.value = "";
-        runTask(text, false);
+        isQuestion(text) ? runAsk(text) : runTask(text, false);
       });
 
       el.taskInput.addEventListener("keydown", function(e) {
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
           e.preventDefault();
-          const text = el.taskInput.value;
+          const text = el.taskInput.value.trim();
           el.taskInput.value = "";
-          runTask(text, false);
+          isQuestion(text) ? runAsk(text) : runTask(text, false);
         }
       });
 
@@ -2402,7 +2443,20 @@
       el.taskInput.focus();
       logLine("log-system", "BOOT", "O.C.T.O Command Interface v2 initialised");
 
-      // Gateway events arrive over WebSocket — handle them in onmessage additions
+      // Welcome voice — fires after voices load (Chrome loads async)
+      function doWelcome() {
+        speak("O.C.T.O Command Interface online. All systems active. How can I help you?");
+      }
+      if (window.speechSynthesis) {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length) {
+          setTimeout(doWelcome, 800);
+        } else {
+          window.speechSynthesis.onvoiceschanged = function() {
+            setTimeout(doWelcome, 300);
+          };
+        }
+      }
     }
 
     bootstrap();

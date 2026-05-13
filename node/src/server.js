@@ -448,10 +448,20 @@ app.post('/api/tasks/run', async (req, res) => {
       };
       const result = await runTask(task, memory, emit);
       const agentCount = Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0;
-      setProjectAnswer(project.id, `Completed ${task}. ${agentCount} agents ran.`, 'done');
+      const finalAnswer = result?.answer || `Completed. ${agentCount} agents ran.`;
+      setProjectAnswer(project.id, finalAnswer, 'done');
+      // Broadcast so the dashboard output panel updates with the final answer
+      broadcastEvent('project_updated', {
+        project_id: project.id, type: 'chain_done',
+        project: serializeProject(getProject(project.id)),
+      });
     } catch (err) {
       console.error(`[server] Chain error: ${err.message}`);
       setProjectAnswer(project.id, `Task failed: ${err.message}`, 'failed');
+      broadcastEvent('project_updated', {
+        project_id: project.id, type: 'chain_error',
+        project: serializeProject(getProject(project.id)),
+      });
     } finally {
       endChain(project.id);
     }
@@ -473,6 +483,68 @@ app.post('/api/tasks/interrupt', (req, res) => {
   broadcastEvent('chain_done', { task: interrupted, success: false, interrupted: true, duration_ms: 0, project_id: project.id });
   setProjectAnswer(project.id, 'Task interrupted.', 'failed');
   res.json({ ok: true, interrupted });
+});
+
+// ── Quick Q&A — web search + LLM synthesis, result is spoken ─────────────────
+// Use for conversational queries ("what is the weather", "who is X", etc.)
+// Voice input always routes here. Text input routes here for questions.
+app.post('/api/tasks/ask', async (req, res) => {
+  const { text, project_id } = req.body || {};
+  if (!text) return res.status(400).json({ error: 'text required' });
+
+  const project = getProject(project_id);
+  if (isChainRunning(project.id)) {
+    return res.status(409).json({ error: 'A chain is already running' });
+  }
+
+  activeProjectId = project.id;
+  startChain(project.id, text);
+  setProjectAnswer(project.id, 'Searching…', 'running');
+  broadcastEvent('chain_start', { task: text, plan: ['search', 'answer'], project_id: project.id });
+  res.json({ ok: true, text, project_id: project.id });
+
+  setImmediate(async () => {
+    const startMs = Date.now();
+    try {
+      // ── Step 1: Web search ────────────────────────────────
+      broadcastEvent('agent_start', { agent: 'search', role: 'search', project_id: project.id });
+      let snippet = '';
+      try {
+        const results = await webSearch(text, { limit: 5 });
+        snippet = results.slice(0, 4).map(r => `${r.title}: ${r.snippet}`).join('\n');
+        broadcastEvent('web_search', { query: text, count: results.length, project_id: project.id });
+      } catch (_) { /* no search key — LLM answers from training data */ }
+      broadcastEvent('agent_done', { agent: 'search', approved: true, project_id: project.id });
+
+      // ── Step 2: LLM synthesis ─────────────────────────────
+      broadcastEvent('agent_start', { agent: 'answer', role: 'answer', project_id: project.id });
+      const prompt = snippet
+        ? `You are a concise assistant. Use the search results below to answer the question in 2-3 clear sentences.\n\nSearch results:\n${snippet}\n\nQuestion: ${text}\n\nAnswer:`
+        : `Answer this question concisely in 2-3 sentences: ${text}`;
+      const answer = await complete(prompt, { maxTokens: 350 });
+      broadcastEvent('agent_done', { agent: 'answer', approved: true, project_id: project.id });
+
+      // ── Broadcast answer + speak ──────────────────────────
+      setProjectAnswer(project.id, answer, 'done');
+      broadcastEvent('project_updated', {
+        project_id: project.id, type: 'chain_done',
+        project: serializeProject(getProject(project.id)),
+      });
+      broadcastEvent('chain_done', { task: text, success: true, duration_ms: Date.now() - startMs, project_id: project.id });
+      broadcastEvent('voice_summary', { summary: answer, success: true, project_id: project.id });
+    } catch (err) {
+      const msg = `Sorry, I couldn't answer that: ${err.message}`;
+      setProjectAnswer(project.id, msg, 'failed');
+      broadcastEvent('project_updated', {
+        project_id: project.id, type: 'chain_error',
+        project: serializeProject(getProject(project.id)),
+      });
+      broadcastEvent('chain_done', { task: text, success: false, duration_ms: Date.now() - startMs, project_id: project.id });
+      broadcastEvent('voice_summary', { summary: msg, success: false, project_id: project.id });
+    } finally {
+      endChain(project.id);
+    }
+  });
 });
 
 // ── Voice-friendly task path ─────────────────────────────────────────────────
