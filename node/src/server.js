@@ -53,10 +53,45 @@ function broadcastEvent(type, data = {}) {
   }
 }
 
-// ── Active chain state (one chain at a time for now) ─────────────────────────
+// ── Multi-chain state ─────────────────────────────────────────────────────────
+// Maps project_id → { task, startMs } so multiple projects can run chains in
+// parallel. The single-lock model was the root cause of gateway task collisions.
 
-let activeChainTask  = null;   // task description of running chain
-let activeChainAbort = null;   // AbortController (future: stream abort)
+const activeChains = new Map();   // project_id → { task: string, startMs: number }
+
+// Legacy shim — kept so existing server.js interrupt route still compiles
+let activeChainTask  = null;
+let activeChainAbort = null;
+
+function startChain(projectId, task) {
+  activeChains.set(projectId, { task, startMs: Date.now() });
+  activeChainTask = task;  // shim for interrupt route
+}
+
+function endChain(projectId) {
+  activeChains.delete(projectId);
+  if (activeChains.size === 0) activeChainTask = null;
+}
+
+function isChainRunning(projectId) {
+  return projectId ? activeChains.has(projectId) : activeChains.size > 0;
+}
+
+// ── Gateway session registry ──────────────────────────────────────────────────
+// Maps a stable session key ("telegram:123456") to a project_id.
+// This ensures: same user on Telegram = same project = same WS stream on Dashboard.
+
+const gatewaySessions = new Map();  // sessionKey → project_id
+
+function getOrCreateGatewayProject(gateway, userId) {
+  const key = `${gateway}:${userId}`;
+  let projectId = gatewaySessions.get(key);
+  if (projectId && projectStore.has(projectId)) return projectStore.get(projectId);
+  // Create a named project for this gateway user
+  const project = createProject(`${gateway}/${userId}`);
+  gatewaySessions.set(key, project.id);
+  return project;
+}
 
 // ── Project / session workspace state ────────────────────────────────────────
 
@@ -237,13 +272,18 @@ createProject();
 app.get('/api/health', async (req, res) => {
   const stats = await memory.getCacheStats();
   res.json({
-    status: 'ok',
-    port: PORT,
-    headless_mode: isHeadlessMode(),
-    chain_running: activeChainTask !== null,
-    active_task: activeChainTask,
+    status:            'ok',
+    port:              PORT,
+    headless_mode:     isHeadlessMode(),
+    chains_running:    activeChains.size,
+    active_chains:     [...activeChains.entries()].map(([pid, c]) => ({ project_id: pid, task: c.task })),
     active_project_id: activeProjectId,
-    cache: stats,
+    gateway_sessions:  gatewaySessions.size,
+    cache_stats:       stats,
+    // legacy shim fields kept for existing monitors
+    chain_running:     activeChains.size > 0,
+    active_task:       activeChainTask,
+    cache:             stats,
   });
 });
 
@@ -251,13 +291,16 @@ app.get('/api/health', async (req, res) => {
 app.get('/api/status', async (req, res) => {
   const run = await memory.getRun() || {};
   res.json({
-    chain_running: activeChainTask !== null,
-    active_task: activeChainTask,
-    headless_mode: isHeadlessMode(),
-    llm: activeProvider(),
-    run_state: run,
+    chains_running:    activeChains.size,
+    active_chains:     [...activeChains.entries()].map(([pid, c]) => ({ project_id: pid, task: c.task })),
+    chain_running:     activeChains.size > 0,          // legacy shim
+    active_task:       activeChainTask,                // legacy shim
+    headless_mode:     isHeadlessMode(),
+    llm:               activeProvider(),
+    run_state:         run,
     active_project_id: activeProjectId,
-    projects: listProjects(),
+    gateway_sessions:  gatewaySessions.size,
+    projects:          listProjects(),
   });
 });
 
@@ -380,13 +423,14 @@ app.post('/api/tasks/run', async (req, res) => {
     return res.status(403).json({ error: 'Chain execution disabled in HEADLESS_MODE — external LLM calls octopus_* tools directly' });
   }
 
-  if (activeChainTask !== null) {
-    return res.status(409).json({ error: 'A chain is already running', active_task: activeChainTask });
+  const project = getProject(project_id);
+  // Per-project chain lock — allows parallel tasks on different projects
+  if (isChainRunning(project.id)) {
+    return res.status(409).json({ error: 'This project already has a chain running', active_task: activeChains.get(project.id)?.task });
   }
 
-  const project = getProject(project_id);
   activeProjectId = project.id;
-  activeChainTask = task;
+  startChain(project.id, task);
   appendProjectActivity(project.id, 'task_started', { task });
   setProjectAnswer(project.id, 'Working…', 'running');
   res.json({ ok: true, task, project_id: project.id, message: 'Chain started — follow events on /ws' });
@@ -405,19 +449,22 @@ app.post('/api/tasks/run', async (req, res) => {
       console.error(`[server] Chain error: ${err.message}`);
       setProjectAnswer(project.id, `Task failed: ${err.message}`, 'failed');
     } finally {
-      activeChainTask = null;
+      endChain(project.id);
     }
   });
 });
 
 // ── Task interrupt ────────────────────────────────────────────────────────────
 app.post('/api/tasks/interrupt', (req, res) => {
-  if (!activeChainTask) {
-    return res.status(409).json({ error: 'No chain is running' });
+  const { project_id } = req.body || {};
+  // Interrupt specific project, or the most-recently-active one
+  const project = getProject(project_id);
+  const chain   = activeChains.get(project.id);
+  if (!chain) {
+    return res.status(409).json({ error: 'No chain is running for this project' });
   }
-  const interrupted = activeChainTask;
-  activeChainTask = null;
-  const project = getProject(activeProjectId);
+  const interrupted = chain.task;
+  endChain(project.id);
   recordProjectEvent(project.id, 'chain_done', { task: interrupted, success: false, interrupted: true, duration_ms: 0, project_id: project.id });
   broadcastEvent('chain_done', { task: interrupted, success: false, interrupted: true, duration_ms: 0, project_id: project.id });
   setProjectAnswer(project.id, 'Task interrupted.', 'failed');
@@ -434,16 +481,15 @@ app.post('/api/tasks/voice', async (req, res) => {
     return res.status(403).json({ error: 'Not available in HEADLESS_MODE' });
   }
 
-  if (activeChainTask !== null) {
-    return res.status(409).json({ error: 'A chain is already running' });
+  const project = getProject(project_id);
+  if (isChainRunning(project.id)) {
+    return res.status(409).json({ error: 'A chain is already running on this project' });
   }
 
-  const project = getProject(project_id);
   activeProjectId = project.id;
-  activeChainTask = text;
+  startChain(project.id, text);
   appendProjectActivity(project.id, 'voice_task_started', { text });
   setProjectAnswer(project.id, 'Listening and working…', 'running');
-  // Fire chain in background; return a short TTS summary immediately
   const startMs = Date.now();
 
   setImmediate(async () => {
@@ -454,9 +500,10 @@ app.post('/api/tasks/voice', async (req, res) => {
       };
       const result = await runTask(text, memory, emit);
       const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
-      setProjectAnswer(project.id, `Completed in ${elapsed} seconds. ${Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0} agents ran.`, 'done');
+      const spawned = Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0;
+      setProjectAnswer(project.id, `Completed in ${elapsed}s. ${spawned} agents ran.`, 'done');
       broadcastEvent('voice_summary', {
-        summary: `Task complete in ${elapsed} seconds. ${result.agents_spawned.length} agents ran.`,
+        summary: `Task complete in ${elapsed}s. ${spawned} agents ran.`,
         success: true,
         project_id: project.id,
       });
@@ -464,7 +511,7 @@ app.post('/api/tasks/voice', async (req, res) => {
       setProjectAnswer(project.id, `Task failed: ${err.message}`, 'failed');
       broadcastEvent('voice_summary', { summary: `Task failed: ${err.message}`, success: false, project_id: project.id });
     } finally {
-      activeChainTask = null;
+      endChain(project.id);
     }
   });
 
@@ -880,20 +927,45 @@ if (require.main === module) {
     console.error(`WebSocket events:   ws://localhost:${PORT}/ws`);
     console.error(`HEADLESS_MODE:      ${isHeadlessMode()}`);
 
-    // Wire gateways: use the voice/task runner as the task handler
+    // Wire gateways: each gateway user gets their own project (session isolation)
     const gatewayTaskHandler = async (text, ctx) => {
       try {
-        const project  = getProject(null);
-        const payload  = { text, project_id: project.id };
-        // Reuse the voice task path which returns a short answer
-        const voiceRes = await require('axios').post(
-          `http://localhost:${PORT}/api/tasks/voice`,
-          payload,
-          { headers: { 'Content-Type': 'application/json' }, timeout: 120000 }
-        );
-        return voiceRes.data?.summary || voiceRes.data?.answer || 'Done.';
+        // Resolve a per-user project for this gateway — prevents state collisions
+        const gateway = ctx.gateway || 'unknown';
+        const userId  = ctx.sender  || 'anon';
+        const project = getOrCreateGatewayProject(gateway, userId);
+
+        // Check if this project already has a running chain
+        if (isChainRunning(project.id)) {
+          return 'Still working on your previous request — please wait.';
+        }
+
+        startChain(project.id, text);
+        appendProjectActivity(project.id, 'gateway_task_started', { gateway, text });
+        setProjectAnswer(project.id, 'Working…', 'running');
+
+        // Broadcast so Dashboard switches to this project
+        broadcastEvent('gateway_task_start', { gateway, sender: userId, text, project_id: project.id });
+
+        const startMs = Date.now();
+        const emit = (type, data = {}) => {
+          recordProjectEvent(project.id, type, data);
+          broadcastEvent(type, { ...data, project_id: project.id });
+        };
+
+        const result = await runTask(text, memory, emit);
+        const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+        const spawned = Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0;
+
+        // Build a human-readable TTS/text reply
+        const answer  = project.answer || `Completed in ${elapsed}s.`;
+        const summary = answer.length > 400 ? answer.slice(0, 400) + '…' : answer;
+        setProjectAnswer(project.id, summary, 'done');
+        endChain(project.id);
+        return `[${spawned} agents · ${elapsed}s] ${summary}`;
       } catch (err) {
-        return `Error: ${err.message}`;
+        endChain(ctx.projectId);
+        return `Task failed: ${err.message}`;
       }
     };
 

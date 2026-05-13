@@ -645,6 +645,61 @@
       margin-bottom: 3px;
     }
 
+    /* ═══ PLAN VIEW ═══ */
+    .plan-view {
+      flex-shrink: 0;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      display: none;
+    }
+    .plan-view.visible { display: block; }
+    .plan-header {
+      font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
+    }
+    .plan-header::before { content: "◈"; color: var(--acc2); }
+    .plan-stages {
+      display: flex; flex-wrap: wrap; gap: 5px;
+    }
+    .plan-stage {
+      font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+      border: 1px solid var(--border); background: var(--panel2);
+      padding: 3px 7px; color: var(--text-dim);
+      transition: all 0.2s;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .plan-stage.running  { border-color: var(--acc2); color: var(--acc2); background: rgba(255,204,0,0.08); }
+    .plan-stage.done     { border-color: var(--green-d); color: var(--green); background: rgba(0,255,136,0.06); }
+    .plan-stage.failed   { border-color: var(--red); color: var(--red); background: rgba(255,51,85,0.08); }
+    .plan-stage.parallel { border-style: dashed; }
+
+    /* Architect output panel */
+    .architect-panel {
+      margin-top: 8px; border: 1px solid rgba(255,107,0,0.4);
+      background: rgba(255,107,0,0.06); padding: 8px 10px; display: none;
+    }
+    .architect-panel.visible { display: block; }
+    .arch-title {
+      font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--acc); margin-bottom: 6px; font-weight: 700;
+    }
+    .arch-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+    .arch-badge {
+      font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 2px 6px; border: 1px solid var(--border);
+    }
+    .arch-badge.high   { border-color: var(--red);  color: var(--red); }
+    .arch-badge.medium { border-color: var(--acc2); color: var(--acc2); }
+    .arch-badge.low    { border-color: var(--green-d); color: var(--green); }
+    .arch-files {
+      font-size: 9px; color: var(--text-dim); line-height: 1.6;
+      max-height: 80px; overflow-y: auto;
+    }
+    .arch-rec {
+      font-size: 10px; color: var(--white); line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
     /* ═══ SEARCH TAB ═══ */
     .search-wrap { flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
     .search-input-row { display:flex; gap:6px; }
@@ -967,6 +1022,23 @@
         <div class="metric-tile">
           <div class="tile-label">WebSocket</div>
           <div class="tile-value" id="tile-ws">Connecting</div>
+        </div>
+      </div>
+
+      <!-- Live Plan View — shown when a chain is running -->
+      <div class="plan-view" id="plan-view">
+        <div class="plan-header">Live Execution Plan</div>
+        <div class="plan-stages" id="plan-stages"></div>
+        <!-- Architect's structured output -->
+        <div class="architect-panel" id="arch-panel">
+          <div class="arch-title">◈ Architect — Boundary Impact</div>
+          <div class="arch-row">
+            <span id="arch-risk" class="arch-badge">risk: —</span>
+            <span id="arch-impact" class="arch-badge">impact: — files</span>
+            <span id="arch-cross" class="arch-badge">cross-boundary: —</span>
+          </div>
+          <div id="arch-recs" class="arch-rec"></div>
+          <div id="arch-files" class="arch-files"></div>
         </div>
       </div>
 
@@ -1943,6 +2015,80 @@
     }
 
     // ═══════════════════════════════════════════════════════
+    //  LIVE PLAN VIEW
+    // ═══════════════════════════════════════════════════════
+    const planState = {
+      stages:  [],   // [{ agent, status: 'pending'|'running'|'done'|'failed', parallel }]
+      visible: false,
+    };
+
+    function planView()      { return document.getElementById("plan-view"); }
+    function planStagesEl()  { return document.getElementById("plan-stages"); }
+
+    function initPlan(agentList) {
+      // Mark parallel agents (Reviewer, SecurityReviewer, Probe, FactChecker if adjacent)
+      const PARALLEL_SAFE = new Set(["reviewer","securityreviewer","probe","factchecker"]);
+      planState.stages = agentList.map(agent => ({
+        agent,
+        status:   "pending",
+        parallel: PARALLEL_SAFE.has(agent.toLowerCase()),
+      }));
+      planState.visible = true;
+      renderPlan();
+      document.getElementById("plan-view").classList.add("visible");
+    }
+
+    function setPlanAgentStatus(agentName, status) {
+      const s = planState.stages.find(s => s.agent.toLowerCase() === agentName.toLowerCase());
+      if (s) s.status = status;
+      renderPlan();
+    }
+
+    function clearPlan() {
+      planState.stages  = [];
+      planState.visible = false;
+      document.getElementById("plan-view").classList.remove("visible");
+      document.getElementById("arch-panel").classList.remove("visible");
+    }
+
+    function renderPlan() {
+      const el = planStagesEl();
+      if (!el) return;
+      el.innerHTML = planState.stages.map(function(s) {
+        const icon = s.status === "running" ? "▶ " :
+                     s.status === "done"    ? "✓ " :
+                     s.status === "failed"  ? "✗ " : "○ ";
+        const cls  = ["plan-stage", s.status, s.parallel ? "parallel" : ""].filter(Boolean).join(" ");
+        return '<div class="' + cls + '">' + icon + escapeHtml(s.agent) + '</div>';
+      }).join("");
+    }
+
+    function renderArchitectOutput(data) {
+      const panel = document.getElementById("arch-panel");
+      if (!panel || !data) return;
+
+      const risk   = data.risk_level || "low";
+      const impact = data.affected_files ? data.affected_files.length : 0;
+      const cross  = data.cross_boundary_risks ? data.cross_boundary_risks.length : 0;
+
+      const riskEl   = document.getElementById("arch-risk");
+      const impactEl = document.getElementById("arch-impact");
+      const crossEl  = document.getElementById("arch-cross");
+      const recsEl   = document.getElementById("arch-recs");
+      const filesEl  = document.getElementById("arch-files");
+
+      if (riskEl)   { riskEl.textContent = "risk: " + risk;          riskEl.className = "arch-badge " + risk; }
+      if (impactEl) { impactEl.textContent = "impact: " + impact + " files"; }
+      if (crossEl)  { crossEl.textContent = "cross-boundary: " + cross; }
+      if (recsEl)   { recsEl.textContent = (data.recommendations || []).join("\n"); }
+      if (filesEl)  {
+        filesEl.textContent = (data.affected_files || []).slice(0, 15).join("\n");
+      }
+
+      panel.classList.add("visible");
+    }
+
+    // ═══════════════════════════════════════════════════════
     //  WEB SEARCH
     // ═══════════════════════════════════════════════════════
     async function runSearch(query) {
@@ -2201,6 +2347,41 @@
           try { parsed = JSON.parse(event.data); } catch(_) { return; }
           const type = parsed.type || "";
           const data = parsed.data || {};
+
+          // ── Plan View ──────────────────────────────────────
+          if (type === "chain_start") {
+            if (Array.isArray(data.plan) && data.plan.length) initPlan(data.plan);
+            if (data.project_id && state.activeProjectId !== data.project_id) {
+              // Auto-switch project if task came from a gateway
+              state.activeProjectId = data.project_id;
+              renderDetails && renderDetails();
+            }
+          }
+          if (type === "agent_start")  setPlanAgentStatus(data.agent || "", "running");
+          if (type === "agent_done")   setPlanAgentStatus(data.agent || "", data.approved === false ? "failed" : "done");
+          if (type === "gate_fail")    setPlanAgentStatus(data.agent || "", "failed");
+          if (type === "chain_done")   { setTimeout(clearPlan, 3000); } // keep plan visible 3s after completion
+
+          // ── Full agent output (Architect plan, findings, etc.) ──
+          if (type === "agent_output") {
+            const agent = (data.agent || "").toLowerCase();
+            if (agent === "architect") renderArchitectOutput(data);
+            // Log all agent outputs to the log tab
+            const summary = data.advice || (data.findings && data.findings.length + " findings") || "";
+            if (summary) logLine("log-octo", (data.agent || "AGENT").toUpperCase(), summary.slice(0, 200));
+          }
+
+          // ── Gateway events ─────────────────────────────────
+          if (type === "gateway_task_start") {
+            logLine("log-voice",
+              (data.gateway || "GW").toUpperCase(),
+              (data.sender || "") + " → \"" + (data.text || "").slice(0, 120) + "\"");
+            // Auto-switch dashboard to this project
+            if (data.project_id && state.activeProjectId !== data.project_id) {
+              state.activeProjectId = data.project_id;
+              if (el && el.projectLabel) el.projectLabel.textContent = "Project: " + data.project_id;
+            }
+          }
           if (type === "gateway_message") {
             logLine("log-voice", data.gateway ? data.gateway.toUpperCase() : "GW",
               (data.sender || "") + ": " + (data.text || "").slice(0, 160));

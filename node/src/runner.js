@@ -203,6 +203,64 @@ async function runSequentialStage(stepObj, task, memory, results, errors) {
   }
 }
 
+// ── Agent output serialiser ───────────────────────────────────────────────────
+// Strips circular refs and large blobs; keeps the fields the dashboard cares about.
+function _serializeAgentResult(agentName, r) {
+  const safe = {
+    agent:   agentName,
+    role:    r.role    || '',
+    approved: r.approved !== false,
+    advice:  r.advice  || '',
+  };
+
+  // Architect — boundary impact plan
+  if (r.affected_files !== undefined) {
+    safe.affected_files         = (r.affected_files || []).slice(0, 30);
+    safe.boundary_impact        = (r.boundary_impact || []).slice(0, 30);
+    safe.cross_boundary_risks   = r.cross_boundary_risks || [];
+    safe.circular_risk_modules  = r.circular_risk_modules || [];
+    safe.risk_level             = r.risk_level;
+    safe.risk_score             = r.risk_score;
+    safe.recommendations        = r.recommendations || [];
+  }
+
+  // Reviewer / SecurityReviewer — findings list
+  if (Array.isArray(r.findings)) {
+    safe.findings = r.findings.slice(0, 20).map(f =>
+      typeof f === 'string' ? f : (f.message || JSON.stringify(f))
+    );
+    safe.cautions = (r.cautions || []).slice(0, 10);
+  }
+
+  // Probe — coverage + test results
+  if (r.coverage !== undefined || r.tests_run !== undefined) {
+    safe.coverage  = r.coverage;
+    safe.tests_run = r.tests_run;
+    safe.passed    = r.passed;
+    safe.failed    = r.failed;
+  }
+
+  // Forge — edit plan
+  if (Array.isArray(r.edits)) {
+    safe.edits = r.edits.slice(0, 20).map(e =>
+      typeof e === 'string' ? e : (e.file || e.path || JSON.stringify(e).slice(0, 120))
+    );
+  }
+
+  // FactChecker — verified claims
+  if (Array.isArray(r.claims)) {
+    safe.claims = r.claims.slice(0, 10);
+  }
+
+  // Scribe — docs written
+  if (r.docs_written !== undefined) safe.docs_written = r.docs_written;
+
+  // ReleaseKeeper — gate status
+  if (r.release_status !== undefined) safe.release_status = r.release_status;
+
+  return safe;
+}
+
 // ── Main runner ───────────────────────────────────────────────────────────────
 
 /**
@@ -254,14 +312,16 @@ async function runTask(task, memory, emit) {
           _emit('agent_start', { agent: s.agent, role: mod?.role || s.agent });
         }
         await runParallelStage(stage, task, memory, results, errors);
-        // Emit agent_done for each parallel agent
+        // Emit agent_done + full structured output for each parallel agent
         for (const s of stage) {
           const r = results[s.agent.toLowerCase()] || results[s.agent];
           _emit('agent_done', {
-            agent: s.agent,
+            agent:    s.agent,
             approved: r?.approved !== false,
-            notes: r?.advice ? [r.advice] : [],
+            notes:    r?.advice ? [r.advice] : [],
           });
+          // Full structured output — lets Dashboard render Architect plan, Reviewer findings, etc.
+          if (r) _emit('agent_output', _serializeAgentResult(s.agent, r));
         }
       } else {
         const agentName = stage[0].agent;
@@ -270,10 +330,12 @@ async function runTask(task, memory, emit) {
         await runSequentialStage(stage[0], task, memory, results, errors);
         const r = results[agentName.toLowerCase()] || results[agentName];
         _emit('agent_done', {
-          agent: agentName,
+          agent:    agentName,
           approved: r?.approved !== false,
-          notes: r?.advice ? [r.advice] : [],
+          notes:    r?.advice ? [r.advice] : [],
         });
+        // Full structured output
+        if (r) _emit('agent_output', _serializeAgentResult(agentName, r));
       }
     }
   } catch (err) {
