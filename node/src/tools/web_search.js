@@ -129,7 +129,15 @@ async function duckSearch(query, opts = {}) {
       const links   = [];
       const snips   = [];
       let m;
-      while ((m = linkRe.exec(html)) !== null) links.push({ url: m[1], title: stripHtml(m[2]) });
+      while ((m = linkRe.exec(html)) !== null) {
+        // DDG wraps real URLs: //duckduckgo.com/l/?uddg=<encoded-url>
+        let url = m[1];
+        if (url.includes('uddg=')) {
+          try { url = decodeURIComponent(url.split('uddg=')[1].split('&')[0]); } catch {}
+        }
+        if (!url.startsWith('http')) url = 'https:' + url;
+        links.push({ url, title: stripHtml(m[2]) });
+      }
       while ((m = snipRe.exec(html)) !== null) snips.push(stripHtml(m[1]));
       for (let i = 0; i < Math.min(links.length, limit - results.length); i++) {
         results.push({

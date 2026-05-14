@@ -18,6 +18,7 @@ const skillRegistry = require('./skill_registry');
 const toolLoader    = require('./tool_loader');
 const { search: webSearch, formatResults } = require('./tools/web_search');
 const { processDocument } = require('./tools/document');
+const axios = require('axios');
 const { initGateways, manager: gatewayManager } = require('./gateways');
 const { router: setupRouter, isSetupComplete, SETUP_HTML } = require('./setup-api');
 const octoMemory = require('./octo_memory');
@@ -575,10 +576,8 @@ app.post('/api/tasks/ask', async (req, res) => {
     return res.json({ ok: true, text, project_id: project.id, remembered: toRemember });
   }
 
-  // ── Handle time queries directly — server clock, no LLM/search needed ──────
-  const TIME_RE = /\b(what(?:'s| is) the time|current time|time now|what time is it|tell me the time)\b/i;
-  if (TIME_RE.test(text)) {
-    const answer = `The current time is ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' })}.`;
+  // ── Fast-path helpers ────────────────────────────────────────────────────────
+  function fastAnswer(answer) {
     setProjectAnswer(project.id, answer, 'done');
     broadcastEvent('chain_start',     { task: text, plan: ['answer'], project_id: project.id });
     broadcastEvent('agent_done',      { agent: 'answer', approved: true, project_id: project.id });
@@ -586,7 +585,31 @@ app.post('/api/tasks/ask', async (req, res) => {
     broadcastEvent('chain_done',      { task: text, success: true, duration_ms: 0, project_id: project.id });
     broadcastEvent('project_updated', { project_id: project.id, type: 'chain_done', project: serializeProject(getProject(project.id)) });
     octoMemory.add(`Q: ${text.slice(0, 120)} → A: ${answer.slice(0, 200)}`, 'qa');
-    return res.json({ ok: true, text, project_id: project.id });
+    res.json({ ok: true, text, project_id: project.id });
+  }
+
+  // ── Handle time queries directly — server clock, no LLM/search needed ──────
+  const TIME_RE = /\b(what(?:'s| is) the time|current time|time now|what time is it|tell me the time)\b/i;
+  if (TIME_RE.test(text)) {
+    return fastAnswer(`The current time is ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' })}.`);
+  }
+
+  // ── Handle weather queries via wttr.in (free, no key) ────────────────────────
+  const WEATHER_RE = /\b(weather|temperature|how.?hot|how.?cold|is it raining|forecast|humidity|feels like)\b/i;
+  if (WEATHER_RE.test(text)) {
+    // Extract city from query, or fall back to user's known city from memory
+    let city = octoMemory.all().find(m => /my city|i('m| am) in|i live in/i.test(m.text))?.text?.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)*)\b/)?.[1] || 'London';
+    const cityMatch = text.match(/(?:weather in|temperature in|weather at|in)\s+([a-zA-Z][\w\s]{1,25}?)(?:\s*today|\s*now|\s*currently|\s*\?|$)/i);
+    if (cityMatch) city = cityMatch[1].trim();
+    try {
+      const wRes = await axios.get(`https://wttr.in/${encodeURIComponent(city)}?format=j1`, { timeout: 6000, headers: { 'User-Agent': 'Octopus-Agent/2.0' } });
+      const w  = wRes.data.current_condition[0];
+      const a  = wRes.data.nearest_area[0];
+      const loc = `${a.areaName[0].value}, ${a.country[0].value}`;
+      const desc = w.weatherDesc[0].value;
+      const answer = `The current weather in ${loc} is ${desc}, ${w.temp_C}°C (feels like ${w.FeelsLikeC}°C), humidity ${w.humidity}%, wind ${w.windspeedKmph} km/h.`;
+      return fastAnswer(answer);
+    } catch { /* fall through to normal LLM path */ }
   }
 
   activeProjectId = project.id;
@@ -601,22 +624,88 @@ app.post('/api/tasks/ask', async (req, res) => {
       // ── Step 1: Web search ────────────────────────────────
       broadcastEvent('agent_start', { agent: 'search', role: 'search', project_id: project.id });
       let snippet = '';
+      let searchResults = [];
       try {
-        const results = await webSearch(text, { limit: 5 });
-        snippet = results.slice(0, 4).map(r => `${r.title}: ${r.snippet}`).join('\n');
-        broadcastEvent('web_search', { query: text, count: results.length, project_id: project.id });
+        searchResults = await webSearch(text, { limit: 5 });
+        snippet = searchResults.slice(0, 4).map(r => `${r.title}: ${r.snippet}`).join('\n');
+        broadcastEvent('web_search', { query: text, count: searchResults.length, project_id: project.id });
       } catch (_) { /* no search key — LLM answers from training data */ }
+
+      // ── Step 1b: Live data augmentation ──────────────────────────────────────
+      // For live/current queries: pull BBC RSS for sports news + fetch top page content
+      const LIVE_RE = /\b(ipl|cricket|match|score|today|tonight|live|news|price|rate|gold|stock|shares|schedule|fixtures|result|winner|final|football|football|nfl|nba|f1|formula)\b/i;
+      if (LIVE_RE.test(text)) {
+        // BBC Sport RSS (free, no key, real content)
+        const SPORT_RE = /\b(ipl|cricket|football|soccer|tennis|f1|formula|rugby|hockey|basketball|nba|nfl)\b/i;
+        if (SPORT_RE.test(text)) {
+          try {
+            const rssRes = await axios.get('https://feeds.bbci.co.uk/sport/cricket/rss.xml', {
+              timeout: 5000,
+              headers: { 'User-Agent': 'Octopus-Agent/2.0', 'Accept': 'application/rss+xml' },
+            });
+            const rssXml = String(rssRes.data);
+            // Extract title+description from RSS items
+            const itemRe = /<item>([\s\S]*?)<\/item>/gi;
+            const titleRe = /<title><!\[CDATA\[([^\]]*)\]\]><\/title>|<title>([^<]*)<\/title>/i;
+            const descRe  = /<description><!\[CDATA\[([^\]]*)\]\]><\/description>|<description>([^<]*)<\/description>/i;
+            const items = [];
+            let im;
+            while ((im = itemRe.exec(rssXml)) !== null && items.length < 5) {
+              const t = im[1].match(titleRe);
+              const d = im[1].match(descRe);
+              if (t) items.push(`${(t[1] || t[2] || '').trim()}: ${(d ? (d[1] || d[2] || '') : '').trim()}`);
+            }
+            if (items.length) snippet = `BBC Sport Cricket News:\n${items.join('\n')}\n` + snippet;
+          } catch { /* RSS unavailable */ }
+        }
+
+        // Page content fetch from top DDG result
+        if (snippet.length < 600 && searchResults.length > 0) {
+          for (const r of searchResults.slice(0, 2)) {
+            // DDG wraps URLs as //duckduckgo.com/l/?uddg=<encoded-url> — decode them
+            let fetchUrl = r.url || '';
+            if (fetchUrl.includes('uddg=')) {
+              try { fetchUrl = decodeURIComponent(fetchUrl.split('uddg=')[1].split('&')[0]); } catch {}
+            }
+            if (!fetchUrl.startsWith('http')) continue;
+            try {
+              const pageRes = await axios.get(fetchUrl, {
+                timeout: 5000,
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Octopus/2.0)' },
+                maxContentLength: 300000,
+                responseType: 'text',
+              });
+              const pageText = String(pageRes.data)
+                .replace(/<script[\s\S]*?<\/script>/gi, '')
+                .replace(/<style[\s\S]*?<\/style>/gi, '')
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .slice(0, 1500)
+                .trim();
+              if (pageText.length > 100) {
+                snippet += `\nPage content:\n${pageText}`;
+                break;
+              }
+            } catch { /* page fetch failed */ }
+          }
+        }
+      }
+
       broadcastEvent('agent_done', { agent: 'search', approved: true, project_id: project.id });
 
-      // ── Step 2: LLM synthesis (with memory context) ───────
+      // ── Step 2: LLM synthesis (with memory context + date) ───────
       broadcastEvent('agent_start', { agent: 'answer', role: 'answer', project_id: project.id });
       const memCtx  = octoMemory.format(8);
-      const memBlock = memCtx ? `Known context: ${memCtx}\n` : '';
+      const memBlock = memCtx ? `Known context:\n${memCtx}\n` : '';
+
+      // Always tell the LLM today's date so "today", "tonight", "this week" make sense
+      const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      const dateBlock = `Today is ${today}.\n`;
 
       // Instruction-style prompt — works with all chat/instruction models (Gemma, Llama, Qwen-instruct).
-      // One clear rule: answer in ONE sentence, no markdown, no URLs, no follow-up questions.
-      const snippetBlock = snippet ? `\nRelevant search results:\n${snippet}\n` : '';
-      const prompt = `You are OCTO, a concise voice assistant. Answer the question below in ONE short sentence. No markdown, no URLs, no bullet points, no follow-up questions.\n${memBlock}${snippetBlock}\nQuestion: ${text}\nAnswer:`;
+      // Allow one URL only when the answer is a live-data redirect.
+      const snippetBlock = snippet ? `\nRelevant information:\n${snippet}\n` : '';
+      const prompt = `You are OCTO, a concise voice assistant. Answer the question in ONE sentence using the information provided. If live data is unavailable, tell the user which website to check (e.g. cricbuzz.com for cricket, gold-price.org for gold). No markdown, no bullet points, no follow-up questions.\n${dateBlock}${memBlock}${snippetBlock}\nQuestion: ${text}\nAnswer:`;
 
       const raw    = await complete(prompt, { maxTokens: 150 });
       const answer = cleanVoiceAnswer(raw);
