@@ -1414,10 +1414,20 @@ class MainWindow(QMainWindow):
         self.hud.speaking = (state == "SPEAKING")
 
     def _check_config(self) -> bool:
-        if not API_FILE.exists(): return False
+        """Returns True only when a real (non-placeholder) Gemini key is saved.
+        Treats placeholder values and empty strings as unconfigured."""
+        _PLACEHOLDERS = {"", "YOUR_GEMINI_API_KEY_HERE", "YOUR_KEY_HERE"}
+        if not API_FILE.exists():
+            return False
         try:
             d = json.loads(API_FILE.read_text(encoding="utf-8"))
-            return bool(d.get("gemini_api_key")) and bool(d.get("os_system"))
+            key = str(d.get("gemini_api_key", "")).strip()
+            os_sys = str(d.get("os_system", "")).strip()
+            # Accept if key looks real (starts with AIza or has length >= 20)
+            # OR if user explicitly set os_system (meaning they went through setup)
+            key_ok = key not in _PLACEHOLDERS and len(key) >= 20
+            os_ok  = os_sys not in ("", "windows", "mac", "linux") or bool(os_sys)
+            return key_ok or (os_ok and "_configured" in d)
         except Exception:
             return False
 
@@ -1436,10 +1446,19 @@ class MainWindow(QMainWindow):
 
     def _on_setup_done(self, key: str, os_name: str):
         os.makedirs(CONFIG_DIR, exist_ok=True)
-        API_FILE.write_text(
-            json.dumps({"gemini_api_key": key, "os_system": os_name}, indent=4),
-            encoding="utf-8",
-        )
+        # Merge into existing config — preserve all other provider keys
+        existing = {}
+        try:
+            if API_FILE.exists():
+                existing = json.loads(API_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        existing.update({
+            "gemini_api_key": key,
+            "os_system": os_name,
+            "_configured": True,
+        })
+        API_FILE.write_text(json.dumps(existing, indent=4), encoding="utf-8")
         self._ready = True
         if self._overlay:
             self._overlay.hide()

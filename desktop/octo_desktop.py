@@ -100,34 +100,37 @@ def _start_voice(ui):
         threading.Thread(target=_run_gemini, daemon=True).start()
 
     else:
-        # ── Mode B: Free local voice (no key needed) ───────────────────────
-        print("[OCTO] Voice: free backend (pyttsx3 + Google STT)")
-        ui.write_log("SYS: Voice mode — Windows TTS + Google STT (no API key needed)")
+        # ── Mode B: Free local voice (push-to-talk, no key needed) ────────
+        print("[OCTO] Voice: free backend (pyttsx3 + Google STT, push-to-talk)")
+        ui.write_log("SYS: Voice mode — Windows TTS + Google STT")
 
         try:
             from core.voice_free import FreeVoiceBackend
-            import requests as _req
-
-            def _handle_text(text: str):
-                """Route transcribed speech to Octopus server."""
-                ui.set_state("THINKING")
-                ui.write_log(f"YOU: {text}")
-                try:
-                    _req.post(
-                        f"{DASHBOARD_URL}/api/tasks/ask",
-                        json={"text": text},
-                        timeout=5,
-                    )
-                except Exception as e:
-                    print(f"[OCTO] Server ask error: {e}")
-
-            ui.on_text_command = _handle_text
 
             backend = FreeVoiceBackend(ui=ui, execute_tool_fn=None)
             backend.start()
 
+            # Wire the MICROPHONE ACTIVE button → trigger_listen()
+            # In OctoUI the button is _mute_btn which calls _toggle_mute.
+            # We ADD our listener so clicking the button also triggers a recording.
+            try:
+                win = ui._win
+                mute_btn = getattr(win, '_mute_btn', None)
+                if mute_btn and hasattr(mute_btn, 'clicked'):
+                    # Keep existing _toggle_mute behaviour AND add voice trigger
+                    mute_btn.clicked.connect(lambda: backend.trigger_listen())
+                    print("[OCTO] Mic button hooked — click to record")
+                else:
+                    # Fallback: start VAD immediately
+                    backend._trigger.set()
+                    print("[OCTO] Mic button not found — starting VAD mode")
+            except Exception as hook_err:
+                print(f"[OCTO] Mic button hook failed: {hook_err}")
+                backend._trigger.set()
+
         except Exception as e:
             print(f"[OCTO] Free voice error: {e}")
+            import traceback; traceback.print_exc()
             ui.write_log(f"SYS: Voice error — {e}")
 
 

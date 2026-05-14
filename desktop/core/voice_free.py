@@ -129,78 +129,108 @@ def wait_for_speech(
 # ── Main voice loop ────────────────────────────────────────────────────────────
 class FreeVoiceBackend:
     """
-    Drop-in replacement for the Gemini OctoLive backend.
-    Called from main.py when no Gemini key is available.
+    Free voice backend: Windows SAPI TTS (pyttsx3) + Google free STT.
+    Works with zero API keys. Microphone ACTIVE button triggers a 6-second listen.
     """
 
     def __init__(self, ui, execute_tool_fn: Callable):
         self.ui = ui
         self.execute_tool_fn = execute_tool_fn
-        self._stop = threading.Event()
+        self._stop    = threading.Event()
+        self._trigger = threading.Event()   # set by mic button press
         self._thread: Optional[threading.Thread] = None
-        self._listening = False
 
     def start(self):
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.name = "OctoVoice"
         self._thread.start()
 
     def stop(self):
         self._stop.set()
+        self._trigger.set()  # unblock any waiting .wait()
+
+    def trigger_listen(self):
+        """Called when user presses the MICROPHONE ACTIVE button."""
+        self._trigger.set()
 
     def speak(self, text: str):
+        """Speak using Windows SAPI. COM-safe: initialises per-thread."""
         self.ui.set_state("SPEAKING")
-        self.ui.write_log(f"OCTO: {text[:120]}")
-        speak_text(text)
+        self.ui.write_log(f"OCTO: {text[:160]}")
+        # Run TTS in its own thread to avoid blocking the voice loop
+        # and to get a fresh COM context each time (Windows STA requirement)
+        done = threading.Event()
+        def _tts():
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+            except ImportError:
+                pass
+            speak_text(text)
+            done.set()
+        threading.Thread(target=_tts, daemon=True).start()
+        done.wait(timeout=30)
         if not getattr(self.ui, "muted", False):
             self.ui.set_state("LISTENING")
 
     def _loop(self):
-        from core.text_llm import complete as llm_complete
+        # COM init for this thread (required for pyttsx3 on Windows)
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+        except ImportError:
+            pass
 
         self.ui.set_state("LISTENING")
-        self.ui.write_log("SYS: OCTO voice online (free backend — Windows TTS + Google STT)")
-        self.speak("OCTO online. Microphone active, sir.")
+        self.ui.write_log("SYS: OCTO voice ready — press MICROPHONE ACTIVE to speak")
+        self.speak("OCTO voice active. Press the microphone button and speak, sir.")
 
         while not self._stop.is_set():
+            # Wait for the user to press the mic button (push-to-talk)
+            self._trigger.wait()
+            self._trigger.clear()
+
+            if self._stop.is_set():
+                break
+
             try:
-                self.ui.set_state("LISTENING")
-                self._listening = True
+                # 0.5s pre-delay so button-click noise doesn't get recorded
+                time.sleep(0.5)
 
-                # Wait for microphone activity
-                got_speech = wait_for_speech(
-                    threshold=0.02,
-                    stop_flag=self._stop,
-                )
-                if not got_speech or self._stop.is_set():
-                    break
+                self.ui.set_state("EXECUTE")  # visual cue: recording
+                self.ui.write_log("SYS: Listening for 6 seconds... speak now")
 
-                # Record 5 seconds
+                pcm = record_audio(duration=6.0)
+
                 self.ui.set_state("THINKING")
-                self._listening = False
-                self.ui.write_log("SYS: Recording...")
-                pcm = record_audio(duration=5.0)
-
-                # Transcribe
                 self.ui.write_log("SYS: Transcribing...")
+
                 text = transcribe_audio(pcm).strip()
                 if not text:
+                    self.ui.write_log("SYS: Could not hear speech — try again")
+                    self.ui.set_state("LISTENING")
                     continue
 
                 self.ui.write_log(f"YOU: {text}")
 
-                # Let the UI's on_text_command handler process it
-                # (same path as typed commands)
-                if callable(getattr(self.ui, "on_text_command", None)):
-                    self.ui.on_text_command(text)
-                else:
-                    # Direct LLM path
-                    self.ui.set_state("THINKING")
-                    response = llm_complete(text, max_tokens=200, timeout=30)
+                # Route to Octopus server → answer comes back via WebSocket
+                try:
+                    import requests as _r
+                    _r.post(
+                        "http://localhost:3001/api/tasks/ask",
+                        json={"text": text},
+                        timeout=5,
+                    )
+                except Exception:
+                    # Server not running — answer directly via LLM
+                    from core.text_llm import complete as llm_complete
+                    response = llm_complete(text, max_tokens=200, timeout=45)
                     self.speak(response)
 
             except Exception as e:
                 print(f"[voice_free] Loop error: {e}")
-                time.sleep(1)
+                self.ui.write_log(f"SYS: Voice error — {str(e)[:80]}")
+                self.ui.set_state("LISTENING")
 
         self.ui.write_log("SYS: Voice stopped.")
