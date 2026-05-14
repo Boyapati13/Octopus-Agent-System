@@ -2165,7 +2165,8 @@
         }
 
         if (health.provider) {
-          el.infoProvider.textContent = health.provider.slice(0,8);
+          const modelShort = health.model ? health.model.split('/').pop().slice(0, 12) : '';
+          el.infoProvider.textContent = health.provider + (modelShort ? ' / ' + modelShort : '');
         }
 
         // Simulate dynamic-looking metrics

@@ -318,6 +318,7 @@ createProject();
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {
   const stats = await memory.getCacheStats();
+  const { provider, model } = activeProvider();
   res.json({
     status:            'ok',
     port:              PORT,
@@ -327,6 +328,8 @@ app.get('/api/health', async (req, res) => {
     active_project_id: activeProjectId,
     gateway_sessions:  gatewaySessions.size,
     cache_stats:       stats,
+    provider,
+    model,
     // legacy shim fields kept for existing monitors
     chain_running:     activeChains.size > 0,
     active_task:       activeChainTask,

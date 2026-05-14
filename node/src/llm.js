@@ -26,6 +26,12 @@ const os   = require('os');
 const path = require('path');
 const axios = require('axios');
 
+// Load MASTER_PROMPT once at startup — injected as system context for every LLM call
+let MASTER_PROMPT = '';
+try {
+  MASTER_PROMPT = fs.readFileSync(path.join(__dirname, 'MASTER_PROMPT.md'), 'utf8');
+} catch { /* file absent — system context disabled */ }
+
 // Caller-aware provider + model presets
 // OCTOPUS_CALLER is set in the MCP client's env block — MCP stdio has no built-in caller identity
 const CALLER = (process.env.OCTOPUS_CALLER || '').toLowerCase();
@@ -171,9 +177,11 @@ async function completeAnthropic(prompt, opts = {}) {
   const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('anthropic');
   return withRetry(async () => {
+    const body = { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }] };
+    if (opts.system) body.system = opts.system;
     const res = await axios.post(
       'https://api.anthropic.com/v1/messages',
-      { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }] },
+      body,
       {
         headers: { 'x-api-key': apiKey || '', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
         timeout: opts.timeout || 30000,
@@ -187,9 +195,12 @@ async function completeOpenAI(prompt, opts = {}) {
   const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('openai');
   return withRetry(async () => {
+    const messages = opts.system
+      ? [{ role: 'system', content: opts.system }, { role: 'user', content: prompt }]
+      : [{ role: 'user', content: prompt }];
     const res = await axios.post(
       'https://api.openai.com/v1/chat/completions',
-      { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }] },
+      { model, max_tokens: opts.maxTokens || 1024, messages },
       { headers: { Authorization: `Bearer ${apiKey || ''}`, 'content-type': 'application/json' }, timeout: opts.timeout || 30000 }
     );
     return res.data.choices[0].message.content;
@@ -200,9 +211,14 @@ async function completeGoogle(prompt, opts = {}) {
   const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('google');
   return withRetry(async () => {
+    const body = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: opts.maxTokens || 1024 },
+    };
+    if (opts.system) body.systemInstruction = { parts: [{ text: opts.system }] };
     const res = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey || ''}`,
-      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: opts.maxTokens || 1024 } },
+      body,
       { timeout: opts.timeout || 30000 }
     );
     return res.data.candidates[0].content.parts[0].text;
@@ -215,9 +231,12 @@ async function completeHuggingFace(prompt, opts = {}) {
   const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('huggingface');
   return withRetry(async () => {
+    const messages = opts.system
+      ? [{ role: 'system', content: opts.system }, { role: 'user', content: prompt }]
+      : [{ role: 'user', content: prompt }];
     const res = await axios.post(
       `https://router.huggingface.co/hf-inference/models/${model}/v1/chat/completions`,
-      { model, messages: [{ role: 'user', content: prompt }], max_tokens: opts.maxTokens || 1024, stream: false },
+      { model, messages, max_tokens: opts.maxTokens || 1024, stream: false },
       { headers: { Authorization: `Bearer ${apiKey || ''}`, 'content-type': 'application/json' }, timeout: opts.timeout || 60000 }
     );
     return res.data.choices[0].message.content;
@@ -232,12 +251,15 @@ async function completeOpenRouter(prompt, opts = {}) {
   const model  = opts._model || MODEL;
   const apiKey = await getSecureKey('openrouter');
   return withRetry(async () => {
+    const messages = opts.system
+      ? [{ role: 'system', content: opts.system }, { role: 'user', content: prompt }]
+      : [{ role: 'user', content: prompt }];
     const res = await axios.post(
       'https://openrouter.ai/api/v1/chat/completions',
       {
         model,
         max_tokens: opts.maxTokens || 4096,
-        messages:   [{ role: 'user', content: prompt }],
+        messages,
         stream:     false,
       },
       {
@@ -268,11 +290,15 @@ async function completeNvidia(prompt, opts = {}) {
   const isReasoning = NVIDIA_REASONING_RE.test(model);
 
   return withRetry(async () => {
+    const nvidiaMessages = opts.system
+      ? [{ role: 'system', content: opts.system }, { role: 'user', content: prompt }]
+      : [{ role: 'user', content: prompt }];
+
     if (isReasoning) {
       // Reasoning models need SSE streaming — accumulate all chunks
       const body = {
         model,
-        messages: [{ role: 'user', content: prompt }],
+        messages: nvidiaMessages,
         max_tokens: opts.maxTokens || 65536,
         temperature: 0.6,
         top_p: 0.95,
@@ -306,7 +332,7 @@ async function completeNvidia(prompt, opts = {}) {
     // Standard non-reasoning NVIDIA models
     const res = await axios.post(
       'https://integrate.api.nvidia.com/v1/chat/completions',
-      { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }], stream: false },
+      { model, max_tokens: opts.maxTokens || 1024, messages: nvidiaMessages, stream: false },
       { headers: { Authorization: `Bearer ${apiKey || ''}`, 'content-type': 'application/json' }, timeout: opts.timeout || 60000 }
     );
     return res.data.choices[0].message.content;
@@ -327,9 +353,12 @@ async function completeCustomHttp(prompt, opts = {}) {
   if (!base) throw new Error('CUSTOM_HTTP_URL is not set — required for LLM_PROVIDER=custom_http');
   const model = opts._model || MODEL;
   return withRetry(async () => {
+    const messages = opts.system
+      ? [{ role: 'system', content: opts.system }, { role: 'user', content: prompt }]
+      : [{ role: 'user', content: prompt }];
     const res = await axios.post(
       `${base}/v1/chat/completions`,
-      { model, max_tokens: opts.maxTokens || 1024, messages: [{ role: 'user', content: prompt }], stream: false },
+      { model, max_tokens: opts.maxTokens || 1024, messages, stream: false },
       { headers: { 'content-type': 'application/json' }, timeout: opts.timeout || 60000 }
     );
     return res.data.choices[0].message.content;
@@ -349,6 +378,10 @@ async function completeOllama(prompt, opts = {}) {
   }
 
   return withRetry(async () => {
+    const ollamaMessages = opts.system
+      ? [{ role: 'system', content: opts.system }, { role: 'user', content: prompt }]
+      : [{ role: 'user', content: prompt }];
+
     // Use /api/chat for instruction-tuned models (cleaner, no Q:A: completion bleed).
     // Pass think:false to suppress inner-monologue tokens on thinking models (gemma4, deepseek-r1).
     // Fall back to /api/generate for base models that don't support the chat endpoint.
@@ -357,7 +390,7 @@ async function completeOllama(prompt, opts = {}) {
         `${base}/api/chat`,
         {
           model,
-          messages: [{ role: 'user', content: prompt }],
+          messages: ollamaMessages,
           stream: false,
           think: false,          // disable CoT tokens on thinking models (gemma4, deepseek-r1)
           options: { num_predict: opts.maxTokens || 1024 },
@@ -370,9 +403,10 @@ async function completeOllama(prompt, opts = {}) {
       throw new Error('empty chat content');
     } catch {
       // Fallback: /api/generate for base models (qwen-coder-base, llama-base, etc.)
+      const fullPrompt = opts.system ? `${opts.system}\n\n${prompt}` : prompt;
       const res = await axios.post(
         `${base}/api/generate`,
-        { model, prompt, stream: false, options: { num_predict: opts.maxTokens || 1024 } },
+        { model, prompt: fullPrompt, stream: false, options: { num_predict: opts.maxTokens || 1024 } },
         { timeout: opts.timeout || 120000 }
       );
       return res.data.response;
@@ -396,7 +430,13 @@ function getSovereignModel() { return process.env.SOVEREIGN_FALLBACK_MODEL || 'g
 
 async function complete(prompt, opts = {}) {
   const { provider: PROVIDER, model: MODEL } = getDynamicProvider();
-  const cappedOpts = { ...opts, maxTokens: Math.min(opts.maxTokens || 1024, MAX_THINKING_TOKENS) };
+  // Inject master prompt only for agent pipeline calls (opts.role set).
+  // Quick Q&A completions (no role) skip it — Ollama prefill cost is ~78ms/token,
+  // so a 600-token system prompt adds ~47 seconds to every voice/ask call.
+  const system = opts.system !== undefined
+    ? opts.system
+    : (opts.role && MASTER_PROMPT ? MASTER_PROMPT : undefined);
+  const cappedOpts = { ...opts, maxTokens: Math.min(opts.maxTokens || 1024, MAX_THINKING_TOKENS), system };
 
   // ── Task Router: LLM_PROVIDER=router routes per agent role ───────────────
   if (PROVIDER === 'router' && opts.role) {

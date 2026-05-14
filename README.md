@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">🐙 Octopus Agent System</h1>
-<h3 align="center">OCTO Command Interface — v4.2</h3>
+<h3 align="center">OCTO Command Interface — v4.3</h3>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
@@ -25,7 +25,7 @@
 
 ---
 
-> **A self-evolving, continuously-learning multi-agent AI system with a J.A.R.V.I.S-style HUD dashboard, wake-word voice Q&A ("hello octo"), persistent local memory, self-coding capabilities, smart task routing, setup wizard, 8-specialist model routing, document analysis, live web search, and 6 messaging platform gateways with home-channel routing.**
+> **A fully autonomous, self-evolving multi-agent AI system with a native desktop HUD, real-time voice (Gemini), 15 specialist agents, 8-provider LLM routing (Anthropic → NVIDIA → OpenRouter/Hermes → Ollama), desktop control, screen vision, wake-word Q&A, persistent memory, self-coding pipeline, and 6 messaging gateways.**
 
 ---
 
@@ -53,6 +53,92 @@ After install, start everything:
 Open: **http://localhost:3001**
 
 On first run you are redirected to the **Setup Wizard** automatically. Once configuration is saved, `http://localhost:3001` opens the HUD dashboard directly.
+
+---
+
+## 🖥️ How to Launch — 3 Modes
+
+### Mode 1: Native Desktop App (Recommended)
+Full OCTO desktop — Octopus dashboard in a native PyQt6 window + Gemini voice backend.
+
+```powershell
+# Prerequisites (one time)
+pip install PyQt6 PyQt6-WebEngine sounddevice google-genai psutil requests pyautogui
+
+# Launch
+py desktop\octo_desktop.py
+```
+
+**What it does:**
+- Auto-starts the Octopus Node.js server (`node/src/server.js`)
+- Opens the web dashboard in a native frameless window (no browser needed)
+- Starts Gemini voice backend in background (if Gemini API key is set)
+- Falls back to Ollama for all text tasks if no cloud keys are set
+
+---
+
+### Mode 2: Web Dashboard Only
+```powershell
+# Windows
+.\start_server.ps1
+
+# Or directly
+node node/src/server.js
+```
+Open **http://localhost:3001** in any browser.
+
+---
+
+### Mode 3: CLI (interactive terminal)
+```powershell
+node node/src/cli.js
+```
+
+---
+
+## 🔑 API Keys Setup
+
+Edit `desktop/config/api_keys.json` (for desktop voice app):
+
+```json
+{
+  "gemini_api_key": "YOUR_KEY",
+  "anthropic_api_key": "",
+  "nvidia_api_key": "",
+  "openrouter_api_key": "",
+  "text_llm_provider": "auto",
+  "os_system": "windows"
+}
+```
+
+Edit `node/.env` (for server + agents):
+
+```env
+LLM_PROVIDER=ollama          # or: anthropic | nvidia | openrouter | router
+LLM_MODEL=gemma4:e2b
+ANTHROPIC_API_KEY=sk-ant-...
+NVIDIA_API_KEY=nvapi-...
+TELEGRAM_BOT_TOKEN=...
+```
+
+**Provider priority (auto mode):** Anthropic → NVIDIA NIM (free) → OpenRouter/Hermes → Gemini → HuggingFace → Ollama (local, always available)
+
+**Best free setup:** Get a free NVIDIA key at [build.nvidia.com](https://build.nvidia.com) → set `NVIDIA_API_KEY` → gets you Nemotron 253B, Qwen3-Coder 480B, DeepSeek V4-Pro.
+
+---
+
+## 🤖 LLM Provider Routing
+
+| Provider | Best For | Free? | Where to get key |
+|---|---|---|---|
+| `ollama` | Privacy, offline | Free | `ollama pull gemma4:e2b` |
+| `nvidia` | Best free cloud models | Free tier | build.nvidia.com |
+| `openrouter` | Hermes-3/4 agentic models | Pay-as-go | openrouter.ai |
+| `anthropic` | Claude — best reasoning | Paid | console.anthropic.com |
+| `openai` | GPT-4o | Paid | platform.openai.com |
+| `gemini` | Native audio voice | Free tier | aistudio.google.com |
+| `huggingface` | Open models | Free tier | huggingface.co/settings/tokens |
+| `router` | Auto-select per agent role | Depends | Set `ROUTE_*` in `.env` |
 
 ---
 
