@@ -506,6 +506,59 @@ TOOL_DECLARATIONS = [
             "required": ["task"]
         }
     },
+    {
+        "name": "run_terminal",
+        "description": (
+            "Execute any command in PowerShell, CMD, Bash, or Python on the user's Windows machine. "
+            "Use for: running scripts, installing packages, git commands, file operations, "
+            "system administration, compiling code, starting servers, querying system info, "
+            "reading/writing files via shell, network commands (ping, curl, netstat), "
+            "process management (tasklist, kill), registry queries, scheduled tasks, and more. "
+            "ALWAYS use this when the user asks to run, execute, install, start, stop, or check "
+            "anything via command line. Never simulate — always run the real command."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "command": {
+                    "type": "STRING",
+                    "description": "The exact command to execute"
+                },
+                "shell": {
+                    "type": "STRING",
+                    "description": "powershell (default) | cmd | bash | python"
+                },
+                "cwd": {
+                    "type": "STRING",
+                    "description": "Working directory (absolute path). Default: user home."
+                },
+                "timeout": {
+                    "type": "INTEGER",
+                    "description": "Max seconds to wait (default: 30)"
+                },
+            },
+            "required": ["command"]
+        }
+    },
+    {
+        "name": "recall_memory",
+        "description": (
+            "Search and retrieve what OCTO remembers about the user. "
+            "Call this when the user asks 'what do you know about me', "
+            "'what did I tell you', 'do you remember X', or references something "
+            "from a past conversation. Returns all stored facts."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "query": {
+                    "type": "STRING",
+                    "description": "Optional keyword to filter memory (e.g. 'food', 'job', 'projects'). Leave empty for all."
+                },
+            },
+            "required": []
+        }
+    },
 ]
 
 class OctoLive:
@@ -708,6 +761,31 @@ class OctoLive:
                     lambda: octopus_run_tool(parameters=args, speak=self.speak, player=self.ui)
                 )
                 result = r or "Octopus pipeline complete."
+
+            elif name == "run_terminal":
+                from actions.terminal import run_terminal
+                r = await loop.run_in_executor(
+                    None,
+                    lambda: run_terminal(parameters=args, player=self.ui, speak=self.speak)
+                )
+                result = r or "Command completed."
+
+            elif name == "recall_memory":
+                memory = load_memory()
+                query  = args.get("query", "").lower()
+                if query:
+                    # Filter entries that match the query keyword
+                    lines = []
+                    for cat, items in memory.items():
+                        if not isinstance(items, dict):
+                            continue
+                        for key, entry in items.items():
+                            val = entry.get("value", "") if isinstance(entry, dict) else str(entry)
+                            if query in key.lower() or query in val.lower() or query in cat.lower():
+                                lines.append(f"{cat}/{key}: {val}")
+                    result = "\n".join(lines) if lines else f"Nothing found for '{query}'."
+                else:
+                    result = format_memory_for_prompt(memory) or "No memories stored yet."
 
             elif name == "shutdown_octo":
                 self.ui.write_log("SYS: Shutdown requested.")
