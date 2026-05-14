@@ -153,7 +153,34 @@ async function duckSearch(query, opts = {}) {
   return results.slice(0, limit);
 }
 
-// ── Engine 4: NVIDIA Solar (LLM with built-in search) ───────────────────────
+// ── Engine 4: Serper.dev (Google results, 2500 free/month, no card) ─────────
+// Sign up free at serper.dev → copy API key → set SERPER_API_KEY in node/.env
+async function serperSearch(query, opts = {}) {
+  const key   = process.env.SERPER_API_KEY;
+  const limit = opts.limit || 8;
+  const res   = await axios.post(
+    'https://google.serper.dev/search',
+    { q: query, num: limit, gl: 'us', hl: 'en' },
+    {
+      headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
+      timeout: 10000,
+    }
+  );
+  const items = res.data.organic || [];
+  const news  = res.data.news    || [];
+  const knowledgePanel = res.data.knowledgeGraph;
+  const results = [];
+  if (knowledgePanel?.description) {
+    results.push({ title: knowledgePanel.title || query, url: knowledgePanel.website || '', snippet: truncate(knowledgePanel.description), source: 'serper-kg' });
+  }
+  for (const r of [...news, ...items]) {
+    if (results.length >= limit) break;
+    results.push({ title: r.title || '', url: r.link || '', snippet: truncate(r.snippet || r.description || ''), source: 'serper' });
+  }
+  return results.slice(0, limit);
+}
+
+// ── Engine 5: NVIDIA Solar (LLM with built-in search) ───────────────────────
 async function solarSearch(query, opts = {}) {
   const apiKey = process.env.NVIDIA_API_KEY;
   const res    = await axios.post(
@@ -192,6 +219,9 @@ async function search(query, opts = {}) {
 
   const engine = (opts.engine || 'auto').toLowerCase();
 
+  if (engine === 'serper' || (engine === 'auto' && process.env.SERPER_API_KEY)) {
+    return serperSearch(query, opts);  // Best free option — 2500/month, sign up at serper.dev
+  }
   if (engine === 'serp' || (engine === 'auto' && process.env.SERP_API_KEY)) {
     return serpSearch(query, opts);
   }
