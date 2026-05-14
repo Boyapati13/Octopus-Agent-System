@@ -30,7 +30,10 @@ async function deliverToHomeChannels(text) {
   const gws = gatewayManager && gatewayManager.gateways ? gatewayManager.gateways : new Map();
   for (const [name, gw] of gws) {
     if (gw && gw.online && typeof gw.send === 'function' && gw.homeChannel) {
-      await gw.send(text).catch(e => console.error(`[${name}] home delivery failed:`, e.message));
+      // Pass homeChannel as ctx so gateways that require (ctx, text) work correctly
+      await gw.send({ channel: gw.homeChannel }, text).catch(e =>
+        console.error(`[${name}] home delivery failed:`, e.message)
+      );
     }
   }
 }
@@ -1176,12 +1179,29 @@ if (require.main === module) {
     // Wire gateways: each gateway user gets their own project (session isolation)
     const gatewayTaskHandler = async (text, ctx) => {
       try {
-        // Resolve a per-user project for this gateway — prevents state collisions
+        // ── Fast-path: conversational / Q&A messages ──────────────────────────
+        // If the message looks like a plain question or chat (not a dev task),
+        // answer directly with the LLM instead of spinning up 9 agents.
+        const DEV_TASK_RE = /\b(implement|refactor|build|create|write code|fix bug|add feature|test|deploy|review|audit|security|tdd|coverage|release|changelog|document|scaffold|migrate|debug|optimise|optimize|performance|benchmark)\b/i;
+        const isDevTask = DEV_TASK_RE.test(text) && text.length > 20;
+
+        if (!isDevTask) {
+          // Direct LLM answer — fast, contextual, no agent overhead
+          const memCtx   = octoMemory.format(6);
+          const memBlock = memCtx ? `Known context:\n${memCtx}\n\n` : '';
+          const prompt   = `${memBlock}User (via ${ctx.gateway || 'chat'}): ${text}\n\nAssistant:`;
+          const raw      = await complete(prompt, { maxTokens: 600, timeout: 30000 });
+          const answer   = (raw || '').trim();
+          // Store Q&A in memory so future messages have context
+          octoMemory.add(`Q: ${text.slice(0, 120)} → A: ${answer.slice(0, 200)}`, 'gateway-qa');
+          return answer || 'Sorry, I could not generate a response.';
+        }
+
+        // ── Agent pipeline: dev / complex tasks ───────────────────────────────
         const gateway = ctx.gateway || 'unknown';
         const userId  = ctx.sender  || 'anon';
         const project = getOrCreateGatewayProject(gateway, userId);
 
-        // Check if this project already has a running chain
         if (isChainRunning(project.id)) {
           return 'Still working on your previous request — please wait.';
         }
@@ -1189,8 +1209,6 @@ if (require.main === module) {
         startChain(project.id, text);
         appendProjectActivity(project.id, 'gateway_task_started', { gateway, text });
         setProjectAnswer(project.id, 'Working…', 'running');
-
-        // Broadcast so Dashboard switches to this project
         broadcastEvent('gateway_task_start', { gateway, sender: userId, text, project_id: project.id });
 
         const startMs = Date.now();
@@ -1199,19 +1217,46 @@ if (require.main === module) {
           broadcastEvent(type, { ...data, project_id: project.id });
         };
 
-        const result = await runTask(text, memory, emit);
+        const result  = await runTask(text, memory, emit);
         const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
         const spawned = Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0;
 
-        // Build a human-readable TTS/text reply
-        const answer  = project.answer || `Completed in ${elapsed}s.`;
-        const summary = answer.length > 400 ? answer.slice(0, 400) + '…' : answer;
-        setProjectAnswer(project.id, summary, 'done');
+        // ── Synthesize a human-readable answer from agent results ─────────────
+        // Collect meaningful outputs from all agents in pipeline order
+        const agentOutputs = Object.entries(result.results || {})
+          .filter(([name]) => name !== 'cortex')
+          .map(([name, r]) => {
+            const parts = [];
+            if (r.advice)           parts.push(r.advice);
+            if (r.changelog_entry)  parts.push(`Changelog:\n${r.changelog_entry}`);
+            if (Array.isArray(r.findings) && r.findings.length)
+              parts.push(`Findings: ${r.findings.slice(0, 3).join('; ')}`);
+            if (Array.isArray(r.edits) && r.edits.length)
+              parts.push(`Edits: ${r.edits.slice(0, 3).join(', ')}`);
+            return parts.length ? `[${name}] ${parts.join(' | ')}` : null;
+          })
+          .filter(Boolean);
+
+        let answer;
+        if (agentOutputs.length) {
+          // Ask the LLM to turn agent outputs into a clean reply
+          const synthesis = await complete(
+            `Summarise the following agent pipeline results into a concise, friendly reply to the user.\n` +
+            `Original request: "${text}"\n\nAgent outputs:\n${agentOutputs.join('\n')}\n\nReply:`,
+            { maxTokens: 400, timeout: 20000 }
+          ).catch(() => null);
+          answer = (synthesis || '').trim() || agentOutputs.join('\n');
+        } else {
+          answer = `Task completed in ${elapsed}s using ${spawned} agents.`;
+        }
+
+        setProjectAnswer(project.id, answer, 'done');
         endChain(project.id);
-        return `[${spawned} agents · ${elapsed}s] ${summary}`;
+        return `[${spawned} agents · ${elapsed}s]\n${answer}`;
       } catch (err) {
-        endChain(ctx.projectId);
-        return `Task failed: ${err.message}`;
+        endChain(ctx?.projectId);
+        console.error(`[gateway] task error: ${err.message}`);
+        return `Sorry, something went wrong: ${err.message}`;
       }
     };
 

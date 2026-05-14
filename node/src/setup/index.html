@@ -646,14 +646,63 @@ body{
         <div class="callout">
           <span class="icon">🔀</span>
           <div>
-            <strong style="color:var(--cyan)">Auto Router</strong> mode automatically selects the best available model for each agent role (planning, coding, search, etc.).<br>
-            Configure any API keys above — the router will use all available providers.
+            <strong style="color:var(--cyan)">Auto Router</strong> mode assigns the best available model to each agent role automatically.<br>
+            Enter the API keys for any providers you want the router to use — it will pick the right model per task and fall back to local Ollama when no cloud key is available.
           </div>
         </div>
+
+        <!-- Sovereign fallback -->
         <div class="field">
-          <label>Sovereign Fallback Model (local Ollama)</label>
+          <label>Sovereign Fallback Model <span style="color:var(--cyan);font-size:11px">(local Ollama — used when no cloud key is set)</span></label>
           <input type="text" id="inp-sovereign" placeholder="gemma4:e2b">
-          <div class="hint">Used when no cloud key is available</div>
+          <div class="hint">Run <code style="color:var(--cyan)">ollama pull gemma4:e2b</code> to pre-download the model</div>
+        </div>
+
+        <!-- Per-role overrides -->
+        <div class="section-title" style="margin-top:16px">Per-Role Model Overrides <span style="color:#888;font-weight:400;font-size:11px">— optional, leave blank to use defaults shown below</span></div>
+        <div class="hint" style="margin-bottom:10px">Format: <code style="color:var(--cyan)">provider:model</code> — e.g. <code style="color:var(--cyan)">nvidia:meta/llama-4-maverick-17b-128e-instruct</code> or <code style="color:var(--cyan)">ollama:llama3.2</code></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
+          <div class="field" style="margin:0">
+            <label>Planner <span style="color:#888;font-size:10px">default: nvidia/nemotron-ultra-253b</span></label>
+            <input type="text" id="inp-route-planner" placeholder="nvidia:nvidia/llama-3.1-nemotron-ultra-253b-v1">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Architecture <span style="color:#888;font-size:10px">default: nvidia/kimi-k2-thinking</span></label>
+            <input type="text" id="inp-route-architecture" placeholder="nvidia:moonshotai/kimi-k2-thinking">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Implementation (coding) <span style="color:#888;font-size:10px">default: nvidia/qwen3-coder-480b</span></label>
+            <input type="text" id="inp-route-implementation" placeholder="nvidia:qwen/qwen3-coder-480b-a35b-instruct">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Review <span style="color:#888;font-size:10px">default: nvidia/deepseek-v4-pro</span></label>
+            <input type="text" id="inp-route-review" placeholder="nvidia:deepseek-ai/deepseek-v4-pro">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Testing <span style="color:#888;font-size:10px">default: nvidia/deepseek-v4-pro</span></label>
+            <input type="text" id="inp-route-testing" placeholder="nvidia:deepseek-ai/deepseek-v4-pro">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Security <span style="color:#888;font-size:10px">default: nvidia/llama-3.3-70b</span></label>
+            <input type="text" id="inp-route-security" placeholder="nvidia:meta/llama-3.3-70b-instruct">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Verification <span style="color:#888;font-size:10px">default: nvidia/phi-4-128k</span></label>
+            <input type="text" id="inp-route-verification" placeholder="nvidia:microsoft/phi-4-128k-instruct">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Documentation <span style="color:#888;font-size:10px">default: huggingface/gemma-3-4b</span></label>
+            <input type="text" id="inp-route-documentation" placeholder="huggingface:google/gemma-3-4b-it">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Research <span style="color:#888;font-size:10px">default: nvidia/llama-4-maverick</span></label>
+            <input type="text" id="inp-route-research" placeholder="nvidia:meta/llama-4-maverick-17b-128e-instruct">
+          </div>
+          <div class="field" style="margin:0">
+            <label>Agentic / Tool-use <span style="color:#888;font-size:10px">default: openrouter/hermes-3-405b</span></label>
+            <input type="text" id="inp-route-agentic" placeholder="openrouter:nousresearch/hermes-3-llama-3.1-405b">
+          </div>
         </div>
       </div>
 
@@ -1148,6 +1197,17 @@ function preloadConfig(cfg) {
   val('inp-custom-url', cfg.customHttpUrl);
   val('inp-custom-model', cfg.customHttpModel);
   val('inp-sovereign', cfg.sovereignFallback);
+  // Per-role route overrides
+  val('inp-route-planner',        cfg.routePlanner);
+  val('inp-route-architecture',   cfg.routeArchitecture);
+  val('inp-route-implementation', cfg.routeImplementation);
+  val('inp-route-review',         cfg.routeReview);
+  val('inp-route-testing',        cfg.routeTesting);
+  val('inp-route-security',       cfg.routeSecurity);
+  val('inp-route-verification',   cfg.routeVerification);
+  val('inp-route-documentation',  cfg.routeDocumentation);
+  val('inp-route-research',       cfg.routeResearch);
+  val('inp-route-agentic',        cfg.routeAgentic);
   if (cfg.agentshieldMode) setShield(cfg.agentshieldMode);
   if (cfg.safeMode === 'false') document.getElementById('tog-safe').checked = false;
   if (cfg.headlessMode === 'true') document.getElementById('tog-headless').checked = true;
@@ -1416,6 +1476,17 @@ function buildConfig() {
     LLM_MODEL:             getModel(),
     OLLAMA_BASE_URL:       get('inp-ollama-url') || 'http://localhost:11434',
     SOVEREIGN_FALLBACK_MODEL: get('inp-sovereign') || 'gemma4:e2b',
+    // Per-role route overrides — written as ROUTE_<ROLE>=<provider>:<model>
+    ROUTE_PLANNER:        get('inp-route-planner'),
+    ROUTE_ARCHITECTURE:   get('inp-route-architecture'),
+    ROUTE_IMPLEMENTATION: get('inp-route-implementation'),
+    ROUTE_REVIEW:         get('inp-route-review'),
+    ROUTE_TESTING:        get('inp-route-testing'),
+    ROUTE_SECURITY:       get('inp-route-security'),
+    ROUTE_VERIFICATION:   get('inp-route-verification'),
+    ROUTE_DOCUMENTATION:  get('inp-route-documentation'),
+    ROUTE_RESEARCH:       get('inp-route-research'),
+    ROUTE_AGENTIC:        get('inp-route-agentic'),
     CUSTOM_HTTP_URL:       get('inp-custom-url'),
     CUSTOM_HTTP_MODEL:     get('inp-custom-model'),
     OCTOPUS_WEBHOOK_URL:   get('inp-webhook'),

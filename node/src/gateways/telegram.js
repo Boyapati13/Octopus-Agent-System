@@ -142,16 +142,35 @@ class TelegramGateway extends EventEmitter {
     });
   }
 
-  async send(ctx, text) {
-    if (!this.bot || !ctx.channel) return;
-    // Telegram has 4096 char limit per message
+  /**
+   * Unified send — handles both call patterns:
+   *   manager:         gw.send(ctx, text)  where ctx = { channel: chatId, ... }
+   *   home-channel:    gw.send(text)        outbound-only, uses this.homeChannel
+   */
+  async send(ctxOrText, text) {
+    if (!this.bot || !this.online) return;
+
+    let chatId, message;
+    if (typeof ctxOrText === 'string') {
+      // home-channel outbound: gw.send(text)
+      chatId  = this.homeChannel;
+      message = ctxOrText;
+    } else {
+      // manager reply: gw.send(ctx, text)
+      chatId  = ctxOrText?.channel;
+      message = text;
+    }
+
+    if (!chatId || !message) return;
+
+    // Telegram 4096-char limit — split into chunks
     const chunks = [];
-    for (let i = 0; i < text.length; i += 4000) {
-      chunks.push(text.slice(i, i + 4000));
+    for (let i = 0; i < message.length; i += 4000) {
+      chunks.push(message.slice(i, i + 4000));
     }
     for (const chunk of chunks) {
-      await this.bot.sendMessage(ctx.channel, chunk, { parse_mode: 'Markdown' }).catch(() =>
-        this.bot.sendMessage(ctx.channel, chunk) // retry without markdown
+      await this.bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' }).catch(() =>
+        this.bot.sendMessage(chatId, chunk) // retry without Markdown on parse error
       );
     }
   }
