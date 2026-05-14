@@ -32,3 +32,10 @@ Thumbs.db
 
 # Claude Code local session settings (user-specific, not for source control)
 .claude/settings.local.json
+.gstack/
+desktop/memory/long_term.json
+data/octo_memory.json
+node/.setup-complete
+# Garbled copy artifacts from Windows cp commands
+desktop/·*
+desktop/·

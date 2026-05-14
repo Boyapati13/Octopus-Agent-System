@@ -38,9 +38,13 @@ function remove(id) {
   save(memories);
 }
 
-// Format most recent N memories as a context block for prompt injection
+// Format recent user facts for prompt injection.
+// Skip Q&A transcripts so old answers do not feed back into new prompts.
 function format(limit) {
-  const recent = load().slice(-(limit || 10));
+  const recent = load().filter(m => {
+    const text = String(m.text || '').trim();
+    return text && !/^Q\s*:/i.test(text) && !/→\s*A\s*:/i.test(text);
+  }).slice(-(limit || 10));
   if (!recent.length) return '';
   return 'OCTO memory (things I know):\n' + recent.map(m => `- ${m.text}`).join('\n');
 }
