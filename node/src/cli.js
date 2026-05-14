@@ -1,733 +1,527 @@
 #!/usr/bin/env node
 'use strict';
+// Load .env first
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+
 /**
- * cli.js — Octopus Interactive Terminal UI
+ * cli.js  —  Octopus Interactive Terminal  (Claude Code / Hermes style)
  *
  * Usage:
- *   octopus              (if installed via npm link / PATH)
- *   node node/src/cli.js
+ *   node node/src/cli.js       or      npm run cli   (inside node/)
  *
  * Commands:
- *   /plan  <task>   — plan a task (Cortex only, no execution)
- *   /run   <task>   — run the full agent chain
- *   /agents         — list all 14 agents + roles
- *   /models         — show installed Ollama models
- *   /routes         — show task router config
- *   /vault          — check OS Vault key status
- *   /status         — show all service health
- *   /update         — check GitHub for updates
- *   /update-models  — re-pull all Ollama models
- *   /help           — this help
- *   /exit           — quit
+ *   <message>              - chat / Q&A with the LLM (no slash needed)
+ *   /run   <task>          - run full multi-agent pipeline
+ *   /plan  <task>          - plan only (Cortex, no execution)
+ *   /workspace <url|path>  - clone GitHub repo or open local folder
+ *   /files                 - show workspace file tree
+ *   /context               - show active workspace context
+ *   /agents                - list all agents + roles
+ *   /tools                 - list all tools
+ *   /routes                - task router config
+ *   /models                - installed Ollama models
+ *   /provider [set <p> m]  - show / switch LLM provider
+ *   /setup                 - interactive provider wizard
+ *   /status                - service health check
+ *   /dashboard             - open web dashboard
+ *   /vault                 - API key status
+ *   /clear                 - redraw banner
+ *   /help                  - full command reference
+ *   /exit                  - quit
  */
 
 const readline = require('readline');
 const path     = require('path');
 const fs       = require('fs');
+const os       = require('os');
+const { execSync } = require('child_process');
 const axios    = require('axios');
 const chalk    = require('chalk');
 
-const REPO_ROOT      = path.resolve(__dirname, '..', '..');
-const MEMORY_URL     = process.env.MEMORY_SERVICE_URL || 'http://localhost:5000';
-const OLLAMA_URL     = process.env.OLLAMA_BASE_URL    || 'http://localhost:11434';
-const PROVIDER       = (process.env.LLM_PROVIDER || 'ollama').toLowerCase();
-const MODEL          = process.env.LLM_MODEL || 'gemma4:e2b';
+// ── Config ─────────────────────────────────────────────────────────────────────
+const REPO_ROOT  = path.resolve(__dirname, '..', '..');
+const ENV_PATH   = path.join(__dirname, '..', '.env');
+const MEMORY_URL = process.env.MEMORY_SERVICE_URL || 'http://localhost:5000';
+const OLLAMA_URL = process.env.OLLAMA_BASE_URL    || 'http://localhost:11434';
+const SESSION_ID = `${new Date().toISOString().slice(0,10).replace(/-/g,'')}` +
+                   `_${Date.now().toString(36).toUpperCase()}`;
 
-// ── Spinner ────────────────────────────────────────────────────────────────────
+function getEnvVar(key) {
+  try {
+    const m = fs.readFileSync(ENV_PATH,'utf8').match(new RegExp(`^${key}=(.*)$`,'m'));
+    return m ? m[1].trim() : (process.env[key] || '');
+  } catch { return process.env[key] || ''; }
+}
+function setEnvVar(key, value) {
+  try {
+    let c = ''; try { c = fs.readFileSync(ENV_PATH,'utf8'); } catch {}
+    const re = new RegExp(`^(${key}=).*$`,'m');
+    c = re.test(c) ? c.replace(re, `$1${value}`) : c.trimEnd() + `\n${key}=${value}\n`;
+    fs.writeFileSync(ENV_PATH, c, 'utf8');
+    process.env[key] = value;
+    return true;
+  } catch (err) { console.log(chalk.red(`  Cannot write .env: ${err.message}\n`)); return false; }
+}
+
+const PROVIDER = getEnvVar('LLM_PROVIDER') || 'ollama';
+const MODEL    = getEnvVar('LLM_MODEL')    || 'gemma4:e2b';
+
+// ── Workspace state ─────────────────────────────────────────────────────────────
+const workspace = { root:null, name:null, files:[], summary:null, type:null };
+
+// ── ASCII banner ────────────────────────────────────────────────────────────────
+const BANNER_LINES = [
+  ' ██████╗  ██████╗████████╗ ██████╗ ██████╗ ██╗   ██╗███████╗',
+  '██╔═══██╗██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗██║   ██║██╔════╝',
+  '██║   ██║██║        ██║   ██║   ██║██████╔╝██║   ██║███████╗',
+  '██║   ██║██║        ██║   ██║   ██║██╔═══╝ ██║   ██║╚════██║',
+  '╚██████╔╝╚██████╗   ██║   ╚██████╔╝██║     ╚██████╔╝███████║',
+  ' ╚═════╝  ╚═════╝   ╚═╝    ╚═════╝ ╚═╝      ╚═════╝ ╚══════╝',
+];
+
+// ── Tool + Agent catalogues ─────────────────────────────────────────────────────
+const TOOL_GROUPS = {
+  code:     ['run_task', 'plan_task', 'write_file', 'read_file', 'patch_file'],
+  browser:  ['web_search', 'navigate', 'screenshot'],
+  memory:   ['memory_add', 'memory_search', 'memory_format'],
+  document: ['process_doc', 'doc_summary', 'doc_extract'],
+  system:   ['list_agents', 'get_routes', 'reload_agent', 'vault_check'],
+  gateway:  ['telegram_send', 'discord_send', 'slack_send', 'ha_trigger'],
+};
+const AGENT_GROUPS = {
+  planning:    ['cortex · planner', 'architect · system design'],
+  engineering: ['forge · code', 'probe · testing', 'reviewer · review'],
+  security:    ['securityreviewer · OWASP', 'factchecker · verify'],
+  research:    ['marketscout · intel', 'navigator · browsing'],
+  ops:         ['atlas · memory', 'scribe · docs', 'releasekeeper · release', 'toolsmith · skills', 'sandboxqa · QA'],
+};
+
+// ── Spinner ─────────────────────────────────────────────────────────────────────
 const SPIN = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
-let _spinnerIdx = 0;
-let _spinnerTimer = null;
-
+let _sp = 0, _st = null;
 function startSpinner(label) {
   process.stdout.write('\n');
-  _spinnerTimer = setInterval(() => {
-    process.stdout.write(`\r  ${chalk.cyan(SPIN[_spinnerIdx++ % SPIN.length])} ${label}   `);
-  }, 80);
+  _st = setInterval(() => { process.stdout.write(`\r  ${chalk.cyan(SPIN[_sp++%SPIN.length])} ${label}   `); }, 80);
 }
-function stopSpinner(label, ok = true) {
-  if (_spinnerTimer) { clearInterval(_spinnerTimer); _spinnerTimer = null; }
-  const icon = ok ? chalk.green('✓') : chalk.red('✗');
-  process.stdout.write(`\r  ${icon} ${label}                  \n`);
+function stopSpinner(label, ok=true) {
+  if (_st) { clearInterval(_st); _st = null; }
+  process.stdout.write(`\r  ${ok?chalk.green('✓'):chalk.red('✗')} ${label}                        \n`);
 }
 
-// ── Status checks ──────────────────────────────────────────────────────────────
+// ── Service checks ──────────────────────────────────────────────────────────────
 async function checkMemory() {
-  try {
-    const r = await axios.get(`${MEMORY_URL}/health`, { timeout: 3000 });
-    return { ok: true, data: r.data };
-  } catch { return { ok: false }; }
+  try { await axios.get(`${MEMORY_URL}/health`,{timeout:3000}); return {ok:true}; } catch { return {ok:false}; }
 }
-
 async function checkOllama() {
+  try { const r=await axios.get(`${OLLAMA_URL}/api/tags`,{timeout:3000}); return {ok:true,models:(r.data?.models||[]).map(m=>m.name)}; }
+  catch { return {ok:false,models:[]}; }
+}
+
+// ── File tree ────────────────────────────────────────────────────────────────────
+const IGNORE = new Set(['node_modules','.git','__pycache__','.next','dist','build','.venv','venv','coverage']);
+const CODE_EXT = new Set(['.js','.ts','.jsx','.tsx','.py','.go','.rs','.java','.cs','.cpp','.c','.rb','.php','.sh','.md','.json','.yaml','.yml','.toml','.html','.css','.sql','.env.example']);
+
+function walkDir(dir, base=dir, depth=0, max=4) {
+  if (depth>max) return [];
+  let out=[];
   try {
-    const r = await axios.get(`${OLLAMA_URL}/api/tags`, { timeout: 3000 });
-    return { ok: true, models: (r.data?.models || []).map(m => m.name) };
-  } catch { return { ok: false, models: [] }; }
+    for (const e of fs.readdirSync(dir,{withFileTypes:true})) {
+      if (e.name.startsWith('.')&&e.name!=='.env.example') continue;
+      if (IGNORE.has(e.name)) continue;
+      const full=path.join(dir,e.name), rel=path.relative(base,full);
+      if (e.isDirectory()) { out.push({type:'d',path:rel,depth}); out=out.concat(walkDir(full,base,depth+1,max)); }
+      else if (CODE_EXT.has(path.extname(e.name).toLowerCase())||depth===0) out.push({type:'f',path:rel,depth});
+    }
+  } catch {}
+  return out;
 }
 
-async function checkVault() {
-  const { getSecureKey } = require('./llm');
-  const providers = ['anthropic', 'openai', 'google', 'nvidia', 'huggingface'];
-  const results = {};
-  for (const p of providers) {
-    const k = await getSecureKey(p);
-    results[p] = k ? chalk.green('key present') : chalk.dim('no key');
+function renderTree(entries, maxLines=60) {
+  const lines=[];
+  for (const e of entries.slice(0,maxLines)) {
+    const ind='  '.repeat(e.depth);
+    if (e.type==='d') lines.push(`${ind}${chalk.cyan('▸')} ${chalk.bold(path.basename(e.path))}/`);
+    else {
+      const ext=path.extname(e.path).toLowerCase();
+      const col=['.js','.ts','.jsx','.tsx'].includes(ext)?chalk.yellow:['.py','.go','.rs'].includes(ext)?chalk.green:['.md'].includes(ext)?chalk.white:chalk.dim;
+      lines.push(`${ind}  ${col(path.basename(e.path))}`);
+    }
   }
-  return results;
+  if (entries.length>maxLines) lines.push(chalk.dim(`  … and ${entries.length-maxLines} more`));
+  return lines.join('\n');
 }
 
-// ── Banner + Status ────────────────────────────────────────────────────────────
+// ── Workspace load ───────────────────────────────────────────────────────────────
+async function loadWorkspace(target) {
+  const isGit = /^https?:\/\/github\.com\//i.test(target)||/^git@github\.com:/i.test(target);
+  if (isGit) {
+    const slug=target.replace(/\.git$/,'').split('/').slice(-2).join('/');
+    const name=slug.split('/')[1];
+    const dir=path.join(os.tmpdir(),'octo_ws',name);
+    fs.mkdirSync(path.dirname(dir),{recursive:true});
+    if (fs.existsSync(dir)) {
+      console.log(chalk.dim('  Pulling latest…'));
+      try { execSync(`git -C "${dir}" pull --ff-only`,{timeout:30000,stdio:'pipe'}); } catch {}
+    } else {
+      startSpinner(`Cloning ${chalk.cyan(slug)}…`);
+      try { execSync(`git clone --depth 1 "${target}" "${dir}"`,{timeout:60000,stdio:'pipe'}); stopSpinner(`Cloned ${slug}`); }
+      catch (err) { stopSpinner('Clone failed',false); console.log(chalk.red(`  ${err.message}\n`)); return false; }
+    }
+    workspace.root=dir; workspace.name=slug; workspace.type='git';
+  } else {
+    const abs=path.resolve(target);
+    if (!fs.existsSync(abs)) { console.log(chalk.red(`  Path not found: ${abs}\n`)); return false; }
+    workspace.root=abs; workspace.name=path.basename(abs); workspace.type='local';
+  }
+  workspace.files=walkDir(workspace.root);
+  const exts=[...new Set(workspace.files.filter(e=>e.type==='f').map(e=>path.extname(e.path).replace('.',''))).values()].filter(Boolean).slice(0,8);
+  workspace.summary=`Workspace: ${workspace.name} (${workspace.type})\nRoot: ${workspace.root}\nLanguages: ${exts.join(', ')}\nFiles: ${workspace.files.filter(e=>e.type==='f').slice(0,20).map(e=>e.path).join(', ')}`;
+  return true;
+}
+
+function injectWorkspace(task) {
+  if (!workspace.root) return task;
+  const topFiles=workspace.files.filter(e=>e.type==='f').slice(0,15).map(e=>e.path).join(', ');
+  return `[Workspace: ${workspace.name} — ${workspace.root}]\nKey files: ${topFiles}\n\nTask: ${task}`;
+}
+
+// ── Banner ───────────────────────────────────────────────────────────────────────
 async function showBanner() {
-  const { currentCommit, currentVersion, checkForUpdate } = require('./updater');
-  const ver    = currentVersion();
-  const commit = currentCommit();
+  let version='4.x';
+  try { version=require(path.join(REPO_ROOT,'package.json')).version||'4.x'; } catch {}
 
   console.clear();
-  console.log(chalk.cyan('━'.repeat(56)));
-  console.log(chalk.bold.cyan('  🐙  OCTOPUS') + chalk.dim(`  v${ver}  |  24 tools  |  14 agents  |  Smart Router`));
-  console.log(chalk.cyan('━'.repeat(56)));
+  for (const line of BANNER_LINES) console.log(chalk.hex('#FF8C00').bold(line));
+  console.log();
+  console.log(chalk.hex('#FFB347')(`  Octopus Agent v${version}`) + chalk.dim(` · Session ${SESSION_ID}`));
+  console.log(chalk.dim('  ' + '─'.repeat(72)));
+  console.log();
 
-  // Services
-  const [mem, oll] = await Promise.all([checkMemory(), checkOllama()]);
-  const memIcon  = mem.ok  ? chalk.green('✅') : chalk.red('❌');
-  const ollIcon  = oll.ok  ? chalk.green('✅') : chalk.yellow('⚠️ ');
-  const provIcon = chalk.green('✅');
-
-  console.log(`  ${memIcon} Memory service   ${chalk.dim(MEMORY_URL)}`);
-  console.log(`  ${ollIcon} Ollama           ${oll.ok ? chalk.green(`${oll.models.length} model(s)`) : chalk.yellow('offline — start with: ollama serve')}`);
-  if (oll.ok && oll.models.length) {
-    const active = oll.models.find(m => m === MODEL) ? chalk.green(MODEL) : chalk.yellow(MODEL + ' (not pulled)');
-    console.log(`  ${provIcon} Active model     ${active}  ${chalk.dim(`[${PROVIDER}]`)}`);
+  // Two-column: tools | agents
+  const TL=Object.entries(TOOL_GROUPS).map(([c,t])=>`  ${chalk.hex('#FFB347')(c.padEnd(12))} ${chalk.dim(t.join(', '))}`);
+  const AL=Object.entries(AGENT_GROUPS).map(([c,a])=>`  ${chalk.hex('#FF8C00')(c.padEnd(14))} ${chalk.dim(a.join(' · '))}`);
+  console.log(`  ${chalk.bold.white('Available Tools')}` + ' '.repeat(26) + chalk.bold.white('Agents'));
+  for (let i=0;i<Math.max(TL.length,AL.length);i++) {
+    console.log(`${(TL[i]||'').padEnd(50)}${AL[i]||''}`);
   }
+  console.log();
 
-  // Update check (non-blocking)
-  checkForUpdate().then(upd => {
-    if (upd.hasUpdate) {
-      console.log(`\n  ${chalk.yellow('⬆')} Update available: ${chalk.dim(upd.local)} → ${chalk.cyan(upd.remote)}`);
-      console.log(`    ${chalk.dim(upd.message)}`);
-      console.log(`    ${chalk.yellow('/update')} to apply`);
-    } else {
-      console.log(`  ${chalk.green('✅')} Version          ${chalk.dim(commit)}  ${upd.error ? chalk.yellow('(offline check)') : chalk.green('up to date')}`);
-    }
-    console.log(chalk.cyan('━'.repeat(56)));
-    printHelp(true);
-    prompt();
-  }).catch(() => {
-    console.log(chalk.cyan('━'.repeat(56)));
-    printHelp(true);
-    prompt();
-  });
+  const [mem,oll]=await Promise.all([checkMemory(),checkOllama()]);
+  const memB=mem.ok?chalk.green('● online') :chalk.red('● offline');
+  const ollB=oll.ok?chalk.green(`● ${oll.models.length} models`):chalk.yellow('● offline');
+  const ws=workspace.name?chalk.hex('#FFB347')(`📁 ${workspace.name}`):chalk.dim('no workspace');
+
+  console.log(chalk.dim('  ' + '─'.repeat(72)));
+  console.log(`  ${chalk.hex('#FFB347').bold(PROVIDER)}${chalk.dim(':')}${chalk.white(MODEL.split('/').pop())} · ${ws} · mem ${memB} · ollama ${ollB}`);
+  console.log(chalk.dim(`\n  ${Object.values(TOOL_GROUPS).flat().length} tools · ${Object.values(AGENT_GROUPS).flat().length} agents · /help for commands\n`));
 }
 
-function printHelp(short = false) {
-  if (short) {
-    console.log(chalk.dim('\n  /setup  /plan  /run  /agents  /provider  /headless  /dashboard  /vault  /status  /update  /help\n'));
-    return;
-  }
-  console.log('\n' + chalk.bold('  Commands:'));
-  const cmds = [
-    ['/setup',                'Interactive wizard — pick a model, paste API key, test connection'],
-    ['/plan <task>',          'Plan a task (Cortex only, shows the agent chain)'],
-    ['/run  <task>',          'Run the full agent chain end-to-end'],
-    ['/agents',               'List all 14 agents and their roles'],
-    ['/models',               'Show installed Ollama models'],
-    ['/routes',               'Full task router — which model each agent uses'],
-    ['/provider',             'Show active LLM provider/model'],
-    ['/provider list',        'List all configured providers + key status'],
-    ['/provider set <p> [m]', 'Switch provider (and optionally model) in .env'],
-    ['/headless',             'Show current HEADLESS_MODE setting'],
-    ['/headless on',          'Enable headless mode (external LLM as planner)'],
-    ['/headless off',         'Disable headless mode (Cortex as planner)'],
-    ['/vault',                'Check OS Vault key status (all providers)'],
+// ── Help ─────────────────────────────────────────────────────────────────────────
+function printHelp() {
+  const C=chalk.hex('#FFB347'), D=chalk.dim;
+  console.log(`\n${chalk.bold.white('  Commands:')}\n`);
+  [
+    ['<message>',             'Chat directly — answered by LLM (no agent pipeline)'],
+    ['/run <task>',           'Full multi-agent pipeline: plan → code → test → review'],
+    ['/plan <task>',          'Show execution plan without running it'],
+    ['/workspace <url|path>', 'Load GitHub repo (https://github.com/…) or local folder'],
+    ['/files',                'File tree of current workspace'],
+    ['/context',              'Active workspace summary'],
+    ['/agents',               'All agents + roles'],
+    ['/tools',                'All tools + categories'],
+    ['/routes',               'Task router — which model each agent role uses'],
+    ['/models',               'Installed Ollama models'],
+    ['/provider',             'Show active LLM provider'],
+    ['/provider set <p> [m]', 'Switch: ollama, anthropic, openai, nvidia, router…'],
+    ['/setup',                'Interactive wizard — pick provider, enter key, test'],
     ['/status',               'Health check all services'],
-    ['/dashboard',            'Open the web dashboard in your browser'],
-    ['/update',               'Check GitHub for updates and apply'],
-    ['/update-models',        'Re-pull all Ollama models (checks for new versions)'],
-    ['/help',                 'Show this help'],
+    ['/dashboard',            'Open web dashboard in browser'],
+    ['/vault',                'API key status for all providers'],
+    ['/clear',                'Redraw banner'],
+    ['/help',                 'This help'],
     ['/exit',                 'Quit'],
-  ];
-  for (const [cmd, desc] of cmds) {
-    console.log(`    ${chalk.cyan(cmd.padEnd(28))} ${chalk.dim(desc)}`);
-  }
+  ].forEach(([c,d])=>console.log(`    ${C(c.padEnd(30))} ${D(d)}`));
   console.log();
 }
 
-// ── Interactive setup wizard ──────────────────────────────────────────────────
-
-const PROVIDER_MENU = [
-  { value: 'ollama',      label: 'Ollama (local)',       model: 'gemma4:e2b',                            key: null,              note: 'No API key needed — runs on your machine' },
-  { value: 'anthropic',   label: 'Anthropic Claude',     model: 'claude-sonnet-4-6',                     key: 'ANTHROPIC_API_KEY', note: 'Get key: console.anthropic.com/settings/keys' },
-  { value: 'openai',      label: 'OpenAI GPT-4o',        model: 'gpt-4o',                                key: 'OPENAI_API_KEY',    note: 'Get key: platform.openai.com/api-keys' },
-  { value: 'google',      label: 'Google Gemini',        model: 'gemini-2.0-flash',                      key: 'GOOGLE_API_KEY',    note: 'Get key: aistudio.google.com/app/apikey' },
-  { value: 'nvidia',      label: 'NVIDIA NIM (free)',    model: 'meta/llama-3.1-405b-instruct',          key: 'NVIDIA_API_KEY',    note: 'Free key: build.nvidia.com/settings/api-key' },
-  { value: 'nvidia',      label: 'NVIDIA Nemotron (reasoning)', model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning', key: 'NVIDIA_API_KEY', note: 'Free key: build.nvidia.com/settings/api-key' },
-  { value: 'huggingface', label: 'HuggingFace Gemma',   model: 'google/gemma-3-4b-it',                  key: 'HF_TOKEN',          note: 'Free token: huggingface.co/settings/tokens' },
-  { value: 'custom_http', label: 'Custom HTTP server',  model: '',                                       key: null,              note: 'Any OpenAI-compatible server (vLLM, LM Studio, llamafile)' },
+// ── Setup wizard ─────────────────────────────────────────────────────────────────
+const PROVIDERS = [
+  { value:'ollama',      label:'Ollama (local — no API key)',            model:'',                              key:null,              note:'Runs on your machine — ollama.ai' },
+  { value:'router',      label:'Auto Router (best model per task)',       model:'',                              key:null,              note:'Uses available keys + Ollama fallback per agent role' },
+  { value:'anthropic',   label:'Anthropic Claude Sonnet',                model:'claude-sonnet-4-6',             key:'ANTHROPIC_API_KEY', note:'console.anthropic.com/settings/keys' },
+  { value:'openai',      label:'OpenAI GPT-4o',                          model:'gpt-4o',                        key:'OPENAI_API_KEY',    note:'platform.openai.com/api-keys' },
+  { value:'nvidia',      label:'NVIDIA NIM (free trial)',                model:'meta/llama-3.1-405b-instruct',  key:'NVIDIA_API_KEY',    note:'build.nvidia.com/settings/api-key' },
+  { value:'huggingface', label:'HuggingFace (free)',                     model:'google/gemma-3-4b-it',          key:'HF_TOKEN',          note:'huggingface.co/settings/tokens' },
+  { value:'custom_http', label:'Custom HTTP (vLLM, LM Studio, llamafile)',model:'',                             key:null,              note:'Any OpenAI-compatible server' },
 ];
 
 async function runSetupWizard() {
-  const { Select, Password, Input } = require('enquirer');
-  console.log(chalk.bold('\n  🐙 Octopus Setup Wizard\n'));
-
-  // Show all available providers
-  console.log(chalk.bold('  Available LLM providers:\n'));
-  PROVIDER_MENU.forEach((p, i) => {
-    const idx  = chalk.dim(`  ${String(i + 1).padStart(2)}.`);
-    const name = chalk.cyan(p.label.padEnd(34));
-    const note = chalk.dim(p.note);
-    console.log(`${idx} ${name} ${note}`);
-  });
+  let enq; try { enq=require('enquirer'); } catch { console.log(chalk.yellow('\n  Run: npm install enquirer\n')); return; }
+  const {Select,Password,Input}=enq;
+  console.log(chalk.bold.white('\n  ╔══ Octopus Setup Wizard ══╗\n'));
+  const oll=await checkOllama();
+  PROVIDERS.forEach((p,i)=>console.log(`  ${chalk.dim(`${i+1}.`)} ${chalk.hex('#FFB347')(p.label.padEnd(42))} ${chalk.dim(p.note)}`));
   console.log();
-
-  // Pick a provider
   let choice;
   try {
-    const select = new Select({
-      name: 'provider',
-      message: 'Select LLM provider:',
-      choices: PROVIDER_MENU.map((p, i) => `${i + 1}. ${p.label}`),
-    });
-    const answer = await select.run();
-    const idx = parseInt(answer.split('.')[0]) - 1;
-    choice = PROVIDER_MENU[idx];
-  } catch {
-    console.log(chalk.yellow('\n  Setup cancelled.\n'));
-    return;
-  }
+    const ans=await new Select({name:'p',message:'Select LLM provider:',choices:PROVIDERS.map((p,i)=>`${i+1}. ${p.label}`)}).run();
+    choice=PROVIDERS[parseInt(ans.split('.')[0])-1];
+  } catch { console.log(chalk.yellow('\n  Cancelled.\n')); return; }
 
-  console.log(chalk.dim(`\n  Selected: ${choice.label} (${choice.value}/${choice.model || 'custom'})\n`));
-
-  // Ollama — check it's running and list models
-  if (choice.value === 'ollama') {
-    const oll = await checkOllama();
-    if (!oll.ok) {
-      console.log(chalk.yellow('  Ollama is not running. Start it with: ollama serve'));
-      console.log(chalk.dim('  Download: https://ollama.ai\n'));
-      return;
-    }
-    let selectedModel = choice.model;
-    if (oll.models.length > 0) {
+  if (choice.value==='ollama') {
+    if (!oll.ok) { console.log(chalk.yellow('  Ollama offline — start: ollama serve\n')); return; }
+    let m='gemma4:e2b';
+    if (oll.models.length) {
       try {
-        const modelSelect = new Select({
-          name: 'model',
-          message: 'Select Ollama model:',
-          choices: oll.models.concat(['(type a different model name)']),
-        });
-        const picked = await modelSelect.run();
-        selectedModel = picked.startsWith('(') ? choice.model : picked;
-      } catch { /* use default */ }
-    }
-    setEnvVar('LLM_PROVIDER', 'ollama');
-    setEnvVar('LLM_MODEL', selectedModel);
-    console.log(chalk.green(`\n  ✅ Configured: ollama / ${selectedModel}`));
-    console.log(chalk.dim('  Restart Octopus to apply.\n'));
-    return;
+        const picked=await new Select({name:'m',message:'Select model:',choices:[...oll.models,'(enter different name)']}).run();
+        m=picked.startsWith('(')?await new Input({name:'custom',message:'Model name:'}).run():picked;
+      } catch {}
+    } else console.log(chalk.yellow('  No models — run: ollama pull gemma4:e2b'));
+    setEnvVar('LLM_PROVIDER','ollama'); setEnvVar('LLM_MODEL',m);
+    console.log(chalk.green(`\n  ✅ Set: ollama / ${m}`));
+    console.log(chalk.yellow('  Restart Octopus to apply.\n')); return;
   }
-
-  // Custom HTTP
-  if (choice.value === 'custom_http') {
-    let url = '', model = '';
-    try {
-      const urlInput = new Input({ name: 'url', message: 'Server URL (e.g. http://localhost:8080):' });
-      url = await urlInput.run();
-      const modelInput = new Input({ name: 'model', message: 'Model name:' });
-      model = await modelInput.run();
-    } catch {
-      console.log(chalk.yellow('\n  Setup cancelled.\n'));
-      return;
-    }
-    setEnvVar('LLM_PROVIDER', 'custom_http');
-    setEnvVar('CUSTOM_HTTP_URL', url.trim());
-    setEnvVar('CUSTOM_HTTP_MODEL', model.trim());
-    console.log(chalk.green(`\n  ✅ Configured: custom_http → ${url.trim()} / ${model.trim()}`));
-    console.log(chalk.dim('  Restart Octopus to apply.\n'));
-    return;
+  if (choice.value==='router') {
+    setEnvVar('LLM_PROVIDER','router');
+    console.log(chalk.green('\n  ✅ Auto Router enabled.'));
+    console.log(chalk.dim('  Run /routes to see the full model routing table.\n')); return;
   }
-
-  // Cloud provider — need API key
-  console.log(chalk.cyan(`  ${choice.note}`));
-  console.log();
-
-  let apiKey = '';
-  try {
-    const pw = new Password({ name: 'key', message: `Paste your ${choice.key} (input hidden):` });
-    apiKey = await pw.run();
-  } catch {
-    console.log(chalk.yellow('\n  Setup cancelled.\n'));
-    return;
+  if (choice.value==='custom_http') {
+    let url='',model='';
+    try { url=await new Input({name:'url',message:'Server URL:'}).run(); model=await new Input({name:'model',message:'Model name:'}).run(); }
+    catch { console.log(chalk.yellow('\n  Cancelled.\n')); return; }
+    setEnvVar('LLM_PROVIDER','custom_http'); setEnvVar('CUSTOM_HTTP_URL',url.trim()); setEnvVar('CUSTOM_HTTP_MODEL',model.trim());
+    console.log(chalk.green(`\n  ✅ custom_http → ${url} / ${model}\n`)); return;
   }
-
-  if (!apiKey || apiKey.trim().length < 8) {
-    console.log(chalk.red('\n  Key too short — not saved.\n'));
-    return;
-  }
-
-  // Store in OS Vault via vault_set.js
-  const vaultSet = path.join(__dirname, 'vault_set.js');
-  const storeInVault = require('fs').existsSync(vaultSet);
-
-  if (storeInVault) {
-    try {
-      const { spawnSync } = require('child_process');
-      const res = spawnSync('node', [vaultSet, choice.value], {
-        input: apiKey.trim(), encoding: 'utf8', stdio: ['pipe','pipe','pipe'],
-      });
-      if (res.status === 0) {
-        console.log(chalk.green(`\n  ✅ Key stored in OS Vault (not in .env)`));
-      } else {
-        throw new Error(res.stderr || 'vault_set failed');
-      }
-    } catch (err) {
-      console.log(chalk.yellow(`\n  Vault store failed (${err.message}) — writing to .env instead`));
-      setEnvVar(choice.key, apiKey.trim());
-    }
-  } else {
-    setEnvVar(choice.key, apiKey.trim());
-    console.log(chalk.yellow(`\n  ⚠  Key written to .env (plain text). Prefer: octopus_login for vault storage.`));
-  }
-
-  // Update provider + model in .env
-  setEnvVar('LLM_PROVIDER', choice.value);
-  setEnvVar('LLM_MODEL', choice.model);
-
-  // Quick connection test
-  console.log(chalk.dim('\n  Testing connection...'));
-  try {
-    const axios = require('axios');
-    let ok = false;
-    if (choice.value === 'anthropic') {
-      const r = await axios.get('https://api.anthropic.com/v1/models', {
-        headers: { 'x-api-key': apiKey.trim(), 'anthropic-version': '2023-06-01' }, timeout: 6000
-      });
-      ok = r.status === 200;
-    } else if (choice.value === 'openai') {
-      const r = await axios.get('https://api.openai.com/v1/models', {
-        headers: { Authorization: `Bearer ${apiKey.trim()}` }, timeout: 6000
-      });
-      ok = r.status === 200;
-    } else if (choice.value === 'google') {
-      const r = await axios.get(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`,
-        { timeout: 6000 }
-      );
-      ok = r.status === 200;
-    } else if (choice.value === 'nvidia') {
-      const r = await axios.get('https://integrate.api.nvidia.com/v1/models', {
-        headers: { Authorization: `Bearer ${apiKey.trim()}` }, timeout: 6000
-      });
-      ok = r.status === 200;
-    } else if (choice.value === 'huggingface') {
-      const r = await axios.get('https://huggingface.co/api/whoami', {
-        headers: { Authorization: `Bearer ${apiKey.trim()}` }, timeout: 6000
-      });
-      ok = r.status === 200;
-    }
-    if (ok) {
-      console.log(chalk.green(`  ✅ Connection verified — ${choice.label} is working!`));
-    } else {
-      console.log(chalk.yellow('  ⚠  Could not verify connection automatically.'));
-    }
-  } catch (err) {
-    console.log(chalk.yellow(`  ⚠  Connection test failed: ${err.message}`));
-    console.log(chalk.dim('  Key saved. The provider may still work — try /run <task>.'));
-  }
-
+  console.log(chalk.hex('#FFB347')(`  ${choice.note}`));
+  let key='';
+  try { key=await new Password({name:'k',message:`Paste ${choice.key} (hidden):`}).run(); }
+  catch { console.log(chalk.yellow('\n  Cancelled.\n')); return; }
+  if (!key||key.trim().length<8) { console.log(chalk.red('\n  Key too short.\n')); return; }
+  setEnvVar(choice.key,key.trim()); setEnvVar('LLM_PROVIDER',choice.value); setEnvVar('LLM_MODEL',choice.model);
   console.log(chalk.green(`\n  ✅ Setup complete: ${choice.value} / ${choice.model}`));
-  console.log(chalk.yellow('  Restart Octopus (Ctrl+C + start_server.ps1) to apply.\n'));
+  console.log(chalk.yellow('  Restart Octopus to apply.\n'));
 }
 
-// ── .env read/write helpers ────────────────────────────────────────────────────
-const ENV_PATH = path.join(__dirname, '..', '.env');
-
-function readEnvFile() {
-  try { return fs.readFileSync(ENV_PATH, 'utf8'); } catch { return ''; }
-}
-
-function setEnvVar(key, value) {
-  let content = readEnvFile();
-  const re = new RegExp(`^(${key}=).*$`, 'm');
-  if (re.test(content)) {
-    content = content.replace(re, `$1${value}`);
-  } else {
-    content = content.trimEnd() + `\n${key}=${value}\n`;
-  }
+// ── LLM chat ─────────────────────────────────────────────────────────────────────
+async function chat(message) {
+  startSpinner(chalk.dim('thinking…'));
   try {
-    fs.writeFileSync(ENV_PATH, content, 'utf8');
-    return true;
-  } catch (err) {
-    console.log(chalk.red(`  Could not write .env: ${err.message}\n`));
-    return false;
-  }
+    const {complete}=require('./llm');
+    const octoMemory=require('./octo_memory');
+    const mem=octoMemory.format(6);
+    const wsCtx=workspace.root?`\nWorkspace: ${workspace.name}\nKey files: ${workspace.files.filter(e=>e.type==='f').slice(0,10).map(e=>e.path).join(', ')}\n`:'';
+    const prompt=`${mem?'Context:\n'+mem+'\n':''}${wsCtx}\nUser: ${message}\n\nAssistant:`;
+    const raw=await complete(prompt,{maxTokens:800,timeout:45000});
+    const answer=(raw||'').trim();
+    stopSpinner('done');
+    if (!answer){console.log(chalk.yellow('  (no response)\n'));return;}
+    console.log();
+    answer.split('\n').forEach(l=>console.log('  '+l));
+    console.log();
+    octoMemory.add(`Q: ${message.slice(0,100)} → A: ${answer.slice(0,200)}`,'chat');
+  } catch(err){stopSpinner('failed',false);console.log(chalk.red(`  ${err.message}\n`));}
 }
 
-function getEnvVar(key) {
-  const match = readEnvFile().match(new RegExp(`^${key}=(.*)$`, 'm'));
-  return match ? match[1].trim() : (process.env[key] || '');
-}
-
-// ── Provider helpers ───────────────────────────────────────────────────────────
-const ALL_PROVIDERS = ['anthropic', 'openai', 'google', 'ollama', 'nvidia', 'huggingface', 'custom_http', 'router'];
-const PROVIDER_DOCS = {
-  anthropic:   'Claude (claude-sonnet-4-6)                ANTHROPIC_API_KEY',
-  openai:      'GPT-4o                                     OPENAI_API_KEY',
-  google:      'Gemini 2.0 Flash                           GOOGLE_API_KEY',
-  ollama:      'Ollama local (gemma4:e2b)                  no key needed',
-  nvidia:      'NVIDIA NIM (llama-3.1-405b)                NVIDIA_API_KEY  free at build.nvidia.com',
-  huggingface: 'HuggingFace Inference API (gemma-3-4b-it)  HF_TOKEN  free at huggingface.co',
-  custom_http: 'Custom OpenAI-compat server                CUSTOM_HTTP_URL + CUSTOM_HTTP_MODEL',
-  router:      'Smart per-agent router                     uses best provider per agent role',
-};
-
-// ── Prompt ─────────────────────────────────────────────────────────────────────
-let rl;
-
-function prompt() {
-  if (!rl) return;
-  rl.setPrompt(chalk.cyan('❯ '));
-  rl.prompt();
-}
-
-// ── Agent runner with live output ──────────────────────────────────────────────
+// ── Agent runners ─────────────────────────────────────────────────────────────────
 async function runPlan(task) {
-  startSpinner(`Cortex planning: ${chalk.white(task)}`);
+  startSpinner('Cortex planning…');
   try {
-    const memory    = require('./memory');
-    const { runAgent } = require('./agents');
-    const result    = await runAgent('cortex', { task, query: task }, memory);
-    stopSpinner('Cortex planning complete');
-
-    if (result?.plan) {
+    const {runAgent}=require('./agents');
+    const mem=require('./memory');
+    const r=await runAgent('cortex',{task:injectWorkspace(task),query:task},mem);
+    stopSpinner('Plan ready');
+    if (r?.plan){
       console.log(chalk.bold('\n  Execution plan:'));
-      result.plan.forEach((step, i) => {
-        console.log(`    ${chalk.cyan(`${i + 1}.`)} ${chalk.white(step.agent)} ${chalk.dim('— ' + (step.reason || ''))}`);
-      });
-      console.log(`\n  ${chalk.dim('Run with /run ' + task + ' to execute all agents.')}\n`);
-    } else {
-      console.log('  ' + JSON.stringify(result, null, 2));
-    }
-  } catch (err) {
-    stopSpinner('Planning failed', false);
-    console.log(chalk.red(`  Error: ${err.message}\n`));
-  }
+      r.plan.forEach((s,i)=>console.log(`    ${chalk.hex('#FFB347')(`${i+1}.`)} ${chalk.white(s.agent.padEnd(22))} ${chalk.dim(s.reason||'')}`));
+      console.log(chalk.dim(`\n  Execute: /run ${task}\n`));
+    } else console.log('  '+JSON.stringify(r,null,2)+'\n');
+  } catch(err){stopSpinner('Failed',false);console.log(chalk.red(`  ${err.message}\n`));}
 }
 
 async function runTask(task) {
-  console.log(chalk.bold(`\n  Running: ${chalk.cyan(task)}\n`));
+  const full=injectWorkspace(task);
+  console.log(chalk.bold(`\n  ${chalk.hex('#FF8C00')('⟩')} ${task}\n`));
   try {
-    const memory = require('./memory');
-    const { runTask: execTask } = require('./runner');
-
-    // Patch console.error to show agent progress live
-    const origErr = console.error.bind(console);
-    console.error = (...args) => {
-      const msg = args.join(' ');
-      if (msg.includes('[runner] Spawning')) {
-        const agent = msg.replace('[runner] Spawning', '').replace('…', '').trim();
-        process.stdout.write(`  ${chalk.cyan('→')} ${chalk.white(agent)}...\n`);
-      } else if (msg.includes('[runner] Parallel stage')) {
-        const agents = msg.replace('[runner] Parallel stage:', '').replace(/[\[\]]/g, '').trim();
-        process.stdout.write(`  ${chalk.magenta('⟦')} ${chalk.white(agents)} ${chalk.magenta('⟧')}  ${chalk.dim('(parallel)')}\n`);
-      } else if (msg.includes('[runner] Task:')) {
-        // skip
-      } else if (msg.startsWith('[llm] router:')) {
-        const parts = msg.replace('[llm] router:', '').trim();
-        process.stdout.write(`    ${chalk.dim('→ ' + parts)}\n`);
-      } else {
-        origErr(...args);
-      }
+    const mem=require('./memory');
+    const {runTask:exec}=require('./runner');
+    const orig=console.error.bind(console);
+    console.error=(...a)=>{
+      const m=a.join(' ');
+      if (m.includes('[runner] Spawning')) process.stdout.write(`  ${chalk.hex('#FFB347')('→')} ${chalk.white(m.replace('[runner] Spawning','').replace('…','').trim())}\n`);
+      else if (m.includes('[runner] Parallel stage')) process.stdout.write(`  ${chalk.cyan('⟦')} ${m.replace('[runner] Parallel stage:','').replace(/[\[\]]/g,'').trim()} ${chalk.cyan('⟧')}\n`);
+      else if (!m.includes('[runner] Task:')) orig(...a);
     };
-
-    const result = await execTask(task, memory);
-    console.error = origErr;
-
-    const approved = Object.values(result.results || {}).filter(r => r?.approved === true).length;
-    const errCount = (result.errors || []).length;
-
-    console.log(chalk.bold(`\n  ${chalk.green('✅')} Complete — ${approved} agents approved, ${errCount} errors`));
-    if (errCount > 0) {
-      result.errors.forEach(e => console.log(`    ${chalk.red('✗')} ${e.agent}: ${e.error}`));
-    }
-    if (result.tool_call_count) {
-      console.log(chalk.dim(`  Tool calls: ${result.tool_call_count}`));
-    }
+    const result=await exec(full,mem);
+    console.error=orig;
+    const ok=Object.values(result.results||{}).filter(r=>r?.approved===true).length;
+    const er=(result.errors||[]).length;
+    console.log(chalk.bold(`\n  ${chalk.green('✅')} Complete — ${ok} approved, ${er} errors`));
+    if (er) result.errors.forEach(e=>console.log(`    ${chalk.red('✗')} ${e.agent}: ${e.error}`));
     console.log();
-
-  } catch (err) {
-    console.log(chalk.red(`\n  Error: ${err.message}\n`));
-  }
+  } catch(err){console.log(chalk.red(`\n  ${err.message}\n`));}
 }
 
-// ── Commands ───────────────────────────────────────────────────────────────────
+// ── Command router ────────────────────────────────────────────────────────────────
 async function handleCommand(input) {
-  const trimmed = input.trim();
-  if (!trimmed) return;
+  const t=input.trim(); if (!t) return;
+  if (!t.startsWith('/')) { await chat(t); return; }
+  const parts=t.slice(1).split(' ');
+  const cmd=parts[0].toLowerCase(), arg=parts.slice(1).join(' ').trim();
 
-  // Plain text (no slash) = run task
-  if (!trimmed.startsWith('/')) {
-    await runTask(trimmed);
-    return;
-  }
-
-  const [cmd, ...rest] = trimmed.slice(1).split(' ');
-  const arg = rest.join(' ').trim();
-
-  switch (cmd.toLowerCase()) {
-
-    case 'plan':
-      if (!arg) { console.log(chalk.yellow('  Usage: /plan <task description>\n')); break; }
-      await runPlan(arg);
-      break;
+  switch(cmd) {
 
     case 'run':
-      if (!arg) { console.log(chalk.yellow('  Usage: /run <task description>\n')); break; }
-      await runTask(arg);
+      if (!arg){console.log(chalk.yellow('  Usage: /run <task>\n'));break;}
+      await runTask(arg); break;
+
+    case 'plan':
+      if (!arg){console.log(chalk.yellow('  Usage: /plan <task>\n'));break;}
+      await runPlan(arg); break;
+
+    case 'workspace': case 'ws': case 'clone': case 'load': {
+      if (!arg){
+        console.log(chalk.yellow('  Usage: /workspace <github-url|local-path>'));
+        console.log(chalk.dim('  e.g.  /workspace https://github.com/Boyapati13/Octopus-Agent-System'));
+        console.log(chalk.dim('        /workspace ~/projects/my-app\n')); break;
+      }
+      const ok=await loadWorkspace(arg);
+      if (ok){
+        console.log(chalk.green(`\n  ✅ Workspace: ${chalk.bold(workspace.name)}`));
+        console.log(chalk.dim(`  ${workspace.files.filter(e=>e.type==='f').length} files · /files to browse · /run to code\n`));
+      }
       break;
+    }
+
+    case 'files':
+      if (!workspace.root){console.log(chalk.yellow('  No workspace — use /workspace first\n'));break;}
+      console.log(chalk.bold(`\n  📁 ${workspace.name}  ${chalk.dim(workspace.root)}`));
+      console.log(chalk.dim('  ' + '─'.repeat(60)));
+      console.log(renderTree(workspace.files));
+      console.log(); break;
+
+    case 'context':
+      if (!workspace.root){console.log(chalk.yellow('  No workspace loaded\n'));break;}
+      console.log(chalk.bold('\n  Workspace context:'));
+      workspace.summary.split('\n').forEach(l=>console.log('  '+chalk.dim(l)));
+      console.log(); break;
 
     case 'agents': {
-      const { listAgents } = require('./agents');
-      const agents = listAgents();
+      const {listAgents}=require('./agents');
       console.log(chalk.bold('\n  Agents:'));
-      agents.forEach(a => {
-        const gate = a.canApprove ? chalk.red(' [gate]') : '';
-        console.log(`    ${chalk.cyan(a.name.padEnd(22))} ${chalk.dim(a.role)}${gate}`);
+      listAgents().forEach(a=>console.log(`    ${chalk.hex('#FFB347')(a.name.padEnd(22))} ${chalk.dim(a.role)}${a.canApprove?chalk.red(' [gate]'):''}`));
+      console.log(); break;
+    }
+
+    case 'tools':
+      console.log(chalk.bold('\n  Tools:'));
+      Object.entries(TOOL_GROUPS).forEach(([c,t])=>{
+        console.log(`\n    ${chalk.hex('#FFB347').bold(c)}`);
+        t.forEach(x=>console.log(`      ${chalk.cyan('•')} ${chalk.white(x)}`));
       });
-      console.log();
+      console.log(); break;
+
+    case 'routes': {
+      const {summarise}=require('./task_router');
+      const active=(getEnvVar('LLM_PROVIDER')||'ollama')==='router';
+      console.log(chalk.bold('\n  Task Router')+(active?chalk.green(' [ACTIVE]'):chalk.yellow(' [inactive — /provider set router]')));
+      console.log(chalk.dim('  '+'-'.repeat(64)));
+      summarise().forEach(r=>{
+        console.log(`  ${chalk.dim(r.role.padEnd(20))} ${chalk.hex('#FFB347')(r.provider.padEnd(14))} ${chalk.white(r.model.split('/').pop())}${r.overridden?chalk.yellow(' [override]'):''}`);
+        if (r.agents.length) console.log(`  ${' '.repeat(20)} ${chalk.dim('agents: '+r.agents.join(', '))}`);
+      });
+      console.log(chalk.dim('\n  Override any role: ROUTE_PLANNER=ollama:llama3.2 in node/.env\n'));
       break;
     }
 
     case 'models': {
-      const oll = await checkOllama();
+      const oll=await checkOllama();
+      const active=getEnvVar('LLM_MODEL')||MODEL;
       console.log(chalk.bold('\n  Ollama models:'));
-      if (!oll.ok) {
-        console.log(chalk.yellow('  Ollama offline. Start with: ollama serve'));
-      } else {
-        oll.models.forEach(m => {
-          const active = m === MODEL ? chalk.green(' ← active') : '';
-          console.log(`    ${chalk.cyan(m)}${active}`);
-        });
-      }
-      console.log(chalk.dim(`\n  Pull more: ollama pull gemma4:26b  |  ollama pull gemma4:31b`));
-      console.log(chalk.dim(`  See full guide: /routes\n`));
-      break;
-    }
-
-    case 'routes': {
-      const taskRouter = require('./task_router');
-      const routes     = taskRouter.summarise();
-      const active     = PROVIDER === 'router';
-      console.log(chalk.bold('\n  Task Router') + (active ? chalk.green('  [ACTIVE]') : chalk.yellow('  [inactive — set LLM_PROVIDER=router]')));
-      console.log();
-      for (const r of routes) {
-        const agents = r.agents.length ? chalk.dim(`  agents: ${r.agents.join(', ')}`) : '';
-        const ov = r.overridden ? chalk.yellow(' [overridden]') : '';
-        console.log(`    ${chalk.cyan(r.role.padEnd(18))} ${chalk.white(r.provider + ':' + r.model)}${ov}`);
-        if (agents) console.log(`    ${' '.repeat(18)} ${agents}`);
-      }
-      console.log();
-      if (!active) console.log(chalk.dim('  Enable: set LLM_PROVIDER=router in node/.env\n'));
+      if (!oll.ok) console.log(chalk.yellow('  Offline — start: ollama serve'));
+      else if (!oll.models.length) { console.log(chalk.dim('  None installed.')); console.log(chalk.dim('  Pull one: ollama pull gemma4:e2b')); }
+      else oll.models.forEach(m=>console.log(`    ${chalk.cyan(m)}${m===active?chalk.green(' ← active'):''}`));
+      console.log(chalk.dim('\n  Pull: ollama pull <name>   Switch: /provider set ollama <name>\n'));
       break;
     }
 
     case 'provider': {
-      const sub = arg.toLowerCase().split(' ')[0];
-      const extra = arg.split(' ').slice(1).join(' ').trim();
-
-      if (!sub || sub === 'show') {
-        // Show current active provider
-        const p = getEnvVar('LLM_PROVIDER') || 'anthropic';
-        const m = getEnvVar('LLM_MODEL') || chalk.dim('(provider default)');
-        const hm = getEnvVar('HEADLESS_MODE') === 'true';
-        console.log(chalk.bold('\n  Active LLM provider:'));
-        console.log(`    Provider   ${chalk.cyan(p)}`);
-        console.log(`    Model      ${chalk.cyan(m)}`);
-        console.log(`    Headless   ${hm ? chalk.orange('on') : chalk.dim('off')}`);
-        if (p === 'custom_http') {
-          console.log(`    URL        ${chalk.cyan(getEnvVar('CUSTOM_HTTP_URL') || chalk.red('NOT SET'))}`);
-        }
-        console.log(chalk.dim('\n  /provider list  to see all  |  /provider set <p> [model]  to switch\n'));
-        break;
+      const sub=parts[1]?.toLowerCase();
+      if (!sub||sub==='show'){
+        console.log(chalk.bold('\n  Active provider:'));
+        console.log(`    Provider  ${chalk.hex('#FFB347')(getEnvVar('LLM_PROVIDER')||'ollama')}`);
+        console.log(`    Model     ${chalk.white(getEnvVar('LLM_MODEL')||'(default)')}`);
+        console.log(chalk.dim('\n  Switch: /provider set <provider> [model]\n')); break;
       }
-
-      if (sub === 'list') {
-        const { getSecureKey } = require('./llm');
-        const currentP = getEnvVar('LLM_PROVIDER') || 'anthropic';
-        console.log(chalk.bold('\n  Available LLM providers:\n'));
-        for (const p of ALL_PROVIDERS) {
-          const active = p === currentP ? chalk.green(' ← active') : '';
-          const doc = PROVIDER_DOCS[p] || '';
-          // Check key availability (async, suppress for non-keyed providers)
-          const needsKey = !['ollama', 'router'].includes(p);
-          console.log(`    ${chalk.cyan(p.padEnd(14))} ${chalk.dim(doc)}${active}`);
-        }
-        console.log(chalk.dim('\n  To switch: /provider set ollama gemma4:e2b\n'));
-        break;
-      }
-
-      if (sub === 'set') {
-        // arg = "set ollama gemma4:e2b"  or  "set anthropic"
-        const parts = arg.split(' ').slice(1);  // remove 'set'
-        const newProvider = parts[0]?.toLowerCase();
-        const newModel    = parts.slice(1).join(' ').trim();
-
-        if (!newProvider || !ALL_PROVIDERS.includes(newProvider)) {
-          console.log(chalk.yellow(`  Usage: /provider set <provider> [model]`));
-          console.log(chalk.dim(`  Providers: ${ALL_PROVIDERS.join(', ')}\n`));
-          break;
-        }
-
-        setEnvVar('LLM_PROVIDER', newProvider);
-        if (newModel) setEnvVar('LLM_MODEL', newModel);
-
-        console.log(chalk.green(`\n  ✅ Set LLM_PROVIDER=${newProvider}${newModel ? ` LLM_MODEL=${newModel}` : ''}`));
-        console.log(chalk.yellow('  ⚠  Changes take effect after restarting Octopus.\n'));
-        break;
-      }
-
-      console.log(chalk.yellow(`  Usage: /provider  |  /provider list  |  /provider set <p> [model]\n`));
-      break;
-    }
-
-    case 'headless': {
-      const current = getEnvVar('HEADLESS_MODE') === 'true';
-
-      if (!arg) {
-        console.log(chalk.bold('\n  HEADLESS_MODE:'));
-        console.log(`    Current:   ${current ? chalk.orange('on  (external LLM is planner)') : chalk.green('off (Cortex is planner)')}`);
-        console.log(chalk.dim('\n  /headless on   — external LLM (Claude, Cursor, Windsurf) calls octopus_* tools'));
-        console.log(chalk.dim('  /headless off  — Cortex auto-plans and runs chains\n'));
-        break;
-      }
-
-      if (arg === 'on' || arg === 'true') {
-        setEnvVar('HEADLESS_MODE', 'true');
-        console.log(chalk.orange('\n  ⚡ HEADLESS_MODE enabled.'));
-        console.log(chalk.dim('  Cortex will not auto-plan. External LLM calls octopus_* MCP tools directly.'));
-        console.log(chalk.yellow('  Restart Octopus for this to take effect.\n'));
-      } else if (arg === 'off' || arg === 'false') {
-        setEnvVar('HEADLESS_MODE', 'false');
-        console.log(chalk.green('\n  ✅ HEADLESS_MODE disabled.'));
-        console.log(chalk.dim('  Cortex is the planner. Chains run automatically from /run <task>.'));
-        console.log(chalk.yellow('  Restart Octopus for this to take effect.\n'));
-      } else {
-        console.log(chalk.yellow('  Usage: /headless  |  /headless on  |  /headless off\n'));
+      if (sub==='set') {
+        const newP=parts[2]?.toLowerCase(), newM=parts.slice(3).join(' ').trim();
+        const ALL=['ollama','anthropic','openai','google','nvidia','huggingface','custom_http','router','openrouter'];
+        if (!newP||!ALL.includes(newP)){console.log(chalk.yellow(`  Providers: ${ALL.join(', ')}\n`));break;}
+        setEnvVar('LLM_PROVIDER',newP); if (newM) setEnvVar('LLM_MODEL',newM);
+        console.log(chalk.green(`  ✅ Set LLM_PROVIDER=${newP}${newM?` LLM_MODEL=${newM}`:''}`));
+        console.log(chalk.yellow('  Restart to apply.\n'));
       }
       break;
     }
 
-    case 'setup': {
-      await runSetupWizard();
-      break;
+    case 'setup': await runSetupWizard(); break;
+
+    case 'status': {
+      const [mem,oll]=await Promise.all([checkMemory(),checkOllama()]);
+      console.log(chalk.bold('\n  Services:'));
+      console.log(`    Memory    ${mem.ok?chalk.green('✅ online'):chalk.red('❌ offline')}  ${chalk.dim(MEMORY_URL)}`);
+      console.log(`    Ollama    ${oll.ok?chalk.green(`✅ ${oll.models.length} models`):chalk.yellow('⚠  offline')}  ${chalk.dim(OLLAMA_URL)}`);
+      console.log(`    Provider  ${chalk.hex('#FFB347')(getEnvVar('LLM_PROVIDER')||'ollama')}  ${chalk.dim(getEnvVar('LLM_MODEL'))}`);
+      if (workspace.root) console.log(`    Workspace ${chalk.hex('#FFB347')(workspace.name)}  ${chalk.dim(workspace.root)}`);
+      if (!mem.ok) console.log(chalk.yellow('\n  Start memory: python python/services/memory_service.py'));
+      if (!oll.ok) console.log(chalk.yellow('  Start Ollama: ollama serve'));
+      console.log(); break;
     }
 
     case 'dashboard': {
-      const portVal = process.env.PORT || 3001;
-      const url = `http://localhost:${portVal}/dashboard`;
-      console.log(chalk.bold(`\n  🐙 OctoDeck Dashboard`));
-      console.log(`    ${chalk.cyan(url)}`);
-      console.log(chalk.dim('\n  Open the URL above in your browser.'));
-      console.log(chalk.dim('  The server must be running (node src/server.js).\n'));
-      // Try to open in default browser
-      const { exec: execBrowser } = require('child_process');
-      const openCmd = process.platform === 'win32' ? `start ${url}` : process.platform === 'darwin' ? `open ${url}` : `xdg-open ${url}`;
-      execBrowser(openCmd, { timeout: 3000 }, () => {});
+      const url=`http://localhost:${process.env.PORT||3001}/dashboard`;
+      console.log(chalk.bold(`\n  Dashboard: ${chalk.hex('#FFB347')(url)}\n`));
+      try { require('child_process').exec(process.platform==='win32'?`start ${url}`:process.platform==='darwin'?`open ${url}`:`xdg-open ${url}`,{timeout:3000},()=>{}); } catch {}
       break;
     }
 
     case 'vault': {
-      startSpinner('Checking OS Vault...');
-      const vault = await checkVault();
-      stopSpinner('Vault check complete');
-      console.log(chalk.bold('\n  OS Vault status:'));
-      for (const [provider, status] of Object.entries(vault)) {
-        console.log(`    ${chalk.cyan(provider.padEnd(16))} ${status}`);
-      }
-      console.log(chalk.dim('\n  Authorize: /run octopus_login  or  type: octopus_login in your AI chat\n'));
-      break;
+      startSpinner('Checking keys…');
+      let v={};
+      try { const {getSecureKey}=require('./llm'); for (const p of ['anthropic','openai','google','nvidia','huggingface','openrouter']) v[p]=(await getSecureKey(p))?chalk.green('present'):chalk.dim('none'); } catch {}
+      stopSpinner('Done');
+      console.log(chalk.bold('\n  API Keys:'));
+      Object.entries(v).forEach(([p,s])=>console.log(`    ${chalk.hex('#FFB347')(p.padEnd(16))} ${s}`));
+      console.log(); break;
     }
 
-    case 'status': {
-      startSpinner('Checking services...');
-      const [mem, oll] = await Promise.all([checkMemory(), checkOllama()]);
-      stopSpinner('Status check complete');
-      console.log(chalk.bold('\n  Services:'));
-      console.log(`    Memory   ${mem.ok ? chalk.green('✅ online') : chalk.red('❌ offline')}  ${chalk.dim(MEMORY_URL)}`);
-      console.log(`    Ollama   ${oll.ok ? chalk.green(`✅ ${oll.models.length} models`) : chalk.yellow('⚠️  offline')}  ${chalk.dim(OLLAMA_URL)}`);
-      console.log(`    Provider ${chalk.cyan(PROVIDER)}  ${chalk.dim('model: ' + MODEL)}`);
-      console.log();
-      if (!mem.ok) console.log(chalk.yellow('  Start memory: py python/services/memory_service.py'));
-      if (!oll.ok) console.log(chalk.yellow('  Start Ollama: ollama serve'));
-      console.log();
-      break;
-    }
+    case 'clear': await showBanner(); break;
 
-    case 'update': {
-      const { checkForUpdate, applyUpdate } = require('./updater');
-      startSpinner('Checking for updates...');
-      const upd = await checkForUpdate();
-      stopSpinner('Update check complete');
-      if (upd.error) { console.log(chalk.yellow(`  Could not check: ${upd.error}\n`)); break; }
-      if (!upd.hasUpdate) {
-        console.log(chalk.green(`\n  Already up to date (${upd.local})\n`));
-        break;
-      }
-      console.log(chalk.yellow(`\n  Update available: ${upd.local} → ${chalk.cyan(upd.remote)}`));
-      console.log(`  ${chalk.dim(upd.message)}\n`);
-      console.log(chalk.dim('  Applying update...'));
-      const res = await applyUpdate(msg => console.log(chalk.dim(msg)));
-      if (res.ok) {
-        console.log(chalk.green('\n  ✅ Updated. Please restart Octopus.\n'));
-        process.exit(0);
-      } else {
-        console.log(chalk.red(`\n  Update failed: ${res.error}\n`));
-      }
-      break;
-    }
+    case 'help': printHelp(); break;
 
-    case 'update-models': {
-      const { listOllamaModels, updateOllamaModels } = require('./updater');
-      const models = await listOllamaModels();
-      if (!models.length) { console.log(chalk.yellow('\n  No models installed. Run: ollama pull gemma4:e2b\n')); break; }
-      console.log(chalk.bold(`\n  Re-pulling ${models.length} model(s) to check for updates...\n`));
-      const results = await updateOllamaModels(models, msg => console.log(chalk.dim(msg)));
-      results.forEach(r => {
-        const icon = r.ok ? chalk.green('✅') : chalk.red('❌');
-        console.log(`  ${icon} ${r.model}  ${chalk.dim(r.output)}`);
-      });
-      console.log();
-      break;
-    }
-
-    case 'help':
-      printHelp();
-      break;
-
-    case 'exit':
-    case 'quit':
-      console.log(chalk.cyan('\n  Goodbye 🐙\n'));
-      process.exit(0);
-      break;
-
-    case 'clear':
-      showBanner();
-      return;
+    case 'exit': case 'quit':
+      console.log(chalk.hex('#FF8C00')('\n  Goodbye 🐙\n')); process.exit(0); break;
 
     default:
-      console.log(chalk.yellow(`  Unknown command: /${cmd}. Type /help for a list.\n`));
+      console.log(chalk.yellow(`  Unknown: /${cmd} — /help\n`));
   }
 }
 
-// ── Main ────────────────────────────────────────────────────────────────────────
-async function main() {
-  rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-  rl.on('line', async (input) => {
-    rl.pause();
-    await handleCommand(input);
-    prompt();
-    rl.resume();
-  });
-  rl.on('close', () => { console.log(chalk.cyan('\n  Goodbye 🐙\n')); process.exit(0); });
-
-  await showBanner();
+// ── REPL ─────────────────────────────────────────────────────────────────────────
+let rl;
+function prompt() {
+  if (!rl) return;
+  const ws=workspace.name?chalk.dim(` ${workspace.name}`):'';
+  rl.setPrompt(chalk.hex('#FF8C00').bold('❯')+chalk.hex('#FFB347')(ws)+chalk.hex('#FF8C00')(' '));
+  rl.prompt();
 }
 
-main().catch(err => { console.error(chalk.red('Fatal: ' + err.message)); process.exit(1); });
+async function main() {
+  rl=readline.createInterface({input:process.stdin,output:process.stdout,terminal:true});
+  rl.on('line',async input=>{ rl.pause(); await handleCommand(input); prompt(); rl.resume(); });
+  rl.on('close',()=>{ console.log(chalk.hex('#FF8C00')('\n  Goodbye 🐙\n')); process.exit(0); });
+  await showBanner();
+  prompt();
+}
+
+main().catch(err=>{ console.error(chalk.red('Fatal: '+err.message)); process.exit(1); });
