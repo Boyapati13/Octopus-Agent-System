@@ -296,6 +296,42 @@ const TOOLS = [
       required: ['name'],
     },
   },
+  {
+    name: 'octopus_windows_control',
+    description: 'Full Windows desktop automation: take screenshots, move/click the mouse, type text, press keys, manage processes, control windows, read/write clipboard, get system info, send notifications, set volume, and open files. All via PowerShell — no extra installs needed. Windows only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'screenshot','mouse_move','mouse_click','type_text','key_press',
+            'get_clipboard','set_clipboard','list_processes','start_process',
+            'kill_process','list_windows','focus_window','system_info',
+            'send_notification','run_powershell','open_file',
+            'set_volume','minimize_window','maximize_window',
+          ],
+          description: 'The Windows action to perform',
+        },
+        x:       { type: 'number',  description: 'Mouse X coordinate' },
+        y:       { type: 'number',  description: 'Mouse Y coordinate' },
+        button:  { type: 'string',  enum: ['left','right','double'], description: 'Mouse button' },
+        text:    { type: 'string',  description: 'Text to type or set in clipboard' },
+        keys:    { type: 'string',  description: 'Key combo, e.g. CTRL+C, WIN+D, ALT+F4' },
+        process: { type: 'string',  description: 'Process name or path to start/kill' },
+        pid:     { type: 'number',  description: 'PID to kill' },
+        args:    { type: 'string',  description: 'Args for start_process' },
+        title:   { type: 'string',  description: 'Window title (partial) for focus/min/max' },
+        handle:  { type: 'string',  description: 'Window handle from list_windows' },
+        message: { type: 'string',  description: 'Notification body text' },
+        heading: { type: 'string',  description: 'Notification title' },
+        script:  { type: 'string',  description: 'PowerShell script for run_powershell' },
+        volume:  { type: 'number',  description: 'Volume 0-100 for set_volume' },
+        file:    { type: 'string',  description: 'File path to open' },
+      },
+      required: ['action'],
+    },
+  },
 ];
 
 module.exports = { TOOLS };

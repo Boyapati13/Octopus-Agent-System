@@ -10,7 +10,7 @@ const { compressProse } = require('../compress');
 const AGENT_FILES = [
   'cortex', 'atlas', 'architect', 'forge',
   'reviewer', 'securityReviewer', 'factChecker', 'probe', 'scribe', 'releaseKeeper',
-  'navigator', 'marketScout', 'toolsmith', 'sandboxQA',
+  'navigator', 'marketScout', 'toolsmith', 'sandboxQA', 'systemAgent',
 ];
 
 const _registry = {};

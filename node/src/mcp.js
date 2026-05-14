@@ -12,6 +12,7 @@ const path = require('path');
 const { exec }  = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const axios = require('axios');
 const memory = require('./memory');
 const { runTask } = require('./runner');
 const { runAgent, injectAgent } = require('./agents');
@@ -375,6 +376,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         } catch (pluginErr) {
           throw new OctopusError(KINDS.SYSTEM_ERROR, pluginErr.message);
         }
+      }
+
+      case 'octopus_windows_control': {
+        if (process.platform !== 'win32') {
+          return { content: [{ type: 'text', text: JSON.stringify({ ok: false, error: 'octopus_windows_control is Windows-only' }) }], isError: true };
+        }
+        const winCtrl = require('../../../tools/windows-control/index.js');
+        const result  = await winCtrl(args);
+        // Keep screenshot base64 out of the MCP text if huge
+        const display = (result.base64 && result.base64.length > 500)
+          ? { ...result, base64: `[${result.base64.length} bytes — use octopus_windows_control screenshot to get full data]` }
+          : result;
+        return { content: [{ type: 'text', text: JSON.stringify(display, null, 2) }] };
       }
 
       case 'octopus_memory_status': {

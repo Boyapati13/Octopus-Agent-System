@@ -25,6 +25,25 @@ const REQUIRED_SKILLS = ['get_run_state', 'writeback'];
 //   Research-first: Atlas + FactChecker before any implementation
 //   Parallel QA:    Reviewer ‖ SecurityReviewer ‖ Probe ‖ FactChecker (grouped by runner)
 const KEYWORD_ROUTES = [
+  // Windows system / desktop automation — highest priority
+  { re: /screenshot|screen.?shot|take.?a.?picture.?of.?screen|capture.?screen/i,
+    agents: ['SystemAgent'] },
+  { re: /\b(mouse|click|right.?click|double.?click|type.?text|type.?in|press.?key|hotkey|keyboard|sendkeys)\b/i,
+    agents: ['SystemAgent'] },
+  { re: /\b(open.?window|close.?window|minimize|maximize|focus.?window|list.?windows|window.?title)\b/i,
+    agents: ['SystemAgent'] },
+  { re: /\b(kill.?process|start.?process|launch.?app|open.?app|list.?processes|running.?processes|task.?manager)\b/i,
+    agents: ['SystemAgent'] },
+  { re: /\b(clipboard|copy.?to.?clipboard|paste.?from.?clipboard|set.?clipboard|get.?clipboard)\b/i,
+    agents: ['SystemAgent'] },
+  { re: /\b(system.?info|cpu.?usage|ram.?usage|disk.?space|uptime|computer.?name|windows.?version)\b/i,
+    agents: ['SystemAgent'] },
+  { re: /\b(toast.?notification|send.?notification|desktop.?alert|system.?tray)\b/i,
+    agents: ['SystemAgent'] },
+  { re: /\b(set.?volume|mute|unmute|volume.?level|audio)\b/i,
+    agents: ['SystemAgent'] },
+  { re: /\b(open.?file|open.?folder|launch.?with|open.?document)\b/i,
+    agents: ['SystemAgent'] },
   // Skill evolution
   { re: /skill|evolve|marketplace|scout|toolsmith|synthesize|new.?tool|market/i,
     agents: ['MarketScout','Toolsmith','SandboxQA','Scribe'] },

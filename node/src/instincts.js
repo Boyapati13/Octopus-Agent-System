@@ -81,7 +81,7 @@ function similarity(a, b) {
 function cluster(candidates) {
   const clustered = [];
   for (const c of candidates) {
-    const existing = clustered.find(e => similarity(e.pattern, c.pattern) >= 0.35);
+    const existing = clustered.find(e => similarity(e.pattern, c.pattern) >= 0.55);
     if (existing) {
       existing.occurrences++;
       existing.confidence = Math.min(1.0, existing.confidence + 0.1);

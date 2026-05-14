@@ -54,6 +54,12 @@ function cleanVoiceAnswer(text) {
     .replace(/\s*at\s+https?:\/\/\S+/g, '')
     .replace(/\.\s*\./g, '.')                              // double periods
     .replace(/\s{2,}/g, ' ')
+    .trim()
+    // Remove any appended Q/A transcripts or example Q: blocks that models sometimes append
+    // e.g. "\nQ: ...\nA: ..." or ". Q: ..." inline continuations.
+    .replace(/\nQ:\s*[\s\S]*$/i, '')
+    .replace(/\.\s+Q:\s*[\s\S]*$/i, '')           // catch same-line ". Q: ..." continuation
+    .replace(/Q:\s*[^\n]*?→\s*A:\s*[^\n]*/ig, '')
     .trim();
 }
 
@@ -569,6 +575,20 @@ app.post('/api/tasks/ask', async (req, res) => {
     return res.json({ ok: true, text, project_id: project.id, remembered: toRemember });
   }
 
+  // ── Handle time queries directly — server clock, no LLM/search needed ──────
+  const TIME_RE = /\b(what(?:'s| is) the time|current time|time now|what time is it|tell me the time)\b/i;
+  if (TIME_RE.test(text)) {
+    const answer = `The current time is ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' })}.`;
+    setProjectAnswer(project.id, answer, 'done');
+    broadcastEvent('chain_start',     { task: text, plan: ['answer'], project_id: project.id });
+    broadcastEvent('agent_done',      { agent: 'answer', approved: true, project_id: project.id });
+    broadcastEvent('voice_summary',   { summary: answer, success: true, project_id: project.id });
+    broadcastEvent('chain_done',      { task: text, success: true, duration_ms: 0, project_id: project.id });
+    broadcastEvent('project_updated', { project_id: project.id, type: 'chain_done', project: serializeProject(getProject(project.id)) });
+    octoMemory.add(`Q: ${text.slice(0, 120)} → A: ${answer.slice(0, 200)}`, 'qa');
+    return res.json({ ok: true, text, project_id: project.id });
+  }
+
   activeProjectId = project.id;
   startChain(project.id, text);
   setProjectAnswer(project.id, 'Searching…', 'running');
@@ -593,10 +613,12 @@ app.post('/api/tasks/ask', async (req, res) => {
       const memCtx  = octoMemory.format(8);
       const memBlock = memCtx ? `Known context: ${memCtx}\n` : '';
 
-      // Few-shot prompt — base models learn from examples, not rules
+      // Few-shot prompt — base models learn from examples, not rules.
+      // NOTE: Do NOT use a temperature/weather example here; it causes time queries
+      // to return temperature values. Time queries are handled above before this point.
       const prompt = snippet
-        ? `Q: What is the capital of France?\nA: Paris is the capital of France.\n\nQ: What is 15 celsius in fahrenheit?\nA: 15 degrees Celsius equals 59 degrees Fahrenheit.\n\nQ: What is the weather in London?\nSearch data: London: 18°C, partly cloudy, light winds.\nA: It is 18 degrees in London right now, partly cloudy with light winds.\n\n${memBlock}Q: ${text}\nSearch data: ${snippet}\nA:`
-        : `Q: What is the capital of France?\nA: Paris is the capital of France.\n\nQ: What is 15 celsius in fahrenheit?\nA: 15 degrees Celsius equals 59 degrees Fahrenheit.\n\n${memBlock}Q: ${text}\nA:`;
+        ? `Q: What is the capital of France?\nA: Paris is the capital of France.\n\nQ: Who painted the Mona Lisa?\nSearch data: Leonardo da Vinci painted the Mona Lisa circa 1503-1519.\nA: The Mona Lisa was painted by Leonardo da Vinci.\n\nQ: What is the weather in Tokyo today?\nSearch data: Tokyo weather: sunny skies, 24 degrees Celsius, humidity 58%.\nA: The current weather in Tokyo is sunny and 24 degrees Celsius.\n\n${memBlock}Q: ${text}\nSearch data: ${snippet}\nA:`
+        : `Q: What is the capital of France?\nA: Paris is the capital of France.\n\nQ: Who painted the Mona Lisa?\nA: The Mona Lisa was painted by Leonardo da Vinci.\n\nQ: What is 15 celsius in fahrenheit?\nA: 15 degrees Celsius equals 59 degrees Fahrenheit.\n\n${memBlock}Q: ${text}\nA:`;
 
       const raw    = await complete(prompt, { maxTokens: 120 });
       const answer = cleanVoiceAnswer(raw);

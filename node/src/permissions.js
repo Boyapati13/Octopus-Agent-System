@@ -60,6 +60,9 @@ const AGENT_PERMISSIONS = {
   sandboxqa: [
     'getContext', 'writeback',
   ],
+  systemagent: [
+    'getContext', 'writeback',
+  ],
 };
 
 // Pure utility methods — always accessible, never destructive

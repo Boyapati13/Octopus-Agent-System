@@ -37,6 +37,7 @@ function registerHookGuard(id) {
 // ── Fatal patterns — blocked instantly, zero AI tokens ────────────────────────
 
 const FATAL_COMMAND_PATTERNS = [
+  // Unix destructive
   /rm\s+-[rRfF]{1,2}\s+\/\s*$/,
   /rm\s+-[rRfF]{1,2}\s+\/\*/,
   /rm\s+-[rRfF]{1,2}\s+~\s*$/,
@@ -45,6 +46,17 @@ const FATAL_COMMAND_PATTERNS = [
   /dd\s+.*\bof=\/dev\/[sh]d[a-z]/i,
   />\s*\/dev\/[sh]d[a-z]\b/,
   /chmod\s+-R\s+777\s+\//i,
+  // Windows/PowerShell destructive
+  /Remove-Item\s+.*-Recurse.*-Force\s+[A-Z]:\\/i,  // recursive delete from drive root
+  /Format-Volume\b/i,                               // format a drive
+  /Clear-Disk\b/i,                                  // wipe disk
+  /Initialize-Disk\b/i,                             // reinitialize disk
+  /reg\s+delete\s+HKLM\\SYSTEM/i,                  // delete critical registry hive
+  /reg\s+delete\s+HKLM\\SOFTWARE\\Microsoft/i,     // delete core Windows registry
+  /bcdedit.*\/delete/i,                             // delete boot entry
+  /Stop-Computer\b/i,                               // system shutdown
+  /Restart-Computer\b/i,                            // system restart
+  /Disable-WindowsOptionalFeature.*-FeatureName\s+\w+/i, // disable OS features
 ];
 
 const FATAL_SQL_PATTERNS = [

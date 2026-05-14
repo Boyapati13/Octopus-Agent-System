@@ -1,0 +1,39 @@
+{
+  "name": "windows-control",
+  "description": "Full Windows desktop control: mouse, keyboard, screenshots, process management, window management, clipboard, system info, notifications, and file opening. All operations via PowerShell — no extra dependencies required.",
+  "tier": "high-risk",
+  "platform": "win32",
+  "version": "1.0.0",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "screenshot", "mouse_move", "mouse_click", "type_text", "key_press",
+          "get_clipboard", "set_clipboard", "list_processes", "start_process",
+          "kill_process", "list_windows", "focus_window", "system_info",
+          "send_notification", "run_powershell", "open_file",
+          "set_volume", "minimize_window", "maximize_window"
+        ],
+        "description": "The Windows control action to perform"
+      },
+      "x":         { "type": "number",  "description": "Mouse X coordinate (pixels)" },
+      "y":         { "type": "number",  "description": "Mouse Y coordinate (pixels)" },
+      "button":    { "type": "string",  "enum": ["left","right","double"], "description": "Mouse button for click" },
+      "text":      { "type": "string",  "description": "Text to type or clipboard content" },
+      "keys":      { "type": "string",  "description": "Key combo to press, e.g. 'CTRL+C', 'WIN+D', 'ALT+F4', 'ENTER'" },
+      "process":   { "type": "string",  "description": "Process name or path to start/kill" },
+      "pid":       { "type": "number",  "description": "Process ID to kill" },
+      "args":      { "type": "string",  "description": "Arguments for start_process" },
+      "title":     { "type": "string",  "description": "Window title (partial match) for focus/minimize/maximize" },
+      "handle":    { "type": "string",  "description": "Window handle (from list_windows) for focus/minimize/maximize" },
+      "message":   { "type": "string",  "description": "Notification message text" },
+      "heading":   { "type": "string",  "description": "Notification heading/title" },
+      "script":    { "type": "string",  "description": "PowerShell script to execute (run_powershell action)" },
+      "volume":    { "type": "number",  "description": "Volume level 0-100 for set_volume" },
+      "file":      { "type": "string",  "description": "File path to open with default application" }
+    },
+    "required": ["action"]
+  }
+}
