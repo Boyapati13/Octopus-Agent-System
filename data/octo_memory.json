@@ -40,5 +40,11 @@
     "text": "Q: what is the current weather → A: The current conditions in Sliema are as follows: Temperature: 18 degrees Celsius (64.4 degrees Fahrenheit)\nWind speed: 3 knots (5 km/hour or 6 mph)\nHumidity: 72%\nPressure: 1016 millibars\nUV index: 2 (",
     "context": "qa",
     "created_at": "2026-05-13T12:12:28.487Z"
+  },
+  {
+    "id": 1778731565766,
+    "text": "test memory entry",
+    "context": "test-context",
+    "created_at": "2026-05-14T04:06:05.766Z"
   }
 ]

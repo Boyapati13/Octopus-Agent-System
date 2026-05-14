@@ -484,7 +484,33 @@ app.post('/api/tasks/run', async (req, res) => {
       };
       const result = await runTask(task, memory, emit);
       const agentCount = Array.isArray(result?.agents_spawned) ? result.agents_spawned.length : 0;
-      const finalAnswer = result?.answer || `Completed. ${agentCount} agents ran.`;
+
+      // Synthesize a human-readable answer from agent outputs
+      // runner.js never sets result.answer — build it from agent results
+      const agentOutputs = Object.entries(result.results || {})
+        .filter(([name]) => name !== 'cortex')
+        .map(([name, r]) => {
+          const parts = [];
+          if (r?.advice)          parts.push(r.advice);
+          if (r?.changelog_entry) parts.push(`Changelog: ${r.changelog_entry}`);
+          if (Array.isArray(r?.findings) && r.findings.length)
+            parts.push(`Findings: ${r.findings.slice(0, 3).join('; ')}`);
+          if (Array.isArray(r?.edits) && r.edits.length)
+            parts.push(`Edits: ${r.edits.slice(0, 3).join(', ')}`);
+          return parts.length ? `[${name}] ${parts.join(' | ')}` : null;
+        })
+        .filter(Boolean);
+
+      let finalAnswer;
+      if (agentOutputs.length) {
+        const synthesis = await complete(
+          `Summarise these agent results into a concise reply to the user.\nTask: "${task}"\n\nOutputs:\n${agentOutputs.join('\n')}\n\nReply:`,
+          { maxTokens: 400, timeout: 20000 }
+        ).catch(() => null);
+        finalAnswer = (synthesis || '').trim() || agentOutputs.join('\n');
+      } else {
+        finalAnswer = `Task complete — ${agentCount} agents ran.`;
+      }
       setProjectAnswer(project.id, finalAnswer, 'done');
       // Broadcast so the dashboard output panel updates with the final answer
       broadcastEvent('project_updated', {
