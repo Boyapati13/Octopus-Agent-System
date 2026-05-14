@@ -1941,10 +1941,25 @@
     function startVoiceInput() {
       const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!Recognition) {
-        logLine("log-error", "VOICE", "Speech recognition not supported in this browser");
+        const msg = "Voice not supported. Use Chrome or Edge — not Firefox. Open: http://localhost:3001";
+        logLine("log-error", "VOICE", msg);
+        state.answer = msg;
+        renderAnswer();
         return;
       }
       if (state.listening) return;
+
+      // Pre-check microphone permission before starting
+      if (navigator.permissions) {
+        navigator.permissions.query({ name: "microphone" }).then(function(result) {
+          if (result.state === "denied") {
+            const msg = "Microphone blocked. Click the 🔒 lock in your browser address bar, allow microphone, then refresh.";
+            logLine("log-error", "VOICE", msg);
+            state.answer = msg;
+            renderAnswer();
+          }
+        }).catch(function() { /* permission API not available — proceed anyway */ });
+      }
 
       // Re-enable wake word for this session
       state.wakeEnabled = true;
@@ -1979,7 +1994,17 @@
         rec.onerror = function(e) {
           state.listening = false;
           el.voiceBtn.textContent = "⬤ Voice";
-          logLine("log-error", "VOICE", "Error: " + (e.error || "unknown"));
+          const errMap = {
+            "not-allowed":       "Microphone blocked. Click the 🔒 lock icon in your browser address bar → allow microphone → refresh.",
+            "permission-denied": "Microphone permission denied. Allow it in browser settings and refresh.",
+            "no-speech":         "No speech detected. Speak clearly after clicking Voice.",
+            "audio-capture":     "No microphone found. Plug in a mic and try again.",
+            "network":           "Network error. Make sure you're on http://localhost:3001",
+            "service-not-allowed": "Use Chrome or Edge — Firefox does not support voice input.",
+          };
+          const msg = errMap[e.error] || ("Voice error: " + (e.error || "unknown") + " — try Chrome/Edge on http://localhost");
+          logLine("log-error", "VOICE", msg);
+          state.answer = msg;
           renderAnswer();
           if (state.wakeEnabled) setTimeout(startWakeWord, 1500);
         };

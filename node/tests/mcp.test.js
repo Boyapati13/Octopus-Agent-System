@@ -29,7 +29,7 @@ afterAll(async () => {
 test('listTools returns exactly 26 tools', async () => {
   const response = await client.listTools();
   expect(response.tools).toBeDefined();
-  expect(response.tools.length).toBe(26);
+  expect(response.tools.length).toBe(27);
 
   const toolNames = response.tools.map(t => t.name);
   // Core task orchestration

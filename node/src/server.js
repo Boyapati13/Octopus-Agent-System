@@ -613,14 +613,12 @@ app.post('/api/tasks/ask', async (req, res) => {
       const memCtx  = octoMemory.format(8);
       const memBlock = memCtx ? `Known context: ${memCtx}\n` : '';
 
-      // Few-shot prompt — base models learn from examples, not rules.
-      // NOTE: Do NOT use a temperature/weather example here; it causes time queries
-      // to return temperature values. Time queries are handled above before this point.
-      const prompt = snippet
-        ? `Q: What is the capital of France?\nA: Paris is the capital of France.\n\nQ: Who painted the Mona Lisa?\nSearch data: Leonardo da Vinci painted the Mona Lisa circa 1503-1519.\nA: The Mona Lisa was painted by Leonardo da Vinci.\n\nQ: What is the weather in Tokyo today?\nSearch data: Tokyo weather: sunny skies, 24 degrees Celsius, humidity 58%.\nA: The current weather in Tokyo is sunny and 24 degrees Celsius.\n\n${memBlock}Q: ${text}\nSearch data: ${snippet}\nA:`
-        : `Q: What is the capital of France?\nA: Paris is the capital of France.\n\nQ: Who painted the Mona Lisa?\nA: The Mona Lisa was painted by Leonardo da Vinci.\n\nQ: What is 15 celsius in fahrenheit?\nA: 15 degrees Celsius equals 59 degrees Fahrenheit.\n\n${memBlock}Q: ${text}\nA:`;
+      // Instruction-style prompt — works with all chat/instruction models (Gemma, Llama, Qwen-instruct).
+      // One clear rule: answer in ONE sentence, no markdown, no URLs, no follow-up questions.
+      const snippetBlock = snippet ? `\nRelevant search results:\n${snippet}\n` : '';
+      const prompt = `You are OCTO, a concise voice assistant. Answer the question below in ONE short sentence. No markdown, no URLs, no bullet points, no follow-up questions.\n${memBlock}${snippetBlock}\nQuestion: ${text}\nAnswer:`;
 
-      const raw    = await complete(prompt, { maxTokens: 120 });
+      const raw    = await complete(prompt, { maxTokens: 150 });
       const answer = cleanVoiceAnswer(raw);
       broadcastEvent('agent_done', { agent: 'answer', approved: true, project_id: project.id });
 

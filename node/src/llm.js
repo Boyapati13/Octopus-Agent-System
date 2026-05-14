@@ -349,12 +349,34 @@ async function completeOllama(prompt, opts = {}) {
   }
 
   return withRetry(async () => {
-    const res = await axios.post(
-      `${base}/api/generate`,
-      { model, prompt, stream: false, options: { num_predict: opts.maxTokens || 1024 } },
-      { timeout: opts.timeout || 120000 }  // 120s: large models need time to cold-load
-    );
-    return res.data.response;
+    // Use /api/chat for instruction-tuned models (cleaner, no Q:A: completion bleed).
+    // Pass think:false to suppress inner-monologue tokens on thinking models (gemma4, deepseek-r1).
+    // Fall back to /api/generate for base models that don't support the chat endpoint.
+    try {
+      const res = await axios.post(
+        `${base}/api/chat`,
+        {
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false,
+          think: false,          // disable CoT tokens on thinking models (gemma4, deepseek-r1)
+          options: { num_predict: opts.maxTokens || 1024 },
+        },
+        { timeout: opts.timeout || 120000 }
+      );
+      const content = (res.data.message?.content || '').trim();
+      if (content) return content;
+      // Thinking model returned empty content — retry via generate
+      throw new Error('empty chat content');
+    } catch {
+      // Fallback: /api/generate for base models (qwen-coder-base, llama-base, etc.)
+      const res = await axios.post(
+        `${base}/api/generate`,
+        { model, prompt, stream: false, options: { num_predict: opts.maxTokens || 1024 } },
+        { timeout: opts.timeout || 120000 }
+      );
+      return res.data.response;
+    }
   });
 }
 

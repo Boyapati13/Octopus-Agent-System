@@ -40,7 +40,7 @@ test('GET /api/health returns ok', async () => {
 test('GET /api/agents lists 14 agents', async () => {
   const res = await request(app).get('/api/agents');
   expect(res.status).toBe(200);
-  expect(res.body.length).toBe(14);
+  expect(res.body.length).toBe(15);
 });
 
 test('POST /api/onboard returns indexed_files', async () => {
