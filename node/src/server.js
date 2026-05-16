@@ -1282,6 +1282,15 @@ app.post('/api/gateways/whatsapp/pair', async (req, res) => {
   }
 });
 
+// ── Internal Events ────────────────────────────────────────────────────────────
+app.post('/api/events/internal', (req, res) => {
+  const { type, data } = req.body || {};
+  if (type === 'agent_spawned' && data) {
+    broadcastEvent('agent_spawned', data);
+  }
+  res.json({ ok: true });
+});
+
 // ── Setup wizard ──────────────────────────────────────────────────────────────
 app.use('/api/setup', setupRouter);
 app.get('/setup', (_req, res) => res.sendFile(SETUP_HTML));

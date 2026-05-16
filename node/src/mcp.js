@@ -142,6 +142,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const agentPath     = path.join(__dirname, 'agents', sanitizedName + '.js');
         fs.writeFileSync(agentPath, agentSource, 'utf8');
         injectAgent(sanitizedName);
+        try {
+          const axios = require('axios');
+          axios.post('http://localhost:3001/api/events/internal', {
+            type: 'agent_spawned',
+            data: { agent: sanitizedName }
+          }).catch(() => {});
+        } catch(e) {}
         return { content: [{ type: 'text', text: `Agent ${args.agentName} created and injected successfully.` }] };
       }
 
