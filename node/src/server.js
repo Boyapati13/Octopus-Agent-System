@@ -906,7 +906,11 @@ app.post('/api/tasks/self-code', async (req, res) => {
   if (!instruction) return res.status(400).json({ error: 'instruction required' });
 
   const SRC = path.join(__dirname);
-  const allowed = ['server.js', 'llm.js', 'octo_memory.js', 'setup-api.js', 'tools/web_search.js'];
+  const allowed = fs.readdirSync(SRC).filter(f => f.endsWith('.js')).concat(
+    fs.readdirSync(path.join(SRC, 'agents')).filter(f => f.endsWith('.js')).map(f => 'agents/' + f),
+    fs.readdirSync(path.join(SRC, 'gateways')).filter(f => f.endsWith('.js')).map(f => 'gateways/' + f),
+    fs.readdirSync(path.join(SRC, 'tools')).filter(f => f.endsWith('.js')).map(f => 'tools/' + f)
+  );
   const targets = (files || ['server.js']).filter(f => allowed.includes(f));
   if (!targets.length) return res.status(400).json({ error: 'No valid files specified. Allowed: ' + allowed.join(', ') });
 
