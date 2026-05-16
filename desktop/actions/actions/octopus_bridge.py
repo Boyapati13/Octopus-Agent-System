@@ -5,7 +5,7 @@ The Octopus server (Node.js, port 3001) runs:
   - Cortex planner  → Atlas memory → Architect → Forge → Reviewer → SecurityReviewer
   - Probe (tests) → FactChecker → Scribe → ReleaseKeeper
 
-This bridge sends tasks to it via HTTP and streams results back to the Mark-XXXIX UI.
+This bridge sends tasks to it via HTTP and streams results back to the Octopus UI.
 
 Usage (called by dev_agent, code_helper, or directly from main.py tool dispatch):
   result = octopus_run(task, project_root=None, speak=None, log=None)
@@ -23,7 +23,6 @@ import requests
 OCTOPUS_BASE    = "http://localhost:3001"
 DEFAULT_TIMEOUT = 300   # 5 min max for full pipeline
 POLL_INTERVAL   = 2     # seconds between status polls
-PROJECT_ID      = None  # auto-assigned per session
 
 
 def _octopus_available() -> bool:
@@ -36,20 +35,16 @@ def _octopus_available() -> bool:
 
 def _get_or_create_project() -> str:
     """Use or create the active Octopus project."""
-    global PROJECT_ID
-    if PROJECT_ID:
-        return PROJECT_ID
     try:
         r = requests.get(f"{OCTOPUS_BASE}/api/status", timeout=5)
+        r.raise_for_status()
         data = r.json()
         pid = data.get("active_project_id")
         if pid:
-            PROJECT_ID = pid
             return pid
-    except Exception:
+    except requests.RequestException:
         pass
-    PROJECT_ID = f"mark-xxxix-{int(time.time())}"
-    return PROJECT_ID
+    return f"octopus-session-{int(time.time())}"
 
 
 def _stream_events(project_id: str, log: Optional[Callable], stop_event: threading.Event):
@@ -58,9 +53,12 @@ def _stream_events(project_id: str, log: Optional[Callable], stop_event: threadi
     last_answer = ""
     while not stop_event.is_set():
         if time.time() - start > DEFAULT_TIMEOUT:
+            if log:
+                log("[Octopus] Task timed out.")
             break
         try:
             r = requests.get(f"{OCTOPUS_BASE}/api/status", timeout=5)
+            r.raise_for_status()
             data = r.json()
             projects = data.get("projects") or []
             project = next((p for p in projects if p["id"] == project_id), None)
@@ -78,8 +76,10 @@ def _stream_events(project_id: str, log: Optional[Callable], stop_event: threadi
 
             if status in ("done", "failed"):
                 break
-        except Exception:
-            pass
+        except requests.RequestException as e:
+            if log:
+                log(f"[Octopus] Connection error during polling: {e}")
+            break
         time.sleep(POLL_INTERVAL)
 
 
@@ -158,7 +158,7 @@ def octopus_run(
 
 def octopus_run_tool(parameters: dict, speak=None, player=None, **_) -> str:
     """
-    Direct tool dispatch entry point for Mark-XXXIX tool system.
+    Direct tool dispatch entry point for Octopus Agent System.
     Called when Gemini requests the 'octopus_agent' tool.
     """
     task         = parameters.get("task", "").strip()

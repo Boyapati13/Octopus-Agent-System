@@ -50,10 +50,14 @@ function writeEnv(newVars) {
 
   // Append brand-new keys that weren't in the file at all
   for (const [key, val] of Object.entries(newVars)) {
-    if (!applied.has(key)) content += `\n${key}=${val}`;
+    if (!applied.has(key)) {
+      if (content && !content.endsWith('\n')) content += '\n';
+      content += `${key}=${val}\n`;
+    }
   }
 
-  fs.writeFileSync(ENV_PATH, content, 'utf8');
+  // Ensure file writes are restricted to owner (0600) for security
+  fs.writeFileSync(ENV_PATH, content, { encoding: 'utf8', mode: 0o600 });
 }
 
 function httpGet(url, ms = 4000) {

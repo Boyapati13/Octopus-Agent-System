@@ -1,5 +1,5 @@
 """
-text_llm.py — Multi-provider text LLM adapter for Mark-XXXIX
+text_llm.py — Multi-provider text LLM adapter for Octopus
 Mirrors Octopus llm.js but in Python.
 
 Provider priority (auto mode):
@@ -161,8 +161,8 @@ def _complete_openrouter(prompt: str, system: Optional[str], model: str, max_tok
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://mark-xxxix.local",
-            "X-Title": "Mark-XXXIX",
+            "HTTP-Referer": "https://octopus-agent.local",
+            "X-Title": "Octopus Agent System",
         },
         json={"model": model, "max_tokens": max_tokens, "messages": messages, "stream": False},
         timeout=timeout,

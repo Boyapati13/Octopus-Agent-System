@@ -84,9 +84,20 @@ class TelegramGateway extends EventEmitter {
   }
 
   _isRateLimited(userId) {
+    const now = Date.now();
     const last = this.lastMsg.get(userId) || 0;
-    if (Date.now() - last < 3000) return true;
-    this.lastMsg.set(userId, Date.now());
+
+    // Cleanup old rate limit entries to prevent memory leak
+    if (now % 10 === 0) {
+      for (const [key, timestamp] of this.lastMsg.entries()) {
+        if (now - timestamp > 60000) {
+          this.lastMsg.delete(key);
+        }
+      }
+    }
+
+    if (now - last < 3000) return true;
+    this.lastMsg.set(userId, now);
     return false;
   }
 
