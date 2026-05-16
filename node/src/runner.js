@@ -286,6 +286,12 @@ async function runTask(task, memory, emit) {
     throw new OctopusError(KINDS.PLAN_FAILURE, 'Cortex produced no plan.', 'Cortex', { result: planResult });
   }
 
+  _emit('gateway_task_start', {
+    status: 'PROCESSING',
+    timestamp: new Date().toISOString(),
+    message: `Binding to workspace repo for task: ${task}`
+  });
+
   _emit('chain_start', {
     task,
     plan: planResult.plan.map(s => s.agent),
@@ -383,6 +389,7 @@ async function runTask(task, memory, emit) {
     task,
     success: true,
     duration_ms: Date.now() - startMs,
+    message: "Task verified successfully."
   });
 
   // Stop hook — webhook + console notification
