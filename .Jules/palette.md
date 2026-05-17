@@ -1,3 +1,3 @@
-## 2026-05-17 - Keyboard-First Console Driving
-**Learning:** In highly stylized, high-density dashboard layouts mimicking terminal systems, users inherently default to keyboard navigation patterns rather than cursor clicks. Forcing mouse dependency on standard input fields breaks immersion and lowers task generation efficiency.
-**Action:** Always map primary execution inputs directly to command modifier combos (Ctrl+Enter or Enter) upon initial DOM mount, ensuring interactive indicators match disabled state changes natively.
+## 2024-05-17 - Native PyQt6 Accessibility
+**Learning:** ARIA properties cannot be directly applied to PyQt6 native apps; `setAccessibleName` and `setToolTip` are the Qt equivalents for screen reader support and tooltip hover explanations.
+**Action:** Always map web-based a11y principles to the correct GUI toolkit API when working in native desktop applications (`setAccessibleName` instead of `aria-label`).

@@ -134,9 +134,8 @@
             <option value="/api/agent/scribe/run"           data-method="POST">📝 Scribe</option>
             <option value="/api/agent/releaseKeeper/run"    data-method="POST">🚢 ReleaseKeeper</option>
           </select>
-          <input class="ctrl-input focus-visible:ring-2 focus-visible:ring-cyan-400 outline-none" id="cmd-query" type="text" placeholder='task / query (e.g. "add auth layer")' aria-label="Octopus Command Console Query Input" aria-describedby="keyboard-shortcut-hint" />
+          <input class="ctrl-input" id="cmd-query" type="text" placeholder='task / query (e.g. "add auth layer")'/>
           <button class="btn-fire" id="cmd-run">Run ▶</button>
-          <span id="keyboard-shortcut-hint" class="sr-only">Press Enter to run the command</span>
         </div>
         <div class="console-output" id="console-output">
           <span class="output-placeholder">Output appears here…</span>
