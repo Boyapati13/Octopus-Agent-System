@@ -265,11 +265,13 @@ class FreeVoiceBackend:
                 self.ui.write_log(f"YOU: {text}")
 
                 # Route to Octopus server and poll for the answer
+                self.ui.set_state("THINKING")
                 answer = self._ask_server(text)
                 if answer:
                     self.speak(answer)
                 else:
-                    self.ui.write_log("SYS: No answer received")
+                    self.ui.write_log("SYS: No answer received — try again")
+                    self.ui.set_state("LISTENING")
 
             except Exception as e:
                 print(f"[voice_free] Loop error: {e}")

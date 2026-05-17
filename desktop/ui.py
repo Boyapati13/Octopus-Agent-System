@@ -1279,9 +1279,35 @@ class MainWindow(QMainWindow):
         lay.addWidget(_sec("COMMAND INPUT"))
         lay.addLayout(self._build_input_row())
 
-        self._mute_btn = QPushButton("🎙  MICROPHONE ACTIVE")
-        self._mute_btn.setFixedHeight(30)
-        self._mute_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        # ── Push-to-talk button (wired by octo_desktop._start_voice) ─────────
+        self._ptt_btn = QPushButton("🎤  PUSH TO TALK")
+        self._ptt_btn.setFixedHeight(34)
+        self._ptt_btn.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
+        self._ptt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ptt_btn.setAccessibleName("Push to Talk — click and speak")
+        self._ptt_btn.setToolTip("Click then speak for 6 seconds — OCTO will answer")
+        self._ptt_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: #001a2e; color: {C.PRI};
+                border: 2px solid {C.PRI_DIM}; border-radius: 4px;
+            }}
+            QPushButton:hover {{
+                background: {C.PRI_GHO}; border: 2px solid {C.PRI};
+                color: {C.WHITE};
+            }}
+            QPushButton:pressed {{
+                background: {C.PRI_GHO}; border: 2px solid {C.PRI};
+            }}
+            QPushButton:disabled {{
+                color: {C.TEXT_DIM}; border-color: {C.BORDER};
+            }}
+        """)
+        lay.addWidget(self._ptt_btn)
+
+        # ── Mute toggle — separate from push-to-talk ─────────────────────────
+        self._mute_btn = QPushButton("🔊  MIC ON  [F4 to mute]")
+        self._mute_btn.setFixedHeight(26)
+        self._mute_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
         self._mute_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mute_btn.setAccessibleName("Toggle Microphone")
         self._mute_btn.setToolTip("Click to mute or unmute the microphone  [F4]")
@@ -1290,7 +1316,7 @@ class MainWindow(QMainWindow):
         lay.addWidget(self._mute_btn)
 
         fs_btn = QPushButton("⛶  FULLSCREEN  [F11]")
-        fs_btn.setFixedHeight(26)
+        fs_btn.setFixedHeight(24)
         fs_btn.setFont(QFont("Courier New", 7))
         fs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         fs_btn.setAccessibleName("Toggle Fullscreen")
@@ -1393,7 +1419,7 @@ class MainWindow(QMainWindow):
 
     def _style_mute_btn(self):
         if self._muted:
-            self._mute_btn.setText("🔇  MICROPHONE MUTED")
+            self._mute_btn.setText("🔇  MIC MUTED  [F4 to unmute]")
             self._mute_btn.setToolTip("Microphone is muted — click to unmute  [F4]")
             self._mute_btn.setAccessibleName("Unmute Microphone")
             self._mute_btn.setStyleSheet(f"""
@@ -1403,17 +1429,25 @@ class MainWindow(QMainWindow):
                 }}
                 QPushButton:hover {{ background: #200010; }}
             """)
+            # Disable PTT while muted
+            if hasattr(self, '_ptt_btn'):
+                self._ptt_btn.setEnabled(False)
+                self._ptt_btn.setText("🔇  MIC MUTED")
         else:
-            self._mute_btn.setText("🎙  MICROPHONE ACTIVE")
+            self._mute_btn.setText("🔊  MIC ON  [F4 to mute]")
             self._mute_btn.setToolTip("Microphone is active — click to mute  [F4]")
             self._mute_btn.setAccessibleName("Mute Microphone")
             self._mute_btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: #00140a; color: {C.GREEN};
-                    border: 1px solid {C.GREEN}; border-radius: 3px;
+                    background: transparent; color: {C.TEXT_MED};
+                    border: 1px solid {C.BORDER}; border-radius: 3px;
                 }}
-                QPushButton:hover {{ background: #001f10; }}
+                QPushButton:hover {{ background: #001f10; color: {C.GREEN}; }}
             """)
+            # Re-enable PTT when unmuted
+            if hasattr(self, '_ptt_btn'):
+                self._ptt_btn.setEnabled(True)
+                self._ptt_btn.setText("🎤  PUSH TO TALK")
 
     def _send(self):
         txt = self._input.text().strip()

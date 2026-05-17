@@ -123,19 +123,33 @@ def _start_voice(ui):
             ui.on_text_command = _on_typed
             print("[OCTO] Text command box wired to Octopus server")
 
-            # ── Wire MICROPHONE ACTIVE button → trigger_listen() ───────────
+            # ── Wire PUSH TO TALK button → trigger_listen() ────────────────
             try:
                 win = ui._win
-                mute_btn = getattr(win, '_mute_btn', None)
-                if mute_btn and hasattr(mute_btn, 'clicked'):
-                    mute_btn.clicked.connect(lambda: backend.trigger_listen())
-                    print("[OCTO] Mic button hooked — click to record")
+                ptt_btn = getattr(win, '_ptt_btn', None)
+                if ptt_btn and hasattr(ptt_btn, 'clicked'):
+                    def _on_ptt():
+                        if getattr(win, '_muted', False):
+                            return  # silently ignore while muted
+                        ptt_btn.setText("🔴  RECORDING…")
+                        ptt_btn.setEnabled(False)
+                        backend.trigger_listen()
+                        # Re-enable after the voice loop finishes (~8s max)
+                        def _re_enable():
+                            time.sleep(9)
+                            try:
+                                ptt_btn.setText("🎤  PUSH TO TALK")
+                                ptt_btn.setEnabled(True)
+                            except Exception:
+                                pass
+                        threading.Thread(target=_re_enable, daemon=True).start()
+
+                    ptt_btn.clicked.connect(_on_ptt)
+                    print("[OCTO] Push-to-talk button wired — click to record")
                 else:
-                    backend._trigger.set()
-                    print("[OCTO] Mic button not found — starting VAD mode")
+                    print("[OCTO] PTT button not found — trigger_listen still works via code")
             except Exception as hook_err:
-                print(f"[OCTO] Mic button hook failed: {hook_err}")
-                backend._trigger.set()
+                print(f"[OCTO] PTT button hook failed: {hook_err}")
 
         except Exception as e:
             print(f"[OCTO] Free voice error: {e}")
