@@ -1135,7 +1135,7 @@ class MainWindow(QMainWindow):
             l.setStyleSheet(f"color: {color}; background: transparent;")
             return l
 
-        lay.addWidget(_badge("OCTO v2.0", C.PRI_DIM))
+        lay.addWidget(_badge("OCTO v4.5", C.PRI_DIM))
         lay.addStretch()
 
         mid = QVBoxLayout(); mid.setSpacing(1)
@@ -1227,7 +1227,7 @@ class MainWindow(QMainWindow):
         for txt, col in [
             ("AI CORE\nACTIVE",     C.GREEN),
             ("SEC\nCLEARED",        C.PRI),
-            ("PROTOCOL\nXXXVIII",   C.TEXT_DIM),
+            ("OCTO\nv4.5",          C.TEXT_DIM),
         ]:
             lbl = QLabel(txt)
             lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
