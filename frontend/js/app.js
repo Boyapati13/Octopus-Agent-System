@@ -109,6 +109,18 @@ async function loadAgents() {
 }
 
 // ── Console ───────────────────────────────────────────────────────────────────
+document.getElementById('cmd-query').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey || !event.shiftKey)) {
+    event.preventDefault();
+    const btn = document.getElementById('cmd-run');
+    if (!btn.disabled) {
+      btn.classList.add('scale-95', 'opacity-80');
+      setTimeout(() => btn.classList.remove('scale-95', 'opacity-80'), 100);
+      btn.click();
+    }
+  }
+});
+
 document.getElementById('cmd-run').addEventListener('click', async () => {
   const sel    = document.getElementById('cmd-select');
   const query  = document.getElementById('cmd-query').value.trim();
