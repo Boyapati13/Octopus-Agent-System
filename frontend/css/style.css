@@ -1,5 +1,4 @@
-
-    /* ═══════════════════════════════════════════
+/* ═══════════════════════════════════════════
        DESIGN TOKENS — Mark-XXXIX × Octopus Adapted
        ═══════════════════════════════════════════ */
     :root {
@@ -144,18 +143,6 @@
       font-size: 10px;
       color: var(--text-dim);
       letter-spacing: 0.06em;
-    }
-
-    .setup-link {
-      text-decoration: none;
-      cursor: pointer;
-      transition: color 0.2s, border-color 0.2s, background 0.2s;
-    }
-    .setup-link:hover, .setup-link:focus-visible {
-      color: var(--pri);
-      border-color: var(--pri-dim);
-      background: var(--pri-gho);
-      outline: none;
     }
 
     .hdr-badge {
@@ -786,15 +773,6 @@
     .task-input:focus {
       border-color: var(--pri-dim);
       box-shadow: 0 0 0 3px rgba(0,212,255,0.1);
-    }
-
-    .btn:focus-visible {
-      outline: 2px solid var(--pri-dim);
-      outline-offset: 2px;
-    }
-
-    .btn:active {
-      transform: scale(0.98);
     }
 
     .btn-row {
