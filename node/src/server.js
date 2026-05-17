@@ -22,6 +22,7 @@ const axios = require('axios');
 const { initGateways, manager: gatewayManager } = require('./gateways');
 const { router: setupRouter, isSetupComplete, SETUP_HTML } = require('./setup-api');
 const octoMemory = require('./octo_memory');
+const { compileAndLoadAgent } = require('./routing/agent_factory');
 
 // ── Hermes-style home channel delivery ───────────────────────────────────────
 // When OCTO answers, push to any gateway that has a home_channel configured.
@@ -423,6 +424,20 @@ app.patch('/api/projects/:id/browser-context', (req, res) => {
 // ── Agents ───────────────────────────────────────────────────────────────────
 app.get('/api/agents', (req, res) => {
   res.json(listAgents());
+});
+
+// POST /api/agent/compile — dynamic agent factory
+// Body: { name: string, code: string }
+// Writes a new agent module, hot-swaps it, broadcasts instinct_new via WS.
+app.post('/api/agent/compile', async (req, res) => {
+  const { name, code } = req.body || {};
+  if (!name || !code) return res.status(400).json({ error: 'name and code are required' });
+  try {
+    const result = await compileAndLoadAgent(name, code, broadcastEvent);
+    res.json({ ok: true, agent: result.name, path: result.path });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.post('/api/agent/:name/run', async (req, res) => {

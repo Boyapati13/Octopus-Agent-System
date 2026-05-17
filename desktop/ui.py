@@ -1394,14 +1394,19 @@ class MainWindow(QMainWindow):
     def _style_mute_btn(self):
         if self._muted:
             self._mute_btn.setText("🔇  MICROPHONE MUTED")
+            self._mute_btn.setToolTip("Microphone is muted — click to unmute  [F4]")
+            self._mute_btn.setAccessibleName("Unmute Microphone")
             self._mute_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: #140006; color: {C.MUTED_C};
                     border: 1px solid {C.MUTED_C}; border-radius: 3px;
                 }}
+                QPushButton:hover {{ background: #200010; }}
             """)
         else:
             self._mute_btn.setText("🎙  MICROPHONE ACTIVE")
+            self._mute_btn.setToolTip("Microphone is active — click to mute  [F4]")
+            self._mute_btn.setAccessibleName("Mute Microphone")
             self._mute_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: #00140a; color: {C.GREEN};
