@@ -36,6 +36,10 @@ Thumbs.db
 desktop/memory/long_term.json
 data/octo_memory.json
 node/.setup-complete
+# Test artifacts
+test_mic.wav
+*.wav
+
 # Garbled copy artifacts from Windows cp commands
 desktop/·*
 desktop/·
