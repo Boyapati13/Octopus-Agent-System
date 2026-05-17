@@ -106,22 +106,31 @@ def _start_voice(ui):
 
         try:
             from core.voice_free import FreeVoiceBackend
+            from actions.octopus_bridge import octopus_run_tool
 
-            backend = FreeVoiceBackend(ui=ui, execute_tool_fn=None)
+            backend = FreeVoiceBackend(ui=ui, execute_tool_fn=octopus_run_tool)
             backend.start()
 
-            # Wire the MICROPHONE ACTIVE button → trigger_listen()
-            # In OctoUI the button is _mute_btn which calls _toggle_mute.
-            # We ADD our listener so clicking the button also triggers a recording.
+            # ── Wire typed command box → Octopus server + TTS ─────────────
+            def _on_typed(text: str):
+                def _run():
+                    ui.write_log(f"You: {text}")
+                    answer = backend._ask_server(text)
+                    if answer:
+                        backend.speak(answer)
+                threading.Thread(target=_run, daemon=True).start()
+
+            ui.on_text_command = _on_typed
+            print("[OCTO] Text command box wired to Octopus server")
+
+            # ── Wire MICROPHONE ACTIVE button → trigger_listen() ───────────
             try:
                 win = ui._win
                 mute_btn = getattr(win, '_mute_btn', None)
                 if mute_btn and hasattr(mute_btn, 'clicked'):
-                    # Keep existing _toggle_mute behaviour AND add voice trigger
                     mute_btn.clicked.connect(lambda: backend.trigger_listen())
                     print("[OCTO] Mic button hooked — click to record")
                 else:
-                    # Fallback: start VAD immediately
                     backend._trigger.set()
                     print("[OCTO] Mic button not found — starting VAD mode")
             except Exception as hook_err:

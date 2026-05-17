@@ -154,6 +154,56 @@ class FreeVoiceBackend:
         """Called when user presses the MICROPHONE ACTIVE button."""
         self._trigger.set()
 
+    def _ask_server(self, text: str) -> str:
+        """
+        Post to /api/tasks/ask and poll /api/status until the answer is ready.
+        Falls back to direct LLM if the server is unreachable.
+        Returns the answer string (may be empty on timeout).
+        """
+        try:
+            import requests as _r
+            r = _r.post(
+                "http://localhost:3001/api/tasks/ask",
+                json={"text": text},
+                timeout=10,
+            )
+            data = r.json()
+            project_id = data.get("project_id", "")
+
+            # Poll until done (max 45 s)
+            for _ in range(22):
+                time.sleep(2)
+                try:
+                    sr = _r.get("http://localhost:3001/api/status", timeout=5)
+                    projects = sr.json().get("projects", [])
+                    proj = next((p for p in projects if p.get("id") == project_id), None)
+                    if not proj:
+                        # single-project fallback
+                        proj = next(iter(sr.json().get("projects", [])), None)
+                    if proj:
+                        ans = proj.get("answer", "")
+                        status = proj.get("answer_status", "running")
+                        if ans and status == "done" and ans not in (
+                            "Working…", "Processing…", "Searching…", "Task interrupted."
+                        ):
+                            self.ui.write_log(f"OCTO: {ans[:300]}")
+                            return ans
+                except Exception:
+                    break
+
+        except Exception:
+            pass
+
+        # Server unreachable — answer directly via LLM
+        try:
+            from core.text_llm import complete as llm_complete
+            ans = llm_complete(text, max_tokens=250, timeout=45)
+            self.ui.write_log(f"OCTO: {ans[:300]}")
+            return ans
+        except Exception as e:
+            self.ui.write_log(f"SYS: LLM error — {e}")
+            return ""
+
     def speak(self, text: str):
         """Speak using Windows SAPI. COM-safe: initialises per-thread."""
         self.ui.set_state("SPEAKING")
@@ -214,19 +264,12 @@ class FreeVoiceBackend:
 
                 self.ui.write_log(f"YOU: {text}")
 
-                # Route to Octopus server → answer comes back via WebSocket
-                try:
-                    import requests as _r
-                    _r.post(
-                        "http://localhost:3001/api/tasks/ask",
-                        json={"text": text},
-                        timeout=5,
-                    )
-                except Exception:
-                    # Server not running — answer directly via LLM
-                    from core.text_llm import complete as llm_complete
-                    response = llm_complete(text, max_tokens=200, timeout=45)
-                    self.speak(response)
+                # Route to Octopus server and poll for the answer
+                answer = self._ask_server(text)
+                if answer:
+                    self.speak(answer)
+                else:
+                    self.ui.write_log("SYS: No answer received")
 
             except Exception as e:
                 print(f"[voice_free] Loop error: {e}")
