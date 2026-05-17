@@ -1283,6 +1283,8 @@ class MainWindow(QMainWindow):
         self._mute_btn.setFixedHeight(30)
         self._mute_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
         self._mute_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mute_btn.setAccessibleName("Toggle Microphone")
+        self._mute_btn.setToolTip("Click to mute or unmute the microphone  [F4]")
         self._mute_btn.clicked.connect(self._toggle_mute)
         self._style_mute_btn()
         lay.addWidget(self._mute_btn)
@@ -1291,6 +1293,8 @@ class MainWindow(QMainWindow):
         fs_btn.setFixedHeight(26)
         fs_btn.setFont(QFont("Courier New", 7))
         fs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        fs_btn.setAccessibleName("Toggle Fullscreen")
+        fs_btn.setToolTip("Toggle fullscreen mode  [F11]")
         fs_btn.setStyleSheet(f"""
             QPushButton {{
                 background: transparent; color: {C.TEXT_MED};
@@ -1311,6 +1315,8 @@ class MainWindow(QMainWindow):
         self._input.setPlaceholderText("Type a command or question…")
         self._input.setFont(QFont("Courier New", 9))
         self._input.setFixedHeight(30)
+        self._input.setAccessibleName("Octopus Command Console Query Input")
+        self._input.setToolTip("Press Enter to run the command")
         self._input.setStyleSheet(f"""
             QLineEdit {{
                 background: #000d14; color: {C.WHITE};
@@ -1321,19 +1327,22 @@ class MainWindow(QMainWindow):
         self._input.returnPressed.connect(self._send)
         row.addWidget(self._input)
 
-        send = QPushButton("▸")
-        send.setFixedSize(30, 30)
-        send.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
-        send.setCursor(Qt.CursorShape.PointingHandCursor)
-        send.setStyleSheet(f"""
+        self._send_btn = QPushButton("▸")
+        self._send_btn.setFixedSize(30, 30)
+        self._send_btn.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
+        self._send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._send_btn.setAccessibleName("Run command")
+        self._send_btn.setToolTip("Run command  [Enter]")
+        self._send_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {C.PANEL}; color: {C.PRI};
                 border: 1px solid {C.PRI_DIM}; border-radius: 3px;
             }}
             QPushButton:hover {{ background: {C.PRI_GHO}; border: 1px solid {C.PRI}; }}
+            QPushButton:pressed {{ background: {C.PRI_GHO}; border: 1px solid {C.PRI}; opacity: 0.8; }}
         """)
-        send.clicked.connect(self._send)
-        row.addWidget(send)
+        self._send_btn.clicked.connect(self._send)
+        row.addWidget(self._send_btn)
         return row
 
     def _build_footer(self) -> QWidget:
@@ -1349,7 +1358,7 @@ class MainWindow(QMainWindow):
 
         lay.addWidget(_fl("[F4] Mute  ·  [F11] Fullscreen"))
         lay.addStretch()
-        lay.addWidget(_fl("Octopus Industries  ·  OCTO v2.0  ·  CLASSIFIED"))
+        lay.addWidget(_fl("Octopus Industries  ·  OCTO v4.5  ·  CLASSIFIED"))
         lay.addStretch()
         lay.addWidget(_fl("© FATIHMAKES", C.PRI_DIM))
         return w
