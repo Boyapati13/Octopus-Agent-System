@@ -1,292 +1,408 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Octopus — OCTO Command Interface | OctoDeck</title>
-  <link rel="stylesheet" href="css/style.css"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Octopus Agent System v5.0-EVO</title>
+  <meta name="description" content="Dense, tactical developer workspace and AI operating system dashboard." />
 
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS via CDN for standalone rendering -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Tailwind Configuration for Custom Theme -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            deepspace: {
+              900: '#00060a',
+              800: '#000c14',
+              700: '#011520',
+              600: '#0d3347',
+              500: '#1a5c7a'
+            },
+            cyan: {
+              400: '#00d4ff',
+              500: '#00aaeb',
+              900: '#001f2e'
+            },
+            emerald: {
+              400: '#00ff88',
+              500: '#00aa55',
+              900: '#002f1a'
+            },
+            accent: '#ff6b00'
+          },
+          fontFamily: {
+            mono: ['"JetBrains Mono"', 'monospace'],
+            sans: ['"Inter"', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #00060a; }
+    ::-webkit-scrollbar-thumb { background: #0d3347; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #00d4ff; }
+
+    body { background-color: #00060a; color: #e2e8f0; font-family: 'Inter', sans-serif; overflow: hidden; }
+    .neon-border { border: 1px solid rgba(0, 212, 255, 0.2); }
+    .neon-border-active { border: 1px solid rgba(0, 212, 255, 0.6); box-shadow: 0 0 8px rgba(0, 212, 255, 0.2); }
+
+    /* Code Diff Styling */
+    .diff-add { background-color: rgba(0, 255, 136, 0.1); color: #00ff88; }
+    .diff-del { background-color: rgba(255, 51, 85, 0.1); color: #ff3355; }
+
+    /* Focus States */
+    *:focus-visible {
+      outline: 2px solid #00d4ff;
+      outline-offset: 2px;
+    }
+  </style>
 </head>
-<body>
-  <div class="shell">
+<body class="h-screen w-screen flex flex-col antialiased">
 
-    <!-- ══════════════════ HEADER ══════════════════ -->
-    <header class="header">
-      <div class="header-left">
-        <div>
-          <div class="header-title">OCTO Command Interface</div>
-          <div class="header-sub">Optimized Cognitive Task Orchestrator — Octopus Industries</div>
+  <!-- 1. THE OCTOPUS CORE ARCHITECTURE MATRIX (Top/Center Command Canopy) -->
+  <header class="flex-none h-24 bg-deepspace-800 border-b neon-border flex items-center justify-between px-4 gap-4 z-10">
+
+    <!-- System Identity -->
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-full border-2 border-cyan-400 flex items-center justify-center bg-cyan-900/50 shadow-[0_0_10px_rgba(0,212,255,0.3)]">
+        <span class="text-cyan-400 font-bold text-xl">🐙</span>
+      </div>
+      <div>
+        <h1 class="text-cyan-400 font-mono font-bold tracking-widest text-sm">OCTOPUS OS v5.0-EVO</h1>
+        <div class="flex items-center gap-2 mt-1">
+          <span id="global-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="global-status-text" class="text-xs text-gray-400 font-mono uppercase">System Nominal</span>
         </div>
       </div>
-      <div class="header-right">
-        <a href="/setup" class="hdr-badge setup-link" aria-label="Configure API Keys" title="API Keys & Setup">⚙ SETUP</a>
-        <select id="project-select" class="hdr-project-select" aria-label="Select project"></select>
-        <div class="hdr-badge"><span class="dot" id="ws-dot"></span><span id="ws-label">Connecting</span></div>
-        <div class="hdr-badge"><span class="dot" id="run-dot"></span><span id="run-label">Idle</span></div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
-          <div class="hdr-clock" id="clock">00:00:00</div>
-          <div class="hdr-date"  id="dateline">--/--/----</div>
+    </div>
+
+    <!-- O.P.A.V. Loop Step Monitor -->
+    <div class="flex-1 max-w-xl mx-auto flex flex-col items-center">
+      <div class="text-[10px] text-cyan-500/70 font-mono uppercase tracking-widest mb-1">O.P.A.V Execution Loop</div>
+      <div class="flex items-center justify-between w-full bg-deepspace-900 rounded-full p-1 neon-border">
+        <div id="opav-observe" class="flex-1 text-center text-xs font-mono py-1 rounded-full text-gray-500 transition-colors duration-300">OBSERVE</div>
+        <div class="text-gray-600">➔</div>
+        <div id="opav-plan" class="flex-1 text-center text-xs font-mono py-1 rounded-full text-gray-500 transition-colors duration-300">PLAN</div>
+        <div class="text-gray-600">➔</div>
+        <div id="opav-act" class="flex-1 text-center text-xs font-mono py-1 rounded-full text-gray-500 transition-colors duration-300">ACT</div>
+        <div class="text-gray-600">➔</div>
+        <div id="opav-verify" class="flex-1 text-center text-xs font-mono py-1 rounded-full text-gray-500 transition-colors duration-300">VERIFY</div>
+      </div>
+    </div>
+
+    <!-- 5-Layer Memory Telemetry & Factory Tracker -->
+    <div class="flex items-center gap-4">
+      <div class="grid grid-cols-5 gap-1">
+        <div class="flex flex-col items-center bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1" aria-label="L1 Structural Graph">
+          <span class="text-[9px] text-cyan-500 font-mono">L1:Graph</span>
+          <span id="mem-l1" class="text-xs font-mono text-white">420</span>
+        </div>
+        <div class="flex flex-col items-center bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1" aria-label="L2 Decision Ledger">
+          <span class="text-[9px] text-cyan-500 font-mono">L2:ADR</span>
+          <span id="mem-l2" class="text-xs font-mono text-white">12</span>
+        </div>
+        <div class="flex flex-col items-center bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1" aria-label="L3 Run State">
+          <span class="text-[9px] text-cyan-500 font-mono">L3:PID</span>
+          <span id="mem-l3" class="text-xs font-mono text-emerald-400">9932</span>
+        </div>
+        <div class="flex flex-col items-center bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1" aria-label="L4 Prompt Cache">
+          <span class="text-[9px] text-cyan-500 font-mono">L4:Cache</span>
+          <span id="mem-l4" class="text-xs font-mono text-white">94%</span>
+        </div>
+        <div class="flex flex-col items-center bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1" aria-label="L5 Ephemeral Context">
+          <span class="text-[9px] text-cyan-500 font-mono">L5:Env</span>
+          <span id="mem-l5" class="text-xs font-mono text-white">6 vars</span>
         </div>
       </div>
-    </header>
 
-    <!-- ══════════════════ LEFT PANEL ══════════════════ -->
-    <aside class="left-panel">
-      <div class="panel-section">
-        <div class="panel-section-title">Sys Monitor</div>
-        <div class="metric-row">
-          <div class="metric-label">CPU</div>
-          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-cpu" style="width:0%"></div></div>
-          <div class="metric-val" id="val-cpu">—</div>
+      <div class="bg-deepspace-900 border border-deepspace-600 p-1.5 rounded w-32 flex flex-col justify-center">
+        <div class="text-[9px] text-cyan-500 font-mono uppercase mb-0.5">Agent Factory</div>
+        <div id="agent-factory" class="text-[10px] text-emerald-400 font-mono truncate">Awaiting spawn...</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace Grid -->
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- 2. PROJECTS MODULE & DIRECTORY ARCHITECTURE (Left Pane) -->
+    <aside class="w-64 flex-none bg-deepspace-800 border-r neon-border flex flex-col">
+      <div class="p-3 border-b border-deepspace-600 flex justify-between items-center">
+        <h2 class="text-xs font-bold text-gray-300 uppercase tracking-widest">Workspace</h2>
+        <button id="btn-reindex" class="text-[10px] bg-cyan-900/50 hover:bg-cyan-800 text-cyan-400 border border-cyan-500/50 px-2 py-1 rounded transition-colors" aria-label="Re-Index Repository">
+          ↻ Re-Index
+        </button>
+      </div>
+
+      <!-- Active Workspace Summary -->
+      <div class="p-3 border-b border-deepspace-600 bg-deepspace-900/50">
+        <div class="flex justify-between items-center mb-1">
+          <span class="text-[10px] text-gray-400 font-mono">Branch:</span>
+          <span class="text-[10px] text-cyan-400 font-mono bg-cyan-900/30 px-1 rounded">feature/evo-ui</span>
         </div>
-        <div class="metric-row">
-          <div class="metric-label">MEM</div>
-          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-mem" style="width:0%"></div></div>
-          <div class="metric-val" id="val-mem">—</div>
-        </div>
-        <div class="metric-row">
-          <div class="metric-label">NET</div>
-          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-net" style="width:30%"></div></div>
-          <div class="metric-val" id="val-net">OK</div>
-        </div>
-        <div class="metric-row">
-          <div class="metric-label">AGT</div>
-          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-agt" style="width:0%"></div></div>
-          <div class="metric-val" id="val-agt">0</div>
+        <div class="flex justify-between items-center">
+          <span class="text-[10px] text-gray-400 font-mono">Delta:</span>
+          <span class="text-[10px] text-accent font-mono">+4 / -1</span>
         </div>
       </div>
 
-      <div class="panel-section">
-        <div class="panel-section-title">Status</div>
-        <div class="status-badge"><span class="dot ok"></span>Agent Core Active</div>
-        <div class="status-badge"><span class="dot" id="voice-status-dot"></span><span id="voice-status-txt">Voice Idle</span></div>
-        <div class="status-badge"><span class="dot ok"></span>Sec Cleared</div>
-        <div class="status-badge"><span class="dot ok"></span>Protocol Octo-X</div>
+      <!-- File Explorer Tree -->
+      <div class="flex-1 overflow-y-auto p-2 font-mono text-xs">
+        <ul class="space-y-1" id="file-tree">
+          <li class="flex items-center gap-2 px-2 py-1 hover:bg-deepspace-700 cursor-pointer rounded text-gray-300">
+            <span class="text-cyan-500">📁</span> src/
+          </li>
+          <li class="flex items-center gap-2 px-2 py-1 hover:bg-deepspace-700 cursor-pointer rounded text-gray-300 ml-4">
+            <span class="text-gray-500">📄</span> server.js
+            <span class="ml-auto w-2 h-2 rounded-full bg-emerald-400" title="Recently modified by Forge"></span>
+          </li>
+          <li class="flex items-center gap-2 px-2 py-1 hover:bg-deepspace-700 cursor-pointer rounded text-gray-300 ml-4">
+            <span class="text-gray-500">📄</span> router.js
+          </li>
+          <li class="flex items-center gap-2 px-2 py-1 hover:bg-deepspace-700 cursor-pointer rounded text-gray-300">
+            <span class="text-cyan-500">📁</span> agents/
+          </li>
+          <li class="flex items-center gap-2 px-2 py-1 hover:bg-deepspace-700 cursor-pointer rounded text-gray-300 ml-4">
+            <span class="text-gray-500">📄</span> architect.js
+          </li>
+          <li class="flex items-center gap-2 px-2 py-1 hover:bg-deepspace-700 cursor-pointer rounded text-gray-300">
+            <span class="text-gray-500">📄</span> package.json
+          </li>
+        </ul>
       </div>
-
-      <div class="panel-section">
-        <div class="panel-section-title">Info</div>
-        <div class="info-row"><span>Uptime</span><span class="info-val" id="info-uptime">—</span></div>
-        <div class="info-row"><span>Projects</span><span class="info-val" id="info-projects">—</span></div>
-        <div class="info-row"><span>Cache</span><span class="info-val" id="info-cache">—</span></div>
-        <div class="info-row"><span>Provider</span><span class="info-val" id="info-provider">—</span></div>
-      </div>
-
-      <div class="left-spacer"></div>
     </aside>
 
-    <!-- ══════════════════ CENTER PANEL ══════════════════ -->
-    <main class="center-panel" style="position:relative;">
+    <!-- 3. CO-WORK CANVAS & LIVE CODE EDITOR (Main Center Pane) -->
+    <main class="flex-1 flex flex-col min-w-0 bg-deepspace-900 relative">
 
-      <!-- HUD Canvas -->
-      <div class="hud-wrap">
-        <canvas id="hud-canvas" width="220" height="220" style="cursor:pointer;" title="Click to Initialize Audio/Voice"></canvas>
-        <div class="hud-state-row">
-          <div class="hud-state-item" id="hud-item-listen">
-            <span class="dot"></span><span>Listen</span>
+      <!-- Upper Half: Live Code-Diff Viewer -->
+      <div class="flex-1 border-b neon-border flex flex-col">
+        <div class="bg-deepspace-800 px-3 py-1.5 flex justify-between items-center border-b border-deepspace-600">
+          <div class="text-xs font-mono text-gray-400">src/server.js <span class="text-gray-600">—</span> <span class="text-emerald-400">Forge Agent Modifying</span></div>
+          <div class="flex gap-2">
+            <span class="text-[10px] text-gray-500 bg-deepspace-900 px-1.5 rounded border border-deepspace-600">UTF-8</span>
+            <span class="text-[10px] text-cyan-400 bg-cyan-900/20 px-1.5 rounded border border-cyan-900">JavaScript</span>
           </div>
-          <div class="hud-state-item" id="hud-item-think">
-            <span class="dot"></span><span>Think</span>
-          </div>
-          <div class="hud-state-item" id="hud-item-speak">
-            <span class="dot"></span><span>Speak</span>
-          </div>
-          <div class="hud-state-item" id="hud-item-run">
-            <span class="dot"></span><span>Execute</span>
-          </div>
+        </div>
+        <div class="flex-1 overflow-auto bg-[#0d1117] p-4 font-mono text-sm leading-relaxed" id="diff-viewer">
+          <div class="flex"><span class="w-8 text-right text-gray-600 select-none mr-4">42</span><span class="text-gray-300">function initServer() {</span></div>
+          <div class="flex"><span class="w-8 text-right text-gray-600 select-none mr-4">43</span><span class="text-gray-300">  const app = express();</span></div>
+          <div class="flex diff-del"><span class="w-8 text-right text-gray-600 select-none mr-4">44</span><span>- app.use(express.json());</span></div>
+          <div class="flex diff-add"><span class="w-8 text-right text-gray-600 select-none mr-4">44</span><span>+ app.use(express.json({ limit: '50mb' }));</span></div>
+          <div class="flex diff-add"><span class="w-8 text-right text-gray-600 select-none mr-4">45</span><span>+ app.use(cors());</span></div>
+          <div class="flex"><span class="w-8 text-right text-gray-600 select-none mr-4">46</span><span class="text-gray-300">  </span></div>
+          <div class="flex"><span class="w-8 text-right text-gray-600 select-none mr-4">47</span><span class="text-gray-300">  app.listen(3001, () => {</span></div>
+          <div class="flex"><span class="w-8 text-right text-gray-600 select-none mr-4">48</span><span class="text-gray-300">    console.log("Octopus API running");</span></div>
+          <div class="flex"><span class="w-8 text-right text-gray-600 select-none mr-4">49</span><span class="text-gray-300">  });</span></div>
+          <div class="flex"><span class="w-8 text-right text-gray-600 select-none mr-4">50</span><span class="text-gray-300">}</span></div>
         </div>
       </div>
 
-      <!-- Metrics strip -->
-      <div class="metrics-strip">
-        <div class="metric-tile">
-          <div class="tile-label">Current Task</div>
-          <div class="tile-value" id="tile-task">Idle</div>
-        </div>
-        <div class="metric-tile">
-          <div class="tile-label">Voice Mode</div>
-          <div class="tile-value" id="tile-voice">Idle</div>
-        </div>
-        <div class="metric-tile">
-          <div class="tile-label">Execution</div>
-          <div class="tile-value" id="tile-exec">Awaiting</div>
-        </div>
-        <div class="metric-tile">
-          <div class="tile-label">WebSocket</div>
-          <div class="tile-value" id="tile-ws">Connecting</div>
-        </div>
+      <!-- Human Interaction Action Bar (Floating in Center) -->
+      <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-deepspace-800 border border-cyan-500/50 p-2 rounded-lg shadow-2xl z-20 flex gap-3 backdrop-blur-sm bg-opacity-90">
+        <button id="btn-approve" class="flex items-center gap-2 bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 border border-emerald-500/50 px-4 py-2 rounded font-mono text-xs font-bold transition-all shadow-[0_0_10px_rgba(0,170,85,0.2)]" aria-label="Approve Change">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> APPROVE CHANGE
+        </button>
+        <button id="btn-pause" class="flex items-center gap-2 bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-500/50 px-4 py-2 rounded font-mono text-xs font-bold transition-all shadow-[0_0_10px_rgba(255,51,85,0.2)]" aria-label="Pause Executor">
+          <span class="w-2 h-2 rounded-full bg-red-500"></span> PAUSE EXECUTOR
+        </button>
       </div>
 
-      <!-- Live Plan View — shown when a chain is running -->
-      <div class="plan-view" id="plan-view">
-        <div class="plan-header">Live Execution Plan</div>
-        <div class="plan-stages" id="plan-stages"></div>
-        <!-- Architect's structured output -->
-        <div class="architect-panel" id="arch-panel">
-          <div class="arch-title">◈ Architect — Boundary Impact</div>
-          <div class="arch-row">
-            <span id="arch-risk" class="arch-badge">risk: —</span>
-            <span id="arch-impact" class="arch-badge">impact: — files</span>
-            <span id="arch-cross" class="arch-badge">cross-boundary: —</span>
-          </div>
-          <div id="arch-recs" class="arch-rec"></div>
-          <div id="arch-files" class="arch-files"></div>
+      <!-- Lower Half: Live REPL Terminal -->
+      <div class="h-1/3 flex flex-col bg-black border-t border-deepspace-600">
+        <div class="bg-deepspace-800 px-3 py-1 flex justify-between items-center border-b border-deepspace-600">
+          <div class="text-[10px] font-mono text-gray-400 uppercase tracking-widest">REPL Terminal Stream</div>
         </div>
-      </div>
-
-      <!-- Answer box -->
-      <div class="answer-section">
-        <div class="answer-header">
-          <span class="dot" id="answer-dot"></span>
-          <span class="answer-label">Output</span>
-          <span class="answer-state-txt" id="answer-state-txt">● READY</span>
-          <span style="flex:1"></span>
-          <span style="font-size:9px;color:var(--text-dim);letter-spacing:0.06em;" id="project-label">Project: none</span>
+        <div class="flex-1 overflow-auto p-3 font-mono text-xs text-gray-300 leading-tight space-y-1" id="terminal-output">
+          <div class="text-cyan-500">system$ initialize_workspace --sync</div>
+          <div>[INFO] Repository indexed. 420 files tracked.</div>
+          <div class="text-cyan-500">system$ spawn agent=Forge task="add auth layer"</div>
+          <div>[EXEC] Spawning Forge agent [PID: 9932]</div>
+          <div class="text-emerald-400">[STDOUT] Analyzing src/server.js constraints...</div>
+          <div class="text-emerald-400">[STDOUT] Injecting CORS middleware and payload limits...</div>
+          <div class="text-accent">[WAIT] Awaiting human approval for shell mutation.</div>
         </div>
-        <div id="answer-text">Ask anything and I will route it through the live agent pipeline.<span class="cursor"></span></div>
       </div>
     </main>
 
-    <!-- ══════════════════ RIGHT PANEL ══════════════════ -->
-    <aside class="right-panel">
-      <div class="rp-header">Activity Center</div>
+    <!-- Right Pane: Configuration & Gateways -->
+    <aside class="w-80 flex-none bg-deepspace-800 border-l neon-border flex flex-col">
 
-      <div class="rp-tabs" style="flex-wrap:wrap;">
-        <button class="rp-tab active" data-tab="log">Log</button>
-        <button class="rp-tab"        data-tab="conv">Convo</button>
-        <button class="rp-tab"        data-tab="search">Search</button>
-        <button class="rp-tab"        data-tab="docs">Docs</button>
-        <button class="rp-tab"        data-tab="gateways">Gates</button>
-        <button class="rp-tab"        data-tab="router">Router</button>
-        <button class="rp-tab"        data-tab="events">Events</button>
+      <!-- Right Pane Tabs -->
+      <div class="flex border-b border-deepspace-600" role="tablist">
+        <button id="tab-btn-llm" class="flex-1 py-3 text-xs font-bold text-cyan-400 border-b-2 border-cyan-400 bg-deepspace-900/50 uppercase tracking-widest focus:outline-none focus-visible:bg-deepspace-700" aria-label="LLM Routing Tab" role="tab" aria-selected="true" aria-controls="panel-llm">
+          LLM Config
+        </button>
+        <button id="tab-btn-gw" class="flex-1 py-3 text-xs font-bold text-gray-500 border-b-2 border-transparent hover:text-gray-300 uppercase tracking-widest focus:outline-none focus-visible:bg-deepspace-700" aria-label="Gateways Tab" role="tab" aria-selected="false" aria-controls="panel-gw">
+          Gateways
+        </button>
       </div>
 
-      <div class="rp-body">
-        <!-- Activity log tab -->
-        <div class="tab-pane active" id="tab-log">
-          <div id="log-output"></div>
+      <div class="flex-1 overflow-y-auto relative">
+
+        <!-- 4. LLM ROUTING & ENDPOINT CONFIGURATION CONTROLS (Right Pane - Tab 1) -->
+        <div id="panel-llm" class="absolute inset-0 p-4 flex flex-col gap-4" role="tabpanel">
+
+          <div>
+            <h3 class="text-[10px] text-cyan-500 font-mono uppercase mb-2">Secure Credentials</h3>
+            <div class="space-y-2">
+              <div>
+                <label for="nv-key" class="block text-[10px] text-gray-400 mb-1">NVIDIA_API_KEY</label>
+                <input id="nv-key" type="password" value="nvapi-xxxxxxxxxxxxxxxxx" class="w-full bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1.5 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+              </div>
+              <div>
+                <label for="or-key" class="block text-[10px] text-gray-400 mb-1">OPENROUTER_API_KEY</label>
+                <input id="or-key" type="password" value="sk-or-v1-xxxxxxxx" class="w-full bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1.5 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+              </div>
+              <div>
+                <label for="ol-url" class="block text-[10px] text-gray-400 mb-1">OLLAMA_BASE_URL</label>
+                <input id="ol-url" type="text" value="http://localhost:11434" class="w-full bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1.5 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50" />
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-2">
+            <h3 class="text-[10px] text-cyan-500 font-mono uppercase mb-2">Endpoint Routing Schema</h3>
+            <div class="space-y-3 bg-deepspace-900/50 p-3 rounded border border-deepspace-600">
+
+              <div>
+                <label for="route-plan" class="block text-[10px] text-gray-400 mb-1">Planning / Architecture</label>
+                <select id="route-plan" class="w-full bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1.5 text-xs text-cyan-400 font-mono focus:border-cyan-500 focus:outline-none">
+                  <option value="hermes">Hermes-3-405B</option>
+                  <option value="kimi">Kimi-K2</option>
+                  <option value="claude">Claude 3.5 Sonnet</option>
+                </select>
+              </div>
+
+              <div>
+                <label for="route-code" class="block text-[10px] text-gray-400 mb-1">Code Writing / Assembly</label>
+                <select id="route-code" class="w-full bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1.5 text-xs text-cyan-400 font-mono focus:border-cyan-500 focus:outline-none">
+                  <option value="qwen">Qwen3-Coder</option>
+                  <option value="deepseek" selected>DeepSeek-V3</option>
+                  <option value="gpt4o">GPT-4o</option>
+                </select>
+              </div>
+
+              <div>
+                <label for="route-exec" class="block text-[10px] text-gray-400 mb-1">Local Core Execution</label>
+                <select id="route-exec" class="w-full bg-deepspace-900 border border-deepspace-600 rounded px-2 py-1.5 text-xs text-cyan-400 font-mono focus:border-cyan-500 focus:outline-none">
+                  <option value="gemma">Gemma-2-9B</option>
+                  <option value="llama">Llama-3-8B</option>
+                  <option value="mistral">Mistral-Nemo</option>
+                </select>
+              </div>
+
+            </div>
+          </div>
+
         </div>
 
-        <!-- Conversation tab -->
-        <div class="tab-pane" id="tab-conv">
-          <div id="conversation"></div>
-        </div>
+        <!-- 5. MESSAGING GATEWAYS & CREDENTIAL CHANNELS (Right Pane - Tab 2) -->
+        <div id="panel-gw" class="absolute inset-0 p-4 flex flex-col gap-4 hidden" role="tabpanel">
 
-        <!-- Web Search tab -->
-        <div class="tab-pane" id="tab-search">
-          <div class="search-wrap">
-            <div class="search-input-row">
-              <input id="search-input" class="search-input" type="text" placeholder="Search the web…" />
-              <button class="btn primary" id="search-btn" style="flex-shrink:0;">⌕ Go</button>
+          <h3 class="text-[10px] text-cyan-500 font-mono uppercase">Gateway Management</h3>
+
+          <div class="space-y-4">
+            <!-- Telegram -->
+            <div class="bg-deepspace-900 border border-deepspace-600 rounded p-3">
+              <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xl">✈️</span>
+                  <span class="text-xs font-bold text-gray-200">Telegram Sentry</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="toggle-telegram" class="sr-only peer" checked aria-label="Toggle Telegram Gateway">
+                  <div class="w-7 h-4 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+              <div class="space-y-2 mt-2">
+                <input type="password" id="tg-token" placeholder="TELEGRAM_BOT_TOKEN" value="bot123456:ABC-DEF" class="w-full bg-deepspace-800 border border-deepspace-600 rounded px-2 py-1 text-[10px] text-white font-mono focus:border-cyan-500 focus:outline-none" aria-label="Telegram Bot Token" />
+                <input type="text" id="tg-channel" placeholder="HOME_CHANNEL_ID" value="-100987654321" class="w-full bg-deepspace-800 border border-deepspace-600 rounded px-2 py-1 text-[10px] text-white font-mono focus:border-cyan-500 focus:outline-none" aria-label="Telegram Home Channel ID" />
+              </div>
             </div>
-            <div style="font-size:9px;color:var(--text-dim);letter-spacing:0.08em;">
-              Engine: auto (DDG → Brave → SerpAPI). Set BRAVE_API_KEY or SERP_API_KEY for better results.
+
+            <!-- Discord -->
+            <div class="bg-deepspace-900 border border-deepspace-600 rounded p-3">
+              <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xl">🎮</span>
+                  <span class="text-xs font-bold text-gray-200">Discord Bridge</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="toggle-discord" class="sr-only peer" aria-label="Toggle Discord Gateway">
+                  <div class="w-7 h-4 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+              <div class="mt-2 text-[10px] text-gray-500 font-mono italic">Service disabled. Enable to configure keys.</div>
             </div>
-            <div id="search-results"></div>
+
+            <!-- WhatsApp -->
+            <div class="bg-deepspace-900 border border-deepspace-600 rounded p-3">
+              <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xl">📱</span>
+                  <span class="text-xs font-bold text-gray-200">WhatsApp Interface</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="toggle-whatsapp" class="sr-only peer" aria-label="Toggle WhatsApp Gateway">
+                  <div class="w-7 h-4 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+              <div class="mt-2">
+                <button class="w-full bg-deepspace-800 hover:bg-deepspace-700 text-cyan-500 border border-cyan-900 py-1 text-[10px] font-mono rounded transition-colors">Generate Pairing QR</button>
+              </div>
+            </div>
+
           </div>
         </div>
 
-        <!-- Document Analysis tab -->
-        <div class="tab-pane" id="tab-docs">
-          <div class="docs-wrap">
-            <div id="drop-zone" class="drop-zone" aria-label="File upload drop zone" tabindex="0" role="button">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;color:var(--pri)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg><br>
-              Drop file here or Click to Browse<br>
-              <span style="font-size:9px;opacity:0.6;letter-spacing:0.15em;">Images · Video · Audio · PDF · Docs · Code · Data</span>
-            </div>
-            <input id="file-input" type="file" style="display:none" />
-            <div class="doc-mode-row">
-              <span style="font-size:9px;color:var(--text-dim);letter-spacing:0.1em;">MODE:</span>
-              <button class="mode-chip active" data-mode="summarise">Summarise</button>
-              <button class="mode-chip"        data-mode="analyse">Analyse</button>
-              <button class="mode-chip"        data-mode="extract">Extract Data</button>
-              <button class="mode-chip"        data-mode="code_review">Code Review</button>
-              <button class="mode-chip"        data-mode="explain">Explain</button>
-              <button class="mode-chip"        data-mode="qa">Q&amp;A</button>
-            </div>
-            <div id="qa-row" style="display:none;">
-              <input id="doc-question" class="doc-qa-input" placeholder="Type your question about the document…" />
-            </div>
-            <div id="doc-result"></div>
-          </div>
-        </div>
-
-        <!-- Gateways tab -->
-        <div class="tab-pane" id="tab-gateways">
-          <div class="gw-wrap" id="gw-list"></div>
-          <!-- WhatsApp QR panel — shown when gateway is waiting for scan -->
-          <div id="wa-qr-panel" style="display:none;margin-top:10px;text-align:center">
-            <div style="font-size:9px;color:var(--acc2);letter-spacing:1px;margin-bottom:8px">
-              📱 WHATSAPP PAIRING — Scan with your phone
-            </div>
-            <img id="wa-qr-img" src="" alt="WhatsApp QR"
-              style="width:180px;height:180px;border:2px solid var(--pri-dim);border-radius:4px;background:#fff">
-            <div style="font-size:9px;color:var(--text-dim);margin-top:6px">
-              WhatsApp → Linked Devices → Link a Device
-            </div>
-            <button onclick="refreshWaQR()" style="
-              margin-top:6px;font-family:inherit;font-size:9px;letter-spacing:1px;
-              background:transparent;border:1px solid var(--border-b);color:var(--text-dim);
-              padding:3px 10px;cursor:pointer;border-radius:3px">
-              ↻ Refresh QR
-            </button>
-          </div>
-        </div>
-
-        <!-- Task Router tab -->
-        <div class="tab-pane" id="tab-router">
-          <div class="router-wrap" id="router-list">
-            <div style="font-size:9px;color:var(--text-dim);letter-spacing:0.08em;padding:4px 0;">
-              Loading router config…
-            </div>
-          </div>
-        </div>
-
-        <!-- Events tab -->
-        <div class="tab-pane" id="tab-events">
-          <div id="events-list"></div>
-        </div>
-      </div>
-
-      <!-- Composer -->
-      <div class="composer">
-        <textarea id="task-input" class="task-input"
-          placeholder="Command or question — Enter to execute, Shift+Enter for new line" aria-label="Command input field"></textarea>
-        <div class="btn-row">
-          <button id="run-btn"         class="btn primary" aria-label="Run command">▶ Run</button>
-          <button id="voice-btn"       class="btn orange" aria-label="Start voice input">⬤ Voice</button>
-          <button id="stop-voice-btn"  class="btn" aria-label="Stop voice input">◼ Stop</button>
-          <button id="interrupt-btn"   class="btn danger" aria-label="Interrupt running task">⊘ Kill</button>
-          <select id="voice-select" title="Voice" style="
-            background:var(--bg2,#0d1117);color:var(--text,#c9d1d9);
-            border:1px solid var(--border-b,#30363d);border-radius:4px;
-            font-family:inherit;font-size:9px;letter-spacing:.06em;
-            padding:3px 6px;cursor:pointer;max-width:130px">
-            <option value="">🔊 Voice…</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Quick prompts -->
-      <div class="quick-section">
-        <button class="chip" data-prompt="Summarize the current repository architecture.">Architecture</button>
-        <button class="chip" data-prompt="Review current dashboard code and suggest 3 improvements.">Review UI</button>
-        <button class="chip" data-prompt="List high-priority TODOs based on current project state.">Priority TODOs</button>
-        <button class="chip" data-prompt="Explain the latest git changes and their impact.">Latest Commit</button>
-        <button class="chip" data-prompt="Run a security scan on the current project.">Security Scan</button>
-        <button class="chip" data-prompt="What agents are available and what can they do?">List Agents</button>
       </div>
     </aside>
 
-    <!-- ══════════════════ FOOTER ══════════════════ -->
-    <footer class="footer">
-      <span>[Enter] Execute · [F4] Mute · [F11] Fullscreen</span>
-      <span class="footer-center">Octopus Industries · OCTO v2.0 · CLASSIFIED</span>
-      <span>© OCTOPUS AGENT SYSTEM</span>
-    </footer>
   </div>
 
-  <script src="js/app.js"></script>
+  <!-- 6. GMAIL MCP (MODEL CONTEXT PROTOCOL) STREAMING HUD (Bottom Panel Anchor) -->
+  <footer class="flex-none h-12 bg-deepspace-800 border-t neon-border flex items-center px-4 justify-between relative z-10">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 bg-deepspace-900 border border-deepspace-600 px-2 py-1 rounded">
+        <span class="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+        <span class="text-[10px] font-mono text-cyan-400">mcp:gmail-server</span>
+      </div>
 
+      <!-- Unread Ticker -->
+      <div class="flex items-center gap-2 max-w-lg overflow-hidden whitespace-nowrap">
+        <span class="text-xs">📧</span>
+        <span class="text-[10px] text-gray-400 font-mono bg-deepspace-900 px-2 py-0.5 rounded border border-deepspace-600">Unread: <span id="mcp-unread">2</span></span>
+        <div class="text-[10px] text-gray-300 font-mono truncate" id="mcp-ticker">
+          <span class="text-cyan-500">[GitHub]</span> Pull Request #42 needs review...
+        </div>
+      </div>
+    </div>
+
+    <!-- Automated Draft Tracker -->
+    <div class="flex items-center gap-3">
+      <div class="text-[10px] text-gray-400 font-mono">Agent Drafts Pending Review:</div>
+      <div class="flex gap-1" id="mcp-drafts">
+        <button class="bg-accent/20 border border-accent/50 text-accent text-[9px] px-2 py-0.5 rounded hover:bg-accent/30 focus:outline-none focus:ring-1 focus:ring-accent" aria-label="Review Draft: Project Update">Project Update</button>
+        <button class="bg-accent/20 border border-accent/50 text-accent text-[9px] px-2 py-0.5 rounded hover:bg-accent/30 focus:outline-none focus:ring-1 focus:ring-accent" aria-label="Review Draft: Invoice Reply">Invoice Reply</button>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts: Tab Switching and WebSocket Unification logic will be injected by app.js -->
+  <script src="js/app.js"></script>
 </body>
 </html>
