@@ -15,16 +15,18 @@ import psutil
 
 from PyQt6.QtCore import (
     QEasingCurve, QMimeData, QObject, QPointF, QRectF, QSize, Qt,
-    QTimer, QUrl, pyqtSignal,
+    QThread, QTimer, QUrl, pyqtSignal,
 )
 from PyQt6.QtGui import (
     QBrush, QColor, QDragEnterEvent, QDropEvent, QFont, QFontDatabase,
     QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap,
-    QRadialGradient, QShortcut,
+    QRadialGradient, QShortcut, QTextCharFormat, QTextCursor,
 )
 from PyQt6.QtWidgets import (
-    QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QPushButton, QScrollArea, QSizePolicy, QTextEdit,
+    QApplication, QCheckBox, QComboBox, QFileDialog, QFormLayout,
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
+    QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSplitter,
+    QTabWidget, QTextEdit, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget, QProgressBar,
 )
 
@@ -37,10 +39,10 @@ BASE_DIR   = _base_dir()
 CONFIG_DIR = BASE_DIR / "config"
 API_FILE   = CONFIG_DIR / "api_keys.json"
 
-_DEFAULT_W, _DEFAULT_H = 980, 700
-_MIN_W,     _MIN_H     = 820, 580
-_LEFT_W  = 148
-_RIGHT_W = 340
+_DEFAULT_W, _DEFAULT_H = 1280, 820
+_MIN_W,     _MIN_H     = 900, 620
+_LEFT_W  = 200
+_RIGHT_W = 360
 
 _OS = platform.system()  # "Windows" | "Darwin" | "Linux"
 
@@ -984,13 +986,615 @@ class SetupOverlay(QWidget):
         self.done.emit(key, self._sel_os)
 
 
+# ── New HUD widget classes ─────────────────────────────────────────────────────
+
+class OPAVBar(QWidget):
+    """Horizontal O.P.A.V. loop step indicator wired to WS agent events."""
+    STEPS = ["OBSERVE", "PLAN", "ACT", "VERIFY"]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(22)
+        self._step = 0
+
+    def set_step(self, step: int):
+        self._step = max(0, min(3, step))
+        self.update()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H = self.width(), self.height()
+        total = len(self.STEPS)
+        box_w = (W - (total - 1) * 8) // total
+
+        for i, label in enumerate(self.STEPS):
+            x = i * (box_w + 8)
+            active = i <= self._step
+            bg  = C.PRI_GHO if active else C.PANEL
+            bdr = C.PRI     if active else C.BORDER
+            col = C.WHITE   if active else C.TEXT_DIM
+
+            p.setBrush(QBrush(qcol(bg)))
+            p.setPen(QPen(qcol(bdr), 1.5))
+            p.drawRoundedRect(QRectF(x, 1, box_w, H - 2), 3, 3)
+
+            p.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            p.setPen(QPen(qcol(col), 1))
+            p.drawText(QRectF(x, 1, box_w, H - 2), Qt.AlignmentFlag.AlignCenter, label)
+
+            if i < total - 1:
+                ax = x + box_w + 1
+                ay = H // 2
+                p.setPen(QPen(qcol(C.PRI if active else C.BORDER, 180), 1))
+                p.drawLine(QPointF(ax, ay), QPointF(ax + 6, ay))
+                p.drawLine(QPointF(ax + 4, ay - 3), QPointF(ax + 6, ay))
+                p.drawLine(QPointF(ax + 4, ay + 3), QPointF(ax + 6, ay))
+
+
+class MemoryLayerGrid(QWidget):
+    """Compact L3/L4 memory status display in the header."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(230)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(2)
+
+        def _row(label, attr):
+            h = QHBoxLayout(); h.setSpacing(4)
+            lbl = QLabel(label)
+            lbl.setFont(QFont("Courier New", 6, QFont.Weight.Bold))
+            lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+            lbl.setFixedWidth(28)
+            val = QLabel("—")
+            val.setFont(QFont("Courier New", 6))
+            val.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+            h.addWidget(lbl); h.addWidget(val, stretch=1)
+            setattr(self, attr, val)
+            return h
+
+        lay.addLayout(_row("L3", "_l3"))
+        lay.addLayout(_row("L4", "_l4"))
+
+    def update_status(self, data: dict):
+        rs = data.get("run_state", {})
+        cs = data.get("cache_stats", {})
+        pid = rs.get("pid", "—") if isinstance(rs, dict) else "—"
+        self._l3.setText(f"PID {pid}")
+        hits = cs.get("hits", 0) if isinstance(cs, dict) else 0
+        self._l4.setText(f"cache {hits} hits")
+
+
+class FileTree(QWidget):
+    """Project file tree with git status indicators."""
+
+    def __init__(self, root_path: Path, parent=None):
+        super().__init__(parent)
+        self._root = root_path
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+
+        # git info row
+        self._git_lbl = QLabel("branch: —")
+        self._git_lbl.setFont(QFont("Courier New", 7))
+        self._git_lbl.setStyleSheet(f"color: {C.ACC2}; background: transparent;")
+        self._git_lbl.setWordWrap(True)
+        lay.addWidget(self._git_lbl)
+
+        reindex = QPushButton("⟳  Re-Index")
+        reindex.setFixedHeight(22)
+        reindex.setFont(QFont("Courier New", 7))
+        reindex.setCursor(Qt.CursorShape.PointingHandCursor)
+        reindex.setStyleSheet(f"""
+            QPushButton {{ background: {C.PANEL2}; color: {C.PRI};
+                border: 1px solid {C.BORDER}; border-radius: 3px; }}
+            QPushButton:hover {{ border-color: {C.PRI}; }}
+        """)
+        reindex.clicked.connect(self.refresh)
+        lay.addWidget(reindex)
+
+        self._tree = QTreeWidget()
+        self._tree.setHeaderHidden(True)
+        self._tree.setFont(QFont("Courier New", 7))
+        self._tree.setStyleSheet(f"""
+            QTreeWidget {{ background: {C.PANEL}; color: {C.TEXT};
+                border: 1px solid {C.BORDER}; border-radius: 3px; }}
+            QTreeWidget::item:hover {{ background: {C.PRI_GHO}; }}
+            QTreeWidget::item:selected {{ background: {C.PRI_GHO}; color: {C.WHITE}; }}
+            QScrollBar:vertical {{ background: {C.BG}; width: 6px; border: none; }}
+            QScrollBar::handle:vertical {{ background: {C.BORDER_B}; border-radius: 3px; }}
+        """)
+        lay.addWidget(self._tree, stretch=1)
+        QTimer.singleShot(500, self.refresh)
+
+    def refresh(self):
+        self._tree.clear()
+        self._update_git()
+        _SKIP = {"__pycache__", ".git", "node_modules", ".venv", "venv", "dist", "build"}
+        now = time.time()
+
+        def _add(parent, path: Path, depth=0):
+            if depth > 3: return
+            try:
+                entries = sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+            except PermissionError:
+                return
+            for entry in entries:
+                if entry.name.startswith(".") or entry.name in _SKIP:
+                    continue
+                item = QTreeWidgetItem(parent)
+                age = now - entry.stat().st_mtime
+                if age < 60:
+                    item.setForeground(0, QBrush(qcol(C.GREEN)))
+                elif age < 300:
+                    item.setForeground(0, QBrush(qcol(C.ACC2)))
+                else:
+                    item.setForeground(0, QBrush(qcol(C.TEXT_MED)))
+                if entry.is_dir():
+                    item.setText(0, f"▸ {entry.name}")
+                    _add(item, entry, depth + 1)
+                else:
+                    item.setText(0, f"  {entry.name}")
+
+        _add(self._tree.invisibleRootItem(), self._root)
+
+    def _update_git(self):
+        try:
+            branch = subprocess.check_output(
+                ["git", "branch", "--show-current"],
+                cwd=str(self._root), stderr=subprocess.DEVNULL, timeout=3,
+            ).decode().strip() or "detached"
+            untracked = subprocess.check_output(
+                ["git", "status", "--short"],
+                cwd=str(self._root), stderr=subprocess.DEVNULL, timeout=3,
+            ).decode().strip().count("\n") + 1
+            last = subprocess.check_output(
+                ["git", "log", "--oneline", "-1"],
+                cwd=str(self._root), stderr=subprocess.DEVNULL, timeout=3,
+            ).decode().strip()[:40]
+            self._git_lbl.setText(f"⎇ {branch}  Δ{untracked}\n{last}")
+        except Exception:
+            self._git_lbl.setText("git: —")
+
+
+class DiffViewer(QTextEdit):
+    """Red/green diff display wired to Forge agent events."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setReadOnly(True)
+        self.setFont(QFont("Courier New", 8))
+        self.setStyleSheet(f"""
+            QTextEdit {{ background: {C.PANEL}; color: {C.TEXT};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 4px; }}
+            QScrollBar:vertical {{ background: {C.BG}; width: 6px; border: none; }}
+            QScrollBar::handle:vertical {{ background: {C.BORDER_B}; border-radius: 3px; }}
+        """)
+        self.setPlaceholderText("Forge agent diffs appear here when agents modify files…")
+
+    def show_diff(self, text: str):
+        self.clear()
+        cur = self.textCursor()
+        for line in text.splitlines():
+            fmt = QTextCharFormat()
+            if line.startswith("+"):
+                fmt.setForeground(QBrush(qcol(C.GREEN)))
+                fmt.setBackground(QBrush(qcol("#001a0a")))
+            elif line.startswith("-"):
+                fmt.setForeground(QBrush(qcol(C.RED)))
+                fmt.setBackground(QBrush(qcol("#1a0005")))
+            elif line.startswith("@@"):
+                fmt.setForeground(QBrush(qcol(C.ACC2)))
+            else:
+                fmt.setForeground(QBrush(qcol(C.TEXT_MED)))
+            cur.movePosition(QTextCursor.MoveOperation.End)
+            cur.insertText(line + "\n", fmt)
+        self.setTextCursor(cur)
+        self.ensureCursorVisible()
+
+
+class ServerLogWidget(QTextEdit):
+    """Streams live events from the Node server via HTTP polling."""
+    _append_sig = pyqtSignal(str, str)  # text, color
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setReadOnly(True)
+        self.setFont(QFont("Courier New", 8))
+        self.setStyleSheet(f"""
+            QTextEdit {{ background: #000810; color: {C.TEXT};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 4px; }}
+            QScrollBar:vertical {{ background: {C.BG}; width: 6px; border: none; }}
+            QScrollBar::handle:vertical {{ background: {C.BORDER_B}; border-radius: 3px; }}
+        """)
+        self._append_sig.connect(self._append)
+        self._seen: set = set()
+
+    def push(self, text: str, color: str = C.TEXT_MED):
+        self._append_sig.emit(text, color)
+
+    def _append(self, text: str, color: str):
+        cur = self.textCursor()
+        fmt = QTextCharFormat()
+        fmt.setForeground(QBrush(qcol(color)))
+        cur.movePosition(QTextCursor.MoveOperation.End)
+        ts = time.strftime("%H:%M:%S")
+        cur.insertText(f"[{ts}] {text}\n", fmt)
+        self.setTextCursor(cur)
+        self.ensureCursorVisible()
+        # Keep max 300 lines
+        doc = self.document()
+        while doc.blockCount() > 300:
+            cur2 = self.textCursor()
+            cur2.movePosition(QTextCursor.MoveOperation.Start)
+            cur2.select(QTextCursor.SelectionType.BlockUnderCursor)
+            cur2.removeSelectedText()
+            cur2.deleteChar()
+
+
+class AgentChipGrid(QWidget):
+    """15-agent status chips + dynamic factory event log."""
+
+    AGENTS = [
+        "Cortex","Atlas","Architect","Forge","Reviewer",
+        "SecurityReviewer","FactChecker","Probe","Scribe","ReleaseKeeper",
+        "Navigator","MarketScout","Toolsmith","SandboxQA","SystemAgent",
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+
+        grid = QGridLayout()
+        grid.setSpacing(4)
+        self._chips: dict[str, QPushButton] = {}
+        cols = 3
+        for i, name in enumerate(self.AGENTS):
+            btn = QPushButton(name)
+            btn.setFixedHeight(26)
+            btn.setFont(QFont("Courier New", 7))
+            btn.setEnabled(False)
+            btn.setStyleSheet(self._idle_style())
+            grid.addWidget(btn, i // cols, i % cols)
+            self._chips[name.lower()] = btn
+        lay.addLayout(grid)
+
+        lbl = QLabel("◈ FACTORY STREAM")
+        lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        lay.addWidget(lbl)
+
+        self._factory_log = ServerLogWidget()
+        self._factory_log.setFixedHeight(90)
+        self._factory_log.setPlaceholderText("New agents hot-swapped here via instinct_new…")
+        lay.addWidget(self._factory_log)
+
+    def _idle_style(self):
+        return f"""QPushButton {{
+            background: {C.PANEL2}; color: {C.TEXT_DIM};
+            border: 1px solid {C.BORDER}; border-radius: 3px;
+        }}"""
+
+    def _active_style(self):
+        return f"""QPushButton {{
+            background: {C.PRI_GHO}; color: {C.PRI};
+            border: 1px solid {C.PRI}; border-radius: 3px;
+        }}"""
+
+    def set_agent_active(self, name: str, active: bool):
+        chip = self._chips.get(name.lower())
+        if chip:
+            chip.setStyleSheet(self._active_style() if active else self._idle_style())
+
+    def log_factory_event(self, agent_name: str):
+        self._factory_log.push(f"instinct_new → {agent_name}", C.GREEN)
+        # Flash chip if it exists
+        key = agent_name.lower()
+        if key not in self._chips:
+            # New dynamic agent - add a chip
+            btn = QPushButton(agent_name)
+            btn.setFixedHeight(26)
+            btn.setFont(QFont("Courier New", 7))
+            btn.setEnabled(False)
+            btn.setStyleSheet(self._active_style())
+            self._chips[key] = btn
+
+
+class LLMConfigPanel(QWidget):
+    """API key inputs and model route selectors. Saves to api_keys.json and node/.env."""
+
+    _NODE_ENV = BASE_DIR.parent / "node" / ".env"
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.setSpacing(8)
+
+        def _hdr(txt):
+            l = QLabel(txt)
+            l.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            l.setStyleSheet(f"color: {C.PRI}; background: transparent; "
+                            f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 2px;")
+            return l
+
+        lay.addWidget(_hdr("▸ API KEYS"))
+        form = QFormLayout(); form.setSpacing(5)
+        self._keys: dict[str, QLineEdit] = {}
+        for k, placeholder in [
+            ("NVIDIA_API_KEY",      "nvapi-…"),
+            ("OPENROUTER_API_KEY",  "sk-or-…"),
+            ("OLLAMA_BASE_URL",     "http://localhost:11434"),
+            ("ANTHROPIC_API_KEY",   "sk-ant-…"),
+            ("GEMINI_API_KEY",      "AIza…"),
+        ]:
+            le = QLineEdit()
+            le.setEchoMode(QLineEdit.EchoMode.Password)
+            le.setPlaceholderText(placeholder)
+            le.setFont(QFont("Courier New", 8))
+            le.setStyleSheet(f"""
+                QLineEdit {{ background: {C.PANEL2}; color: {C.WHITE};
+                    border: 1px solid {C.BORDER}; border-radius: 3px; padding: 3px 6px; }}
+                QLineEdit:focus {{ border-color: {C.PRI}; }}
+            """)
+            lbl = QLabel(k.replace("_", " "))
+            lbl.setFont(QFont("Courier New", 7))
+            lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+            form.addRow(lbl, le)
+            self._keys[k] = le
+        lay.addLayout(form)
+
+        lay.addWidget(_hdr("▸ MODEL ROUTES"))
+        route_form = QFormLayout(); route_form.setSpacing(5)
+        self._routes: dict[str, QComboBox] = {}
+        route_defs = [
+            ("Planner",  ["nvidia/llama-3.1-nemotron-ultra-253b-v1", "nousresearch/hermes-3-llama-3.1-405b", "moonshotai/kimi-k2-thinking"]),
+            ("Coder",    ["qwen/qwen3-coder-480b-a35b-instruct", "deepseek-ai/deepseek-v4-pro", "qwen2.5-coder:1.5b-base"]),
+            ("Local",    ["gemma4:e2b", "llama3:8b", "qwen2.5-coder:1.5b-base", "phi4:latest"]),
+            ("Security", ["meta/llama-3.3-70b-instruct", "microsoft/phi-4-128k-instruct"]),
+        ]
+        for role, opts in route_defs:
+            cb = QComboBox()
+            for o in opts: cb.addItem(o)
+            cb.setFont(QFont("Courier New", 7))
+            cb.setStyleSheet(f"""
+                QComboBox {{ background: {C.PANEL2}; color: {C.TEXT};
+                    border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 6px; }}
+                QComboBox:focus {{ border-color: {C.PRI}; }}
+                QComboBox::drop-down {{ border: none; }}
+                QComboBox QAbstractItemView {{ background: {C.PANEL}; color: {C.TEXT};
+                    selection-background-color: {C.PRI_GHO}; }}
+            """)
+            lbl2 = QLabel(role)
+            lbl2.setFont(QFont("Courier New", 7))
+            lbl2.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+            route_form.addRow(lbl2, cb)
+            self._routes[role] = cb
+        lay.addLayout(route_form)
+
+        save_btn = QPushButton("💾  SAVE CONFIG")
+        save_btn.setFixedHeight(30)
+        save_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setStyleSheet(f"""
+            QPushButton {{ background: {C.PRI_GHO}; color: {C.PRI};
+                border: 1px solid {C.PRI_DIM}; border-radius: 3px; }}
+            QPushButton:hover {{ border-color: {C.PRI}; color: {C.WHITE}; }}
+        """)
+        save_btn.clicked.connect(self._save)
+        lay.addWidget(save_btn)
+        self._status = QLabel("")
+        self._status.setFont(QFont("Courier New", 7))
+        self._status.setStyleSheet(f"color: {C.GREEN}; background: transparent;")
+        self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(self._status)
+        lay.addStretch()
+        self._load()
+
+    def _load(self):
+        try:
+            d = json.loads(API_FILE.read_text(encoding="utf-8"))
+            mapping = {
+                "NVIDIA_API_KEY":     d.get("nvidia_api_key", ""),
+                "OPENROUTER_API_KEY": d.get("openrouter_api_key", ""),
+                "OLLAMA_BASE_URL":    d.get("ollama_base_url", ""),
+                "ANTHROPIC_API_KEY":  d.get("anthropic_api_key", ""),
+                "GEMINI_API_KEY":     d.get("gemini_api_key", ""),
+            }
+            for k, v in mapping.items():
+                if k in self._keys and v:
+                    self._keys[k].setText(v)
+        except Exception:
+            pass
+
+    def _save(self):
+        # Write api_keys.json
+        try:
+            existing = {}
+            if API_FILE.exists():
+                existing = json.loads(API_FILE.read_text(encoding="utf-8"))
+            existing.update({
+                "nvidia_api_key":     self._keys["NVIDIA_API_KEY"].text(),
+                "openrouter_api_key": self._keys["OPENROUTER_API_KEY"].text(),
+                "ollama_base_url":    self._keys["OLLAMA_BASE_URL"].text() or "http://localhost:11434",
+                "anthropic_api_key":  self._keys["ANTHROPIC_API_KEY"].text(),
+                "gemini_api_key":     self._keys["GEMINI_API_KEY"].text(),
+            })
+            API_FILE.write_text(json.dumps(existing, indent=4), encoding="utf-8")
+        except Exception as e:
+            self._status.setStyleSheet(f"color: {C.RED}; background: transparent;")
+            self._status.setText(f"Error: {e}")
+            return
+
+        # Write node/.env
+        try:
+            lines = []
+            if self._NODE_ENV.exists():
+                for line in self._NODE_ENV.read_text(encoding="utf-8").splitlines():
+                    skip = any(line.startswith(k) for k in [
+                        "NVIDIA_API_KEY=", "OPENROUTER_API_KEY=",
+                        "OLLAMA_BASE_URL=", "ANTHROPIC_API_KEY=",
+                    ])
+                    if not skip:
+                        lines.append(line)
+            for k, le in self._keys.items():
+                if k == "GEMINI_API_KEY": continue
+                lines.append(f"{k}={le.text()}")
+            self._NODE_ENV.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        except Exception:
+            pass
+
+        self._status.setStyleSheet(f"color: {C.GREEN}; background: transparent;")
+        self._status.setText("Saved to api_keys.json + node/.env")
+        QTimer.singleShot(3000, lambda: self._status.setText(""))
+
+
+class GatewayPanel(QWidget):
+    """Live gateway status indicators."""
+
+    _GATEWAYS = [
+        ("telegram",    "Telegram Sentry"),
+        ("discord",     "Discord Bridge"),
+        ("slack",       "Slack"),
+        ("whatsapp",    "WhatsApp Interface"),
+        ("signal",      "Signal"),
+        ("homeassistant","Home Assistant"),
+    ]
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.setSpacing(6)
+
+        hdr = QLabel("▸ GATEWAY STATUS")
+        hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        hdr.setStyleSheet(f"color: {C.PRI}; background: transparent; "
+                          f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 2px;")
+        lay.addWidget(hdr)
+
+        self._rows: dict[str, QLabel] = {}
+        for key, name in self._GATEWAYS:
+            row = QHBoxLayout(); row.setSpacing(6)
+            dot = QLabel("●")
+            dot.setFont(QFont("Courier New", 10))
+            dot.setFixedWidth(14)
+            dot.setStyleSheet(f"color: {C.BORDER}; background: transparent;")
+            nlbl = QLabel(name)
+            nlbl.setFont(QFont("Courier New", 8))
+            nlbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+            status = QLabel("offline")
+            status.setFont(QFont("Courier New", 7))
+            status.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+            status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            row.addWidget(dot); row.addWidget(nlbl, stretch=1); row.addWidget(status)
+            lay.addLayout(row)
+            self._rows[key] = (dot, status)
+
+        lay.addSpacing(8)
+        lbl2 = QLabel("▸ TELEGRAM CREDENTIALS")
+        lbl2.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        lbl2.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        lay.addWidget(lbl2)
+
+        form = QFormLayout(); form.setSpacing(4)
+        self._tg_token = QLineEdit()
+        self._tg_token.setEchoMode(QLineEdit.EchoMode.Password)
+        self._tg_token.setPlaceholderText("TELEGRAM_BOT_TOKEN")
+        self._tg_token.setFont(QFont("Courier New", 7))
+        self._tg_token.setStyleSheet(f"""
+            QLineEdit {{ background: {C.PANEL2}; color: {C.WHITE};
+                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 2px 5px; }}
+            QLineEdit:focus {{ border-color: {C.PRI}; }}
+        """)
+        self._tg_channel = QLineEdit()
+        self._tg_channel.setPlaceholderText("TELEGRAM_HOME_CHANNEL_ID")
+        self._tg_channel.setFont(QFont("Courier New", 7))
+        self._tg_channel.setStyleSheet(self._tg_token.styleSheet())
+        for le, label in [(self._tg_token, "Token"), (self._tg_channel, "Channel")]:
+            lbl3 = QLabel(label)
+            lbl3.setFont(QFont("Courier New", 7))
+            lbl3.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+            form.addRow(lbl3, le)
+        lay.addLayout(form)
+        lay.addStretch()
+
+    def update_gateways(self, gw_data: dict):
+        gateways = gw_data.get("gateways", {})
+        for key, (dot, status) in self._rows.items():
+            info = gateways.get(key, {})
+            online = info.get("online", False)
+            dot.setStyleSheet(f"color: {'#00ff88' if online else C.BORDER}; background: transparent;")
+            status.setText("online" if online else "offline")
+            status.setStyleSheet(f"color: {'#00ff88' if online else C.TEXT_DIM}; background: transparent;")
+
+
+class _StatusPoller(QThread):
+    """Polls /api/status every 3s and emits structured events."""
+    status_ready   = pyqtSignal(dict)
+    gateways_ready = pyqtSignal(dict)
+    event_fired    = pyqtSignal(str, str)  # event_type, detail
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._running = True
+        self._prev_task = ""
+        self._prev_agents: set = set()
+
+    def run(self):
+        import requests as _r
+        tick = 0
+        while self._running:
+            try:
+                r = _r.get("http://localhost:3001/api/status", timeout=3)
+                if r.ok:
+                    data = r.json()
+                    self.status_ready.emit(data)
+                    # Derive OPAV step from running state
+                    task = data.get("active_task") or ""
+                    chains = data.get("chains_running", 0)
+                    if chains and task and task != self._prev_task:
+                        self._prev_task = task
+                        self.event_fired.emit("chain_start", task)
+                    elif not chains and self._prev_task:
+                        self._prev_task = ""
+                        self.event_fired.emit("chain_done", "")
+            except Exception:
+                pass
+
+            # Poll gateways every 10s
+            if tick % 4 == 0:
+                try:
+                    gr = _r.get("http://localhost:3001/api/gateways", timeout=3)
+                    if gr.ok:
+                        self.gateways_ready.emit(gr.json())
+                except Exception:
+                    pass
+            tick += 1
+            self.msleep(3000)
+
+    def stop(self):
+        self._running = False
+        self.quit()
+        self.wait(2000)
+
+
 class MainWindow(QMainWindow):
-    _log_sig   = pyqtSignal(str)
-    _state_sig = pyqtSignal(str)
+    _log_sig     = pyqtSignal(str)
+    _state_sig   = pyqtSignal(str)
+    _opav_sig    = pyqtSignal(int)
+    _diff_sig    = pyqtSignal(str)
+    _factory_sig = pyqtSignal(str)
+    _agent_on    = pyqtSignal(str, bool)
 
     def __init__(self, face_path: str):
         super().__init__()
-        self.setWindowTitle("OCTO — Autonomous Agent System")
+        self.setWindowTitle("O.C.T.O — Optimized Cognitive Task Orchestrator v4.5")
         self.setMinimumSize(_MIN_W, _MIN_H)
         self.resize(_DEFAULT_W, _DEFAULT_H)
 
@@ -1003,6 +1607,7 @@ class MainWindow(QMainWindow):
         self.on_text_command  = None
         self._muted           = False
         self._current_file: str | None = None
+        self._opav_step       = 0
 
         central = QWidget()
         central.setStyleSheet(f"background: {C.BG};")
@@ -1013,46 +1618,86 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
         root.addWidget(self._build_header())
 
-        body = QHBoxLayout()
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(0)
+        # ── Resizable 3-column splitter ───────────────────────────────────────
+        body = QSplitter(Qt.Orientation.Horizontal)
+        body.setHandleWidth(2)
+        body.setStyleSheet(f"QSplitter::handle {{ background: {C.BORDER}; }}")
 
-        self._left_panel = self._build_left_panel()
-        body.addWidget(self._left_panel, stretch=0)
+        body.addWidget(self._build_left_panel())
+        body.addWidget(self._build_center_tabs(face_path))
+        body.addWidget(self._build_right_panel())
+        body.setSizes([_LEFT_W, _DEFAULT_W - _LEFT_W - _RIGHT_W, _RIGHT_W])
+        body.setCollapsible(0, False)
+        body.setCollapsible(2, False)
 
-        self.hud = HudCanvas(face_path)
-        self.hud.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        body.addWidget(self.hud, stretch=5)
-
-        self._right_panel = self._build_right_panel()
-        body.addWidget(self._right_panel, stretch=0)
-
-        root.addLayout(body, stretch=1)
+        root.addWidget(body, stretch=1)
         root.addWidget(self._build_footer())
 
+        # ── Timers ─────────────────────────────────────────────────────────────
         self._clock_tmr = QTimer(self)
         self._clock_tmr.timeout.connect(self._tick_clock)
         self._clock_tmr.start(1000)
         self._tick_clock()
 
-        # Metrik güncelleme timer'ı
         self._metric_tmr = QTimer(self)
         self._metric_tmr.timeout.connect(self._update_metrics)
         self._metric_tmr.start(2000)
         self._update_metrics()
 
+        # ── Signal wiring ──────────────────────────────────────────────────────
         self._log_sig.connect(self._log.append_log)
         self._state_sig.connect(self._apply_state)
+        self._opav_sig.connect(self._opav_bar.set_step)
+        self._diff_sig.connect(self._diff_viewer.show_diff)
+        self._factory_sig.connect(self._agent_grid.log_factory_event)
+        self._agent_on.connect(self._agent_grid.set_agent_active)
 
+        # ── Background status poller ────────────────────────────────────────────
+        self._poller = _StatusPoller(self)
+        self._poller.status_ready.connect(self._on_status)
+        self._poller.gateways_ready.connect(self._gateway_panel.update_gateways)
+        self._poller.event_fired.connect(self._on_server_event)
+        self._poller.start()
+
+        # ── Setup overlay ──────────────────────────────────────────────────────
         self._overlay: SetupOverlay | None = None
         self._ready = self._check_config()
         if not self._ready:
             self._show_setup()
 
+        # ── Keyboard shortcuts ─────────────────────────────────────────────────
         sc_mute = QShortcut(QKeySequence("F4"), self)
         sc_mute.activated.connect(self._toggle_mute)
         sc_full = QShortcut(QKeySequence("F11"), self)
         sc_full.activated.connect(self._toggle_fullscreen)
+
+    def _on_status(self, data: dict):
+        self._mem_grid.update_status(data)
+        # Pipe server events to server log
+        task = data.get("active_task") or ""
+        if task:
+            self._server_log.push(f"TASK  {task[:80]}", C.ACC2)
+
+    def _on_server_event(self, event_type: str, detail: str):
+        step_map = {"chain_start": 1, "agent_start": 2, "chain_done": 3}
+        if event_type in step_map:
+            self._opav_step = step_map[event_type]
+            self._opav_sig.emit(self._opav_step)
+            if event_type == "chain_done":
+                QTimer.singleShot(2000, lambda: self._opav_sig.emit(0))
+        color_map = {
+            "chain_start": C.ACC2, "chain_done": C.GREEN,
+            "agent_start": C.PRI,  "instinct_new": C.GREEN,
+        }
+        col = color_map.get(event_type, C.TEXT_MED)
+        msg = f"{event_type}"
+        if detail: msg += f"  {detail[:60]}"
+        self._server_log.push(msg, col)
+
+    def closeEvent(self, event):
+        if hasattr(self, "_poller"):
+            self._poller.stop()
+        super().closeEvent(event)
 
     def _toggle_fullscreen(self):
         if self.isFullScreen():
@@ -1124,24 +1769,27 @@ class MainWindow(QMainWindow):
 
     def _build_header(self) -> QWidget:
         w = QWidget()
-        w.setFixedHeight(54)
+        w.setFixedHeight(72)
         w.setStyleSheet(f"background: {C.DARK}; border-bottom: 1px solid {C.BORDER_B};")
-        lay = QHBoxLayout(w)
-        lay.setContentsMargins(16, 0, 16, 0)
+        outer = QVBoxLayout(w)
+        outer.setContentsMargins(14, 6, 14, 4)
+        outer.setSpacing(4)
 
-        def _badge(txt, color=C.TEXT_MED):
+        top = QHBoxLayout(); top.setSpacing(10)
+
+        def _badge(txt, color=C.PRI_DIM):
             l = QLabel(txt)
             l.setFont(QFont("Courier New", 8))
             l.setStyleSheet(f"color: {color}; background: transparent;")
             return l
 
-        lay.addWidget(_badge("OCTO v4.5", C.PRI_DIM))
-        lay.addStretch()
+        top.addWidget(_badge("OCTO v4.5"))
+        top.addStretch()
 
-        mid = QVBoxLayout(); mid.setSpacing(1)
+        mid = QVBoxLayout(); mid.setSpacing(0)
         title = QLabel("O.C.T.O")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFont(QFont("Courier New", 17, QFont.Weight.Bold))
+        title.setFont(QFont("Courier New", 15, QFont.Weight.Bold))
         title.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         mid.addWidget(title)
         sub = QLabel("Optimized Cognitive Task Orchestrator")
@@ -1149,12 +1797,16 @@ class MainWindow(QMainWindow):
         sub.setFont(QFont("Courier New", 7))
         sub.setStyleSheet(f"color: {C.PRI_DIM}; background: transparent;")
         mid.addWidget(sub)
-        lay.addLayout(mid)
-        lay.addStretch()
+        top.addLayout(mid)
+        top.addStretch()
 
-        right_col = QVBoxLayout(); right_col.setSpacing(2)
+        self._mem_grid = MemoryLayerGrid()
+        top.addWidget(self._mem_grid)
+        top.addSpacing(10)
+
+        right_col = QVBoxLayout(); right_col.setSpacing(1)
         self._clock_lbl = QLabel("00:00:00")
-        self._clock_lbl.setFont(QFont("Courier New", 14, QFont.Weight.Bold))
+        self._clock_lbl.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
         self._clock_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
         self._clock_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._clock_lbl)
@@ -1163,7 +1815,11 @@ class MainWindow(QMainWindow):
         self._date_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
         self._date_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._date_lbl)
-        lay.addLayout(right_col)
+        top.addLayout(right_col)
+        outer.addLayout(top)
+
+        self._opav_bar = OPAVBar()
+        outer.addWidget(self._opav_bar)
         return w
 
     def _tick_clock(self):
@@ -1172,114 +1828,212 @@ class MainWindow(QMainWindow):
 
     def _build_left_panel(self) -> QWidget:
         w = QWidget()
-        w.setFixedWidth(_LEFT_W)
+        w.setMinimumWidth(160)
+        w.setMaximumWidth(280)
         w.setStyleSheet(f"background: {C.DARK}; border-right: 1px solid {C.BORDER};")
         lay = QVBoxLayout(w)
-        lay.setContentsMargins(8, 10, 8, 10)
-        lay.setSpacing(6)
+        lay.setContentsMargins(6, 8, 6, 8)
+        lay.setSpacing(5)
 
-        hdr = QLabel("◈ SYS MONITOR")
-        hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-        hdr.setStyleSheet(f"color: {C.PRI}; background: transparent; "
-                          f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 4px;")
-        lay.addWidget(hdr)
-        lay.addSpacing(2)
+        def _sec(txt):
+            l = QLabel(txt)
+            l.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            l.setStyleSheet(f"color: {C.PRI}; background: transparent; "
+                            f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 2px;")
+            return l
 
+        lay.addWidget(_sec("◈ WORKSPACE"))
+        self._file_tree = FileTree(BASE_DIR.parent)
+        lay.addWidget(self._file_tree, stretch=3)
+
+        lay.addWidget(_sec("◈ SYS MONITOR"))
         self._bar_cpu = MetricBar("CPU", C.PRI)
         self._bar_mem = MetricBar("MEM", C.ACC2)
         self._bar_net = MetricBar("NET", C.GREEN)
         self._bar_gpu = MetricBar("GPU", C.ACC)
         self._bar_tmp = MetricBar("TMP", "#ff6688")
-
         for bar in [self._bar_cpu, self._bar_mem, self._bar_net,
                     self._bar_gpu, self._bar_tmp]:
             lay.addWidget(bar)
 
-        lay.addSpacing(4)
-
         info_panel = QWidget()
         info_panel.setStyleSheet(
-            f"background: {C.PANEL2}; border: 1px solid {C.BORDER}; border-radius: 4px;"
-        )
+            f"background: {C.PANEL2}; border: 1px solid {C.BORDER}; border-radius: 4px;")
         ip_lay = QVBoxLayout(info_panel)
-        ip_lay.setContentsMargins(6, 5, 6, 5)
-        ip_lay.setSpacing(3)
-
+        ip_lay.setContentsMargins(6, 4, 6, 4); ip_lay.setSpacing(2)
         self._uptime_lbl = QLabel("UP  --:--")
-        self._uptime_lbl.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._uptime_lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
         self._uptime_lbl.setStyleSheet(f"color: {C.GREEN}; background: transparent; border: none;")
-        ip_lay.addWidget(self._uptime_lbl)
-
         self._proc_lbl = QLabel("PROC  --")
-        self._proc_lbl.setFont(QFont("Courier New", 8))
+        self._proc_lbl.setFont(QFont("Courier New", 7))
         self._proc_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; border: none;")
-        ip_lay.addWidget(self._proc_lbl)
-
         os_name = {"Windows": "WIN", "Darwin": "macOS", "Linux": "LINUX"}.get(_OS, _OS.upper())
         os_lbl = QLabel(f"OS  {os_name}")
-        os_lbl.setFont(QFont("Courier New", 8))
+        os_lbl.setFont(QFont("Courier New", 7))
         os_lbl.setStyleSheet(f"color: {C.ACC2}; background: transparent; border: none;")
-        ip_lay.addWidget(os_lbl)
-
+        for l in [self._uptime_lbl, self._proc_lbl, os_lbl]:
+            ip_lay.addWidget(l)
         lay.addWidget(info_panel)
-        lay.addStretch()
-
-        for txt, col in [
-            ("AI CORE\nACTIVE",     C.GREEN),
-            ("SEC\nCLEARED",        C.PRI),
-            ("OCTO\nv4.5",          C.TEXT_DIM),
-        ]:
-            lbl = QLabel(txt)
-            lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(
-                f"color: {col}; background: {C.PANEL2};"
-                f"border: 1px solid {C.BORDER_A}; border-radius: 3px; padding: 4px;"
-            )
-            lay.addWidget(lbl)
-
         return w
+    def _build_center_tabs(self, face_path: str) -> QWidget:
+        tabs = QTabWidget()
+        tabs.setFont(QFont("Courier New", 8))
+        tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; background: {C.BG}; }}
+            QTabBar::tab {{
+                background: {C.PANEL}; color: {C.TEXT_DIM};
+                padding: 5px 14px; border: 1px solid {C.BORDER};
+                border-bottom: none; border-radius: 3px 3px 0 0;
+                font: 8pt "Courier New";
+            }}
+            QTabBar::tab:selected {{ background: {C.BG}; color: {C.PRI};
+                border-color: {C.BORDER_B}; }}
+            QTabBar::tab:hover {{ color: {C.TEXT}; }}
+        """)
+
+        # ── Tab 1: HUD Canvas ─────────────────────────────────────────────────
+        self.hud = HudCanvas(face_path)
+        tabs.addTab(self.hud, "HUD")
+
+        # ── Tab 2: Diff Viewer + Server Log ───────────────────────────────────
+        diff_tab = QWidget()
+        diff_lay = QVBoxLayout(diff_tab)
+        diff_lay.setContentsMargins(6, 6, 6, 6)
+        diff_lay.setSpacing(4)
+
+        diff_hdr = QLabel("◈ FORGE DIFF VIEWER")
+        diff_hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        diff_hdr.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        diff_lay.addWidget(diff_hdr)
+
+        self._diff_viewer = DiffViewer()
+        diff_lay.addWidget(self._diff_viewer, stretch=1)
+
+        # Approve / Pause action bar
+        action_bar = QHBoxLayout()
+        approve_btn = QPushButton("🟢  APPROVE CHANGE")
+        approve_btn.setFixedHeight(30)
+        approve_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        approve_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        approve_btn.setStyleSheet(f"""
+            QPushButton {{ background: #001a0e; color: {C.GREEN};
+                border: 1px solid {C.GREEN_D}; border-radius: 3px; }}
+            QPushButton:hover {{ background: #002a18; border-color: {C.GREEN}; }}
+        """)
+        approve_btn.clicked.connect(lambda: self._log.append_log("SYS: Change approved."))
+
+        pause_btn = QPushButton("🔴  PAUSE EXECUTOR")
+        pause_btn.setFixedHeight(30)
+        pause_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        pause_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        pause_btn.setStyleSheet(f"""
+            QPushButton {{ background: #1a0008; color: {C.RED};
+                border: 1px solid #7a0020; border-radius: 3px; }}
+            QPushButton:hover {{ background: #280010; border-color: {C.RED}; }}
+        """)
+
+        def _pause():
+            try:
+                import requests as _r
+                _r.post("http://localhost:3001/api/tasks/interrupt", timeout=3)
+                self._log.append_log("SYS: Executor paused.")
+            except Exception as e:
+                self._log.append_log(f"SYS: Pause failed — {e}")
+
+        pause_btn.clicked.connect(_pause)
+        action_bar.addWidget(approve_btn)
+        action_bar.addWidget(pause_btn)
+        diff_lay.addLayout(action_bar)
+
+        log_hdr = QLabel("◈ SERVER EVENTS")
+        log_hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        log_hdr.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        diff_lay.addWidget(log_hdr)
+
+        self._server_log = ServerLogWidget()
+        diff_lay.addWidget(self._server_log, stretch=1)
+        tabs.addTab(diff_tab, "DIFF / LOG")
+
+        # ── Tab 3: Agent chips + factory stream ───────────────────────────────
+        self._agent_grid = AgentChipGrid()
+        tabs.addTab(self._agent_grid, "AGENTS")
+
+        return tabs
+
     def _build_right_panel(self) -> QWidget:
         w = QWidget()
-        w.setFixedWidth(_RIGHT_W)
+        w.setMinimumWidth(280)
+        w.setMaximumWidth(440)
         w.setStyleSheet(f"background: {C.DARK}; border-left: 1px solid {C.BORDER};")
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(8, 8, 8, 8)
-        lay.setSpacing(6)
+        outer = QVBoxLayout(w)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        def _sec(txt):
-            l = QLabel(f"▸ {txt}")
-            l.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-            l.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
-            return l
+        # ── Tab widget (Log / Config / Gateways) ──────────────────────────────
+        right_tabs = QTabWidget()
+        right_tabs.setFont(QFont("Courier New", 8))
+        right_tabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border: none; background: {C.DARK}; }}
+            QTabBar::tab {{
+                background: {C.PANEL}; color: {C.TEXT_DIM};
+                padding: 4px 10px; border: 1px solid {C.BORDER};
+                border-bottom: none; font: 7pt "Courier New";
+            }}
+            QTabBar::tab:selected {{ background: {C.DARK}; color: {C.PRI};
+                border-color: {C.BORDER_B}; }}
+        """)
 
-        lay.addWidget(_sec("ACTIVITY LOG"))
+        # Tab 1: Activity log + file drop
+        log_w = QWidget()
+        log_lay = QVBoxLayout(log_w)
+        log_lay.setContentsMargins(6, 6, 6, 4)
+        log_lay.setSpacing(4)
         self._log = LogWidget()
-        lay.addWidget(self._log, stretch=1)
-
+        log_lay.addWidget(self._log, stretch=1)
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
-        lay.addWidget(sep)
-
-        lay.addWidget(_sec("FILE UPLOAD"))
+        sep.setStyleSheet(f"color: {C.BORDER};")
+        log_lay.addWidget(sep)
+        log_lay.addWidget(QLabel("▸ FILE UPLOAD", font=QFont("Courier New", 7),
+                                  styleSheet=f"color: {C.TEXT_MED}; background: transparent;"))
         self._drop_zone = FileDropZone()
         self._drop_zone.file_selected.connect(self._on_file_selected)
-        lay.addWidget(self._drop_zone)
-
+        log_lay.addWidget(self._drop_zone)
         self._file_hint = QLabel("No file loaded — drop or click above to upload")
         self._file_hint.setFont(QFont("Courier New", 7))
         self._file_hint.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
         self._file_hint.setWordWrap(True)
-        lay.addWidget(self._file_hint)
+        log_lay.addWidget(self._file_hint)
+        right_tabs.addTab(log_w, "LOG")
 
-        sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
-        lay.addWidget(sep2)
+        # Tab 2: LLM Config
+        self._llm_config = LLMConfigPanel()
+        scroll1 = QScrollArea(); scroll1.setWidget(self._llm_config)
+        scroll1.setWidgetResizable(True)
+        scroll1.setStyleSheet(f"QScrollArea {{ border: none; background: {C.DARK}; }}")
+        right_tabs.addTab(scroll1, "CONFIG")
 
-        lay.addWidget(_sec("COMMAND INPUT"))
-        lay.addLayout(self._build_input_row())
+        # Tab 3: Gateways
+        self._gateway_panel = GatewayPanel()
+        scroll2 = QScrollArea(); scroll2.setWidget(self._gateway_panel)
+        scroll2.setWidgetResizable(True)
+        scroll2.setStyleSheet(f"QScrollArea {{ border: none; background: {C.DARK}; }}")
+        right_tabs.addTab(scroll2, "GATEWAYS")
 
-        # ── Push-to-talk button (wired by octo_desktop._start_voice) ─────────
+        outer.addWidget(right_tabs, stretch=1)
+
+        # ── Always-visible controls below tabs ────────────────────────────────
+        ctrl = QWidget()
+        ctrl.setStyleSheet(f"background: {C.DARK}; border-top: 1px solid {C.BORDER};")
+        ctrl_lay = QVBoxLayout(ctrl)
+        ctrl_lay.setContentsMargins(8, 6, 8, 6)
+        ctrl_lay.setSpacing(4)
+
+        lbl_cmd = QLabel("▸ COMMAND INPUT")
+        lbl_cmd.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        lbl_cmd.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        ctrl_lay.addWidget(lbl_cmd)
+        ctrl_lay.addLayout(self._build_input_row())
+
         self._ptt_btn = QPushButton("🎤  PUSH TO TALK")
         self._ptt_btn.setFixedHeight(34)
         self._ptt_btn.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
@@ -1287,24 +2041,14 @@ class MainWindow(QMainWindow):
         self._ptt_btn.setAccessibleName("Push to Talk — click and speak")
         self._ptt_btn.setToolTip("Click then speak for 6 seconds — OCTO will answer")
         self._ptt_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: #001a2e; color: {C.PRI};
-                border: 2px solid {C.PRI_DIM}; border-radius: 4px;
-            }}
-            QPushButton:hover {{
-                background: {C.PRI_GHO}; border: 2px solid {C.PRI};
-                color: {C.WHITE};
-            }}
-            QPushButton:pressed {{
-                background: {C.PRI_GHO}; border: 2px solid {C.PRI};
-            }}
-            QPushButton:disabled {{
-                color: {C.TEXT_DIM}; border-color: {C.BORDER};
-            }}
+            QPushButton {{ background: #001a2e; color: {C.PRI};
+                border: 2px solid {C.PRI_DIM}; border-radius: 4px; }}
+            QPushButton:hover {{ background: {C.PRI_GHO}; border: 2px solid {C.PRI}; color: {C.WHITE}; }}
+            QPushButton:pressed {{ background: {C.PRI_GHO}; border: 2px solid {C.PRI}; }}
+            QPushButton:disabled {{ color: {C.TEXT_DIM}; border-color: {C.BORDER}; }}
         """)
-        lay.addWidget(self._ptt_btn)
+        ctrl_lay.addWidget(self._ptt_btn)
 
-        # ── Mute toggle — separate from push-to-talk ─────────────────────────
         self._mute_btn = QPushButton("🔊  MIC ON  [F4 to mute]")
         self._mute_btn.setFixedHeight(26)
         self._mute_btn.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
@@ -1313,26 +2057,22 @@ class MainWindow(QMainWindow):
         self._mute_btn.setToolTip("Click to mute or unmute the microphone  [F4]")
         self._mute_btn.clicked.connect(self._toggle_mute)
         self._style_mute_btn()
-        lay.addWidget(self._mute_btn)
+        ctrl_lay.addWidget(self._mute_btn)
 
         fs_btn = QPushButton("⛶  FULLSCREEN  [F11]")
-        fs_btn.setFixedHeight(24)
+        fs_btn.setFixedHeight(22)
         fs_btn.setFont(QFont("Courier New", 7))
         fs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         fs_btn.setAccessibleName("Toggle Fullscreen")
         fs_btn.setToolTip("Toggle fullscreen mode  [F11]")
         fs_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {C.TEXT_MED};
-                border: 1px solid {C.BORDER}; border-radius: 3px;
-            }}
-            QPushButton:hover {{
-                color: {C.PRI}; border: 1px solid {C.BORDER_B};
-            }}
+            QPushButton {{ background: transparent; color: {C.TEXT_MED};
+                border: 1px solid {C.BORDER}; border-radius: 3px; }}
+            QPushButton:hover {{ color: {C.PRI}; border-color: {C.BORDER_B}; }}
         """)
         fs_btn.clicked.connect(self._toggle_fullscreen)
-        lay.addWidget(fs_btn)
-
+        ctrl_lay.addWidget(fs_btn)
+        outer.addWidget(ctrl)
         return w
 
     def _build_input_row(self) -> QHBoxLayout:
