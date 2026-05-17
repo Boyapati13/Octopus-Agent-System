@@ -650,7 +650,7 @@ class OctoLive:
         args = dict(fc.args or {})
 
         print(f"[OCTO] 🔧 {name}  {args}")
-        self.ui.set_state("THINKING")
+        self.ui.set_state("PROCESSING")
 
         if name == "save_memory":
             category = args.get("category", "notes")
@@ -947,7 +947,7 @@ class OctoLive:
         while True:
             try:
                 print("[OCTO] 🔌 Connecting...")
-                self.ui.set_state("THINKING")
+                self.ui.set_state("PROCESSING")
                 config = self._build_config()
 
                 async with (
@@ -973,7 +973,7 @@ class OctoLive:
                 print(f"[OCTO] ⚠️ {e}")
                 traceback.print_exc()
             self.set_speaking(False)
-            self.ui.set_state("THINKING")
+            self.ui.set_state("PROCESSING")
             print("[OCTO] 🔄 Reconnecting in 3s...")
             await asyncio.sleep(3)
 
