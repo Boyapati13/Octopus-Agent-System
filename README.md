@@ -332,6 +332,14 @@ WS   /ws                  — WebSocket event stream
 
 ---
 
+## What's New in v5.0-EVO
+
+- **Native PyQt6 HUD Enhancements** — Enhanced accessibility, micro-UX hover states, and proper visual focus properties to `desktop/ui.py` for screen reader optimization.
+- **Dynamic Agent Factory** — Hot-swap system that auto-generates custom micro-agents on the fly and integrates them directly via Node.js memory maps and WebSocket payloads (`node/src/routing/agent_factory.js`).
+- **Unified Workspace Parity** — Synchronized the web-based HUD (`frontend/`) structure perfectly against local environments.
+- **Automated Playwright Auditing** — Embedded automated testing pipeline targeting end-to-end frontend node structural bounds natively using Playwright.
+- **WebAudio Voice Security Loop** — Streamlined and secured voice context activation.
+
 ## What's New in v4.4
 
 - **Full Windows terminal control** — PowerShell, CMD, Bash, Python via `run_terminal` tool
