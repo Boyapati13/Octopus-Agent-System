@@ -128,21 +128,19 @@ def _start_voice(ui):
                 win = ui._win
                 ptt_btn = getattr(win, '_ptt_btn', None)
                 if ptt_btn and hasattr(ptt_btn, 'clicked'):
+                    from PyQt6.QtCore import QTimer as _QT
+
                     def _on_ptt():
                         if getattr(win, '_muted', False):
-                            return  # silently ignore while muted
+                            return
                         ptt_btn.setText("🔴  RECORDING…")
                         ptt_btn.setEnabled(False)
                         backend.trigger_listen()
-                        # Re-enable after the voice loop finishes (~8s max)
-                        def _re_enable():
-                            time.sleep(9)
-                            try:
-                                ptt_btn.setText("🎤  PUSH TO TALK")
-                                ptt_btn.setEnabled(True)
-                            except Exception:
-                                pass
-                        threading.Thread(target=_re_enable, daemon=True).start()
+                        # Re-enable on main thread after recording + answer (~9s)
+                        _QT.singleShot(9000, lambda: (
+                            ptt_btn.setText("🎤  PUSH TO TALK"),
+                            ptt_btn.setEnabled(True),
+                        ))
 
                     ptt_btn.clicked.connect(_on_ptt)
                     print("[OCTO] Push-to-talk button wired — click to record")
@@ -162,17 +160,17 @@ def main():
     # Start Octopus server in background (non-blocking)
     threading.Thread(target=_start_server_background, daemon=True).start()
 
-    # Import UI after sys.path is set
     from ui import OctoUI
+    from PyQt6.QtCore import QTimer
 
-    # face.png — use empty string if missing (OctoUI handles gracefully)
     face = str(FACE_IMG) if FACE_IMG.exists() else ""
     ui = OctoUI(face)
 
-    # Start voice after UI is ready (small delay so QApplication is initialized)
-    threading.Timer(1.5, lambda: _start_voice(ui)).start()
+    # Wire voice AFTER Qt event loop starts — QTimer.singleShot runs on the
+    # main thread so signal connections are safe. Threading.Timer runs on a
+    # background thread and Qt silently drops connections made there.
+    QTimer.singleShot(800, lambda: _start_voice(ui))
 
-    # Run the PyQt6 event loop — blocks until window is closed
     ui.root.mainloop()
 
 
