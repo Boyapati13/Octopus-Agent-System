@@ -39,6 +39,8 @@ node/.setup-complete
 # Test artifacts
 test_mic.wav
 *.wav
+node/test-results/
+playwright-report/
 
 # Garbled copy artifacts from Windows cp commands
 desktop/·*
