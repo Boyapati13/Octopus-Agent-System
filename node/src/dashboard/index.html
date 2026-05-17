@@ -153,6 +153,18 @@
       letter-spacing: 0.06em;
     }
 
+    .setup-link {
+      text-decoration: none;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .setup-link:hover, .setup-link:focus-visible {
+      color: var(--pri);
+      border-color: var(--pri-dim);
+      background: var(--pri-gho);
+      outline: none;
+    }
+
     .hdr-badge {
       display: inline-flex;
       align-items: center;
@@ -783,6 +795,15 @@
       box-shadow: 0 0 0 3px rgba(0,212,255,0.1);
     }
 
+    .btn:focus-visible {
+      outline: 2px solid var(--pri-dim);
+      outline-offset: 2px;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
     .btn-row {
       display: flex;
       gap: 6px;
@@ -927,6 +948,7 @@
         </div>
       </div>
       <div class="header-right">
+        <a href="/setup" class="hdr-badge setup-link" aria-label="Configure API Keys" title="API Keys & Setup">⚙ SETUP</a>
         <select id="project-select" class="hdr-project-select" aria-label="Select project"></select>
         <div class="hdr-badge"><span class="dot" id="ws-dot"></span><span id="ws-label">Connecting</span></div>
         <div class="hdr-badge"><span class="dot" id="run-dot"></span><span id="run-label">Idle</span></div>
@@ -1096,9 +1118,10 @@
         <!-- Document Analysis tab -->
         <div class="tab-pane" id="tab-docs">
           <div class="docs-wrap">
-            <div id="drop-zone" class="drop-zone">
-              ⬆ Drop file here or click to upload<br>
-              <span style="font-size:9px;opacity:0.6;">txt · md · json · csv · js · py · java · go · xml · html · yaml</span>
+            <div id="drop-zone" class="drop-zone" aria-label="File upload drop zone" tabindex="0" role="button">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;color:var(--pri)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg><br>
+              Drop file here or Click to Browse<br>
+              <span style="font-size:9px;opacity:0.6;letter-spacing:0.15em;">Images · Video · Audio · PDF · Docs · Code · Data</span>
             </div>
             <input id="file-input" type="file" style="display:none" />
             <div class="doc-mode-row">
@@ -1157,12 +1180,12 @@
       <!-- Composer -->
       <div class="composer">
         <textarea id="task-input" class="task-input"
-          placeholder="Command or question — Ctrl+Enter to execute"></textarea>
+          placeholder="Command or question — Enter to execute, Shift+Enter for new line" aria-label="Command input field"></textarea>
         <div class="btn-row">
-          <button id="run-btn"         class="btn primary">▶ Run</button>
-          <button id="voice-btn"       class="btn orange">⬤ Voice</button>
-          <button id="stop-voice-btn"  class="btn">◼ Stop</button>
-          <button id="interrupt-btn"   class="btn danger">⊘ Kill</button>
+          <button id="run-btn"         class="btn primary" aria-label="Run command">▶ Run</button>
+          <button id="voice-btn"       class="btn orange" aria-label="Start voice input">⬤ Voice</button>
+          <button id="stop-voice-btn"  class="btn" aria-label="Stop voice input">◼ Stop</button>
+          <button id="interrupt-btn"   class="btn danger" aria-label="Interrupt running task">⊘ Kill</button>
           <select id="voice-select" title="Voice" style="
             background:var(--bg2,#0d1117);color:var(--text,#c9d1d9);
             border:1px solid var(--border-b,#30363d);border-radius:4px;
@@ -1186,7 +1209,7 @@
 
     <!-- ══════════════════ FOOTER ══════════════════ -->
     <footer class="footer">
-      <span>[Ctrl+Enter] Execute · [F4] Mute · [F11] Fullscreen</span>
+      <span>[Enter] Execute · [F4] Mute · [F11] Fullscreen</span>
       <span class="footer-center">Octopus Industries · OCTO v2.0 · CLASSIFIED</span>
       <span>© OCTOPUS AGENT SYSTEM</span>
     </footer>
@@ -2533,7 +2556,7 @@
       });
 
       el.taskInput.addEventListener("keydown", function(e) {
-        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           const text = el.taskInput.value.trim();
           el.taskInput.value = "";
@@ -2659,6 +2682,13 @@
       await resolveProjects();
       connectWs();
       el.taskInput.focus();
+
+      // Welcome log messages
+      logLine("log-system", "SYS", "Voice mode — Windows TTS + Google STT");
+      logLine("log-system", "SYS", "OCTO voice ready — press MICROPHONE ACTIVE to speak");
+      logLine("log-octo", "OCTO", "OCTO voice active. Press the microphone button and speak, sir.");
+      logLine("log-system", "SYS", "Microphone muted.");
+
       logLine("log-system", "BOOT", "OCTO Command Interface v2 initialised");
 
       // Welcome voice — fires after voices load (Chrome loads async)
