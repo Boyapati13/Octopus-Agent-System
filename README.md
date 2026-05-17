@@ -3,11 +3,11 @@
 </p>
 
 <h1 align="center">🐙 Octopus Agent System</h1>
-<h3 align="center">O.C.T.O — Optimized Cognitive Task Orchestrator · v4.4</h3>
+<h3 align="center">O.C.T.O — Optimized Cognitive Task Orchestrator · v4.5</h3>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <img src="https://img.shields.io/badge/version-4.4.0-brightgreen.svg">
+  <img src="https://img.shields.io/badge/version-4.5.0-brightgreen.svg">
   <img src="https://img.shields.io/badge/agents-15%20specialist-blue.svg">
   <img src="https://img.shields.io/badge/LLM%20providers-8-blueviolet.svg">
   <img src="https://img.shields.io/badge/gateways-6%20platforms-cyan.svg">
@@ -237,6 +237,26 @@ Cortex (planner) → Atlas (memory) → Architect → Forge (implement)
 
 Each GATE blocks the chain if it finds critical issues.
 
+**Additional specialist agents dispatched by Cortex based on task type:**
+
+| Agent | Role |
+|---|---|
+| Navigator | Web research and URL traversal via Playwright |
+| SystemAgent | Windows desktop automation (mouse, keyboard, processes, windows) |
+| MarketScout | Phase 1 of Skill Evolution — scans npm/PyPI/GitHub for skill opportunities |
+| Toolsmith | Phase 2 — synthesises a working MCP skill from package docs using the LLM |
+| SandboxQA | Phase 3 — validates auto-generated skills in isolated worker threads, self-corrects via Toolsmith (max 3 retries), approves for deployment |
+
+**Skill Evolution Pipeline** (`"evolve skills"` or `"add a new tool for X"`):
+
+```
+MarketScout (scout) → Toolsmith (synthesise) → SandboxQA (validate + deploy)
+```
+
+SandboxQA runs each generated skill in a sandboxed `worker_thread` with a 10 s hard timeout and memory limits. On failure it loops back to Toolsmith automatically.
+
+**Dynamic routing** — Cortex reads the task and selects which agents to chain at runtime. New agents can be registered at any point via `injectAgent()` without a server restart.
+
 ---
 
 ### Messaging Gateways
@@ -305,12 +325,20 @@ node/src/
 ├── llm.js             ← 8-provider LLM gateway + sovereign fallback
 ├── runner.js          ← Multi-agent pipeline executor
 ├── task_router.js     ← Per-role model routing (ROUTE_* env vars)
+│                         Routes each agent to a specialist model:
+│                         planner→Nemotron 253B, forge→Qwen3-Coder 480B,
+│                         security→Llama-3.3-70B, verify→Phi-4-128K, etc.
+│                         Override any route: ROUTE_<ROLE>=<provider>:<model>
 ├── octo_memory.js     ← Rolling session memory (L6)
 ├── MASTER_PROMPT.md   ← Full autonomous agent persona
-├── agents/            ← 15 specialist agents
+├── agents/            ← 15 specialist agents (cortex, atlas, architect, forge,
+│                         reviewer, securityReviewer, factChecker, probe, scribe,
+│                         releaseKeeper, navigator, marketScout, toolsmith,
+│                         sandboxQA, systemAgent)
+│                         injectAgent() registers new agents at runtime
 ├── gateways/          ← Telegram, Discord, Slack, WhatsApp, Signal, HA
 ├── tools/             ← MCP tool implementations
-└── dashboard/         ← Web HUD (index.html, ~3000 lines)
+└── frontend/          ← Web HUD (index.html + js/ + css/)
 ```
 
 ---
@@ -323,12 +351,36 @@ GET  /api/status          — active chains, projects, agents
 POST /api/tasks/run       — full 15-agent pipeline
 POST /api/tasks/ask       — fast Q&A (search + LLM, ~3s)
 POST /api/tasks/interrupt — stop running chain
+POST /api/tasks/self-code — patch own source files (reads all .js in src/,
+                            agents/, gateways/, tools/ dynamically)
 GET  /api/projects        — list all projects
 POST /api/search          — web search
 POST /api/documents/upload — analyze uploaded file
 GET  /api/gateways        — gateway status
 WS   /ws                  — WebSocket event stream
 ```
+
+**HEADLESS_MODE** — set `HEADLESS_MODE=true` in `node/.env` to disable Cortex auto-planning. In this mode external LLMs (e.g. Claude, GPT) act as the planner and call `octopus_*` tools directly. Chain execution and self-code endpoints are gated off.
+
+---
+
+## What's New in v4.5
+
+### Web Dashboard — Keyboard Navigation & Accessibility (PR #5)
+- **Enter / Ctrl+Enter** on the command console input now fires the Run button — no mouse click needed
+- **`aria-label`** added to the command input (`"Octopus Command Console Query Input"`)
+- **`aria-describedby`** wired to a screen-reader-only hint (`"Press Enter to run the command"`)
+- **Focus-visible rings** (`focus-visible:ring-2 focus-visible:ring-cyan-400`) on the input for keyboard navigation users
+- **Micro-interaction** on the Run button — `scale-95 / opacity-80` for 100 ms on press
+
+### Architecture Hardening (PR #4)
+- **`octopus_bridge.py`** — eliminated global `PROJECT_ID` state leak; improved connection-polling error handling
+- **`text_llm.py`** — updated `HTTP-Referer` and `X-Title` headers to unified `OCTO` branding across all providers
+- **`node/.env` writes** — token files now written with mode `0600`; template-appending bug fixed in `setup-api.js`
+- **Telegram gateway** — rate-limiter `Map` entries are now deleted after use, preventing unbounded memory growth
+
+### Self-Code Full Directory Indexing (PR #4)
+- `POST /api/tasks/self-code` now dynamically reads every `.js` file in `src/`, `src/agents/`, `src/gateways/`, and `src/tools/` instead of a hardcoded five-file allowlist — the self-improvement engine can now patch any agent or gateway file
 
 ---
 
@@ -380,6 +432,6 @@ WS   /ws                  — WebSocket event stream
 ---
 
 <p align="center">
-  <strong>Octopus Industries · OCTO v2.0 · CLASSIFIED</strong><br>
+  <strong>Octopus Industries · OCTO v4.5 · CLASSIFIED</strong><br>
   <a href="https://github.com/Boyapati13/Octopus-Agent-System">GitHub</a>
 </p>
