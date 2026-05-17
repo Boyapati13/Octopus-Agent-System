@@ -1,290 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Octopus — OCTO Command Interface | OctoDeck</title>
-  <link rel="stylesheet" href="css/style.css">
-
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Octopus Agent System</title>
+  <meta name="description" content="Memory-first software agent harness — layered memory, shared context, 9 specialist agents."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+  <link rel="stylesheet" href="css/voice.css"/>
 </head>
 <body>
-  <div class="shell">
 
-    <!-- ══════════════════ HEADER ══════════════════ -->
-    <header class="header">
-      <div class="header-left">
-        <div>
-          <div class="header-title">OCTO Command Interface</div>
-          <div class="header-sub">Optimized Cognitive Task Orchestrator — Octopus Industries</div>
-        </div>
-      </div>
-      <div class="header-right">
-        <select id="project-select" class="hdr-project-select" aria-label="Select project"></select>
-        <div class="hdr-badge"><span class="dot" id="ws-dot"></span><span id="ws-label">Connecting</span></div>
-        <div class="hdr-badge"><span class="dot" id="run-dot"></span><span id="run-label">Idle</span></div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
-          <div class="hdr-clock" id="clock">00:00:00</div>
-          <div class="hdr-date"  id="dateline">--/--/----</div>
-        </div>
-      </div>
-    </header>
-
-    <!-- ══════════════════ LEFT PANEL ══════════════════ -->
-    <aside class="left-panel">
-      <div class="panel-section">
-        <div class="panel-section-title">Sys Monitor</div>
-        <div class="metric-row">
-          <div class="metric-label">CPU</div>
-          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-cpu" style="width:0%"></div></div>
-          <div class="metric-val" id="val-cpu">—</div>
-        </div>
-        <div class="metric-row">
-          <div class="metric-label">MEM</div>
-          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-mem" style="width:0%"></div></div>
-          <div class="metric-val" id="val-mem">—</div>
-        </div>
-        <div class="metric-row">
-          <div class="metric-label">NET</div>
-          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-net" style="width:30%"></div></div>
-          <div class="metric-val" id="val-net">OK</div>
-        </div>
-        <div class="metric-row">
-          <div class="metric-label">AGT</div>
-          <div class="metric-bar-wrap"><div class="metric-bar-fill" id="bar-agt" style="width:0%"></div></div>
-          <div class="metric-val" id="val-agt">0</div>
-        </div>
-      </div>
-
-      <div class="panel-section">
-        <div class="panel-section-title">Status</div>
-        <div class="status-badge"><span class="dot ok"></span>Agent Core Active</div>
-        <div class="status-badge"><span class="dot" id="voice-status-dot"></span><span id="voice-status-txt">Voice Idle</span></div>
-        <div class="status-badge"><span class="dot ok"></span>Sec Cleared</div>
-        <div class="status-badge"><span class="dot ok"></span>Protocol Octo-X</div>
-      </div>
-
-      <div class="panel-section">
-        <div class="panel-section-title">Info</div>
-        <div class="info-row"><span>Uptime</span><span class="info-val" id="info-uptime">—</span></div>
-        <div class="info-row"><span>Projects</span><span class="info-val" id="info-projects">—</span></div>
-        <div class="info-row"><span>Cache</span><span class="info-val" id="info-cache">—</span></div>
-        <div class="info-row"><span>Provider</span><span class="info-val" id="info-provider">—</span></div>
-      </div>
-
-      <div class="left-spacer"></div>
-    </aside>
-
-    <!-- ══════════════════ CENTER PANEL ══════════════════ -->
-    <main class="center-panel" style="position:relative;">
-
-      <!-- HUD Canvas -->
-      <div class="hud-wrap">
-        <canvas id="hud-canvas" width="220" height="220" style="cursor:pointer;" title="Click to Initialize Audio/Voice"></canvas>
-        <div class="hud-state-row">
-          <div class="hud-state-item" id="hud-item-listen">
-            <span class="dot"></span><span>Listen</span>
-          </div>
-          <div class="hud-state-item" id="hud-item-think">
-            <span class="dot"></span><span>Think</span>
-          </div>
-          <div class="hud-state-item" id="hud-item-speak">
-            <span class="dot"></span><span>Speak</span>
-          </div>
-          <div class="hud-state-item" id="hud-item-run">
-            <span class="dot"></span><span>Execute</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Metrics strip -->
-      <div class="metrics-strip">
-        <div class="metric-tile">
-          <div class="tile-label">Current Task</div>
-          <div class="tile-value" id="tile-task">Idle</div>
-        </div>
-        <div class="metric-tile">
-          <div class="tile-label">Voice Mode</div>
-          <div class="tile-value" id="tile-voice">Idle</div>
-        </div>
-        <div class="metric-tile">
-          <div class="tile-label">Execution</div>
-          <div class="tile-value" id="tile-exec">Awaiting</div>
-        </div>
-        <div class="metric-tile">
-          <div class="tile-label">WebSocket</div>
-          <div class="tile-value" id="tile-ws">Connecting</div>
-        </div>
-      </div>
-
-      <!-- Live Plan View — shown when a chain is running -->
-      <div class="plan-view" id="plan-view">
-        <div class="plan-header">Live Execution Plan</div>
-        <div class="plan-stages" id="plan-stages"></div>
-        <!-- Architect's structured output -->
-        <div class="architect-panel" id="arch-panel">
-          <div class="arch-title">◈ Architect — Boundary Impact</div>
-          <div class="arch-row">
-            <span id="arch-risk" class="arch-badge">risk: —</span>
-            <span id="arch-impact" class="arch-badge">impact: — files</span>
-            <span id="arch-cross" class="arch-badge">cross-boundary: —</span>
-          </div>
-          <div id="arch-recs" class="arch-rec"></div>
-          <div id="arch-files" class="arch-files"></div>
-        </div>
-      </div>
-
-      <!-- Answer box -->
-      <div class="answer-section">
-        <div class="answer-header">
-          <span class="dot" id="answer-dot"></span>
-          <span class="answer-label">Output</span>
-          <span class="answer-state-txt" id="answer-state-txt">● READY</span>
-          <span style="flex:1"></span>
-          <span style="font-size:9px;color:var(--text-dim);letter-spacing:0.06em;" id="project-label">Project: none</span>
-        </div>
-        <div id="answer-text">Ask anything and I will route it through the live agent pipeline.<span class="cursor"></span></div>
-      </div>
-    </main>
-
-    <!-- ══════════════════ RIGHT PANEL ══════════════════ -->
-    <aside class="right-panel">
-      <div class="rp-header">Activity Center</div>
-
-      <div class="rp-tabs" style="flex-wrap:wrap;">
-        <button class="rp-tab active" data-tab="log">Log</button>
-        <button class="rp-tab"        data-tab="conv">Convo</button>
-        <button class="rp-tab"        data-tab="search">Search</button>
-        <button class="rp-tab"        data-tab="docs">Docs</button>
-        <button class="rp-tab"        data-tab="gateways">Gates</button>
-        <button class="rp-tab"        data-tab="router">Router</button>
-        <button class="rp-tab"        data-tab="events">Events</button>
-      </div>
-
-      <div class="rp-body">
-        <!-- Activity log tab -->
-        <div class="tab-pane active" id="tab-log">
-          <div id="log-output"></div>
-        </div>
-
-        <!-- Conversation tab -->
-        <div class="tab-pane" id="tab-conv">
-          <div id="conversation"></div>
-        </div>
-
-        <!-- Web Search tab -->
-        <div class="tab-pane" id="tab-search">
-          <div class="search-wrap">
-            <div class="search-input-row">
-              <input id="search-input" class="search-input" type="text" placeholder="Search the web…" />
-              <button class="btn primary" id="search-btn" style="flex-shrink:0;">⌕ Go</button>
-            </div>
-            <div style="font-size:9px;color:var(--text-dim);letter-spacing:0.08em;">
-              Engine: auto (DDG → Brave → SerpAPI). Set BRAVE_API_KEY or SERP_API_KEY for better results.
-            </div>
-            <div id="search-results"></div>
-          </div>
-        </div>
-
-        <!-- Document Analysis tab -->
-        <div class="tab-pane" id="tab-docs">
-          <div class="docs-wrap">
-            <div id="drop-zone" class="drop-zone">
-              ⬆ Drop file here or click to upload<br>
-              <span style="font-size:9px;opacity:0.6;">txt · md · json · csv · js · py · java · go · xml · html · yaml</span>
-            </div>
-            <input id="file-input" type="file" style="display:none" />
-            <div class="doc-mode-row">
-              <span style="font-size:9px;color:var(--text-dim);letter-spacing:0.1em;">MODE:</span>
-              <button class="mode-chip active" data-mode="summarise">Summarise</button>
-              <button class="mode-chip"        data-mode="analyse">Analyse</button>
-              <button class="mode-chip"        data-mode="extract">Extract Data</button>
-              <button class="mode-chip"        data-mode="code_review">Code Review</button>
-              <button class="mode-chip"        data-mode="explain">Explain</button>
-              <button class="mode-chip"        data-mode="qa">Q&amp;A</button>
-            </div>
-            <div id="qa-row" style="display:none;">
-              <input id="doc-question" class="doc-qa-input" placeholder="Type your question about the document…" />
-            </div>
-            <div id="doc-result"></div>
-          </div>
-        </div>
-
-        <!-- Gateways tab -->
-        <div class="tab-pane" id="tab-gateways">
-          <div class="gw-wrap" id="gw-list"></div>
-          <!-- WhatsApp QR panel — shown when gateway is waiting for scan -->
-          <div id="wa-qr-panel" style="display:none;margin-top:10px;text-align:center">
-            <div style="font-size:9px;color:var(--acc2);letter-spacing:1px;margin-bottom:8px">
-              📱 WHATSAPP PAIRING — Scan with your phone
-            </div>
-            <img id="wa-qr-img" src="" alt="WhatsApp QR"
-              style="width:180px;height:180px;border:2px solid var(--pri-dim);border-radius:4px;background:#fff">
-            <div style="font-size:9px;color:var(--text-dim);margin-top:6px">
-              WhatsApp → Linked Devices → Link a Device
-            </div>
-            <button onclick="refreshWaQR()" style="
-              margin-top:6px;font-family:inherit;font-size:9px;letter-spacing:1px;
-              background:transparent;border:1px solid var(--border-b);color:var(--text-dim);
-              padding:3px 10px;cursor:pointer;border-radius:3px">
-              ↻ Refresh QR
-            </button>
-          </div>
-        </div>
-
-        <!-- Task Router tab -->
-        <div class="tab-pane" id="tab-router">
-          <div class="router-wrap" id="router-list">
-            <div style="font-size:9px;color:var(--text-dim);letter-spacing:0.08em;padding:4px 0;">
-              Loading router config…
-            </div>
-          </div>
-        </div>
-
-        <!-- Events tab -->
-        <div class="tab-pane" id="tab-events">
-          <div id="events-list"></div>
-        </div>
-      </div>
-
-      <!-- Composer -->
-      <div class="composer">
-        <textarea id="task-input" class="task-input"
-          placeholder="Command or question — Ctrl+Enter to execute"></textarea>
-        <div class="btn-row">
-          <button id="run-btn"         class="btn primary">▶ Run</button>
-          <button id="voice-btn"       class="btn orange">⬤ Voice</button>
-          <button id="stop-voice-btn"  class="btn">◼ Stop</button>
-          <button id="interrupt-btn"   class="btn danger">⊘ Kill</button>
-          <select id="voice-select" title="Voice" style="
-            background:var(--bg2,#0d1117);color:var(--text,#c9d1d9);
-            border:1px solid var(--border-b,#30363d);border-radius:4px;
-            font-family:inherit;font-size:9px;letter-spacing:.06em;
-            padding:3px 6px;cursor:pointer;max-width:130px">
-            <option value="">🔊 Voice…</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Quick prompts -->
-      <div class="quick-section">
-        <button class="chip" data-prompt="Summarize the current repository architecture.">Architecture</button>
-        <button class="chip" data-prompt="Review current dashboard code and suggest 3 improvements.">Review UI</button>
-        <button class="chip" data-prompt="List high-priority TODOs based on current project state.">Priority TODOs</button>
-        <button class="chip" data-prompt="Explain the latest git changes and their impact.">Latest Commit</button>
-        <button class="chip" data-prompt="Run a security scan on the current project.">Security Scan</button>
-        <button class="chip" data-prompt="What agents are available and what can they do?">List Agents</button>
-      </div>
-    </aside>
-
-    <!-- ══════════════════ FOOTER ══════════════════ -->
-    <footer class="footer">
-      <span>[Ctrl+Enter] Execute · [F4] Mute · [F11] Fullscreen</span>
-      <span class="footer-center">Octopus Industries · OCTO v2.0 · CLASSIFIED</span>
-      <span>© OCTOPUS AGENT SYSTEM</span>
-    </footer>
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-brand">
+    <div class="logo-ring">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <circle cx="14" cy="14" r="12" stroke="var(--accent)" stroke-width="2"/>
+        <circle cx="14" cy="14" r="5"  fill="var(--accent)" opacity="0.8"/>
+        <line x1="14" y1="2"  x2="14" y2="8"  stroke="var(--accent)" stroke-width="1.5"/>
+        <line x1="14" y1="20" x2="14" y2="26" stroke="var(--accent)" stroke-width="1.5"/>
+        <line x1="2"  y1="14" x2="8"  y2="14" stroke="var(--accent)" stroke-width="1.5"/>
+        <line x1="20" y1="14" x2="26" y2="14" stroke="var(--accent)" stroke-width="1.5"/>
+      </svg>
+    </div>
+    <span class="brand-name">Octopus</span>
+    <span class="brand-tag">Agent System</span>
   </div>
+  <div class="header-status">
+    <div class="status-pill" id="svc-voice">
+      <span class="status-dot"></span>Voice
+    </div>
+    <div class="status-pill" id="svc-python">
+      <span class="status-dot"></span>Memory SVC
+    </div>
+    <div class="status-pill" id="svc-node">
+      <span class="status-dot"></span>API
+    </div>
+    <div class="status-pill" id="svc-cache">
+      <span class="status-dot"></span>Cache
+    </div>
+  </div>
+</header>
 
-  <script src="js/app.js"></script>
+<div class="layout">
 
+  <!-- ── Sidebar: Agent Roster ────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <h2 class="sidebar-title">Agents</h2>
+    <div class="agent-list" id="agent-list">
+      <div class="agent-skeleton"></div>
+      <div class="agent-skeleton"></div>
+      <div class="agent-skeleton"></div>
+    </div>
+  </aside>
+
+  <!-- ── Main ─────────────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Tabs -->
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="memory"   role="tab">Memory Layers</button>
+      <button class="tab"        data-tab="console"  role="tab">Command Console</button>
+      <button class="tab"        data-tab="explorer" role="tab">Memory Explorer</button>
+      <button class="tab"        data-tab="feed"     role="tab">Activity Feed</button>
+      <button class="tab"        data-tab="voice"    role="tab">🎙 Voice</button>
+    </nav>
+
+    <!-- Memory Layers -->
+    <section class="tab-panel active" id="tab-memory">
+      <div class="layers-grid">
+        <div class="layer-card" data-layer="5">
+          <div class="layer-badge">L5</div>
+          <div class="layer-body">
+            <h3>Task Context Profile</h3>
+            <p>Built on demand per agent. Never stored. Agent-specific includes/excludes.</p>
+            <div class="layer-stat"><span class="stat-label">Backend</span><span class="stat-val mono">ephemeral</span></div>
+          </div>
+        </div>
+        <div class="layer-card" data-layer="4">
+          <div class="layer-badge">L4</div>
+          <div class="layer-body">
+            <h3>Prompt Cache</h3>
+            <p>Redis/Valkey optional. In-memory fallback. Agent contracts, hot queries.</p>
+            <div class="layer-stat"><span class="stat-label">Backend</span><span class="stat-val mono" id="l4-backend">—</span></div>
+            <div class="layer-stat"><span class="stat-label">Hit rate</span><span class="stat-val mono" id="l4-hitrate">—</span></div>
+          </div>
+        </div>
+        <div class="layer-card" data-layer="3">
+          <div class="layer-badge">L3</div>
+          <div class="layer-body">
+            <h3>Run State</h3>
+            <p>Current task, changed files, blockers, approvals. Compacted at session end.</p>
+            <div class="layer-stat"><span class="stat-label">Status</span><span class="stat-val mono" id="l3-status">—</span></div>
+            <div class="layer-stat"><span class="stat-label">Changed files</span><span class="stat-val mono" id="l3-files">—</span></div>
+          </div>
+        </div>
+        <div class="layer-card" data-layer="2">
+          <div class="layer-badge">L2</div>
+          <div class="layer-body">
+            <h3>Decision Memory</h3>
+            <p>ADRs, rationale, rejected options. Append-only, versioned, timestamped.</p>
+            <div class="layer-stat"><span class="stat-label">Decisions</span><span class="stat-val mono" id="l2-count">—</span></div>
+          </div>
+        </div>
+        <div class="layer-card" data-layer="1">
+          <div class="layer-badge">L1</div>
+          <div class="layer-body">
+            <h3>Structural Memory</h3>
+            <p>SQLite graph facts. NetworkX loaded on-demand for traversal and reasoning.</p>
+            <div class="layer-stat"><span class="stat-label">Indexed files</span><span class="stat-val mono" id="l1-count">—</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Command Console -->
+    <section class="tab-panel" id="tab-console">
+      <div class="console-wrap">
+        <div class="console-controls">
+          <select class="ctrl-select" id="cmd-select">
+            <option value="/api/onboard" data-method="POST">🚀 /onboard</option>
+            <option value="/api/plan-feature" data-method="POST">🗺️ /plan-feature</option>
+            <option value="/api/release-check" data-method="POST">🔒 /release-check</option>
+            <option value="/api/agent/atlas/run"            data-method="POST">🧠 Atlas</option>
+            <option value="/api/agent/cortex/run"           data-method="POST">🎯 Cortex</option>
+            <option value="/api/agent/architect/run"        data-method="POST">🏗️ Architect</option>
+            <option value="/api/agent/forge/run"            data-method="POST">🔨 Forge</option>
+            <option value="/api/agent/reviewer/run"         data-method="POST">👁️ Reviewer</option>
+            <option value="/api/agent/securityReviewer/run" data-method="POST">🔐 SecurityReviewer</option>
+            <option value="/api/agent/probe/run"            data-method="POST">🧪 Probe</option>
+            <option value="/api/agent/scribe/run"           data-method="POST">📝 Scribe</option>
+            <option value="/api/agent/releaseKeeper/run"    data-method="POST">🚢 ReleaseKeeper</option>
+          </select>
+          <input class="ctrl-input" id="cmd-query" type="text" placeholder='task / query (e.g. "add auth layer")'/>
+          <button class="btn-fire" id="cmd-run">Run ▶</button>
+        </div>
+        <div class="console-output" id="console-output">
+          <span class="output-placeholder">Output appears here…</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Memory Explorer -->
+    <section class="tab-panel" id="tab-explorer">
+      <div class="explorer-tabs">
+        <button class="etab active" data-etab="structural">Structural</button>
+        <button class="etab" data-etab="decisions">Decisions</button>
+        <button class="etab" data-etab="run">Run State</button>
+        <button class="etab" data-etab="cache">Cache Stats</button>
+      </div>
+      <div class="explorer-body" id="explorer-body">
+        <span class="output-placeholder">Select a tab to load data…</span>
+      </div>
+    </section>
+
+    <!-- Activity Feed -->
+    <section class="tab-panel" id="tab-feed">
+      <div class="feed-header">
+        <h3>Activity Feed</h3>
+        <button class="btn-sm" id="feed-clear">Clear</button>
+      </div>
+      <div class="feed-list" id="feed-list">
+        <div class="feed-empty">No activity yet. Run a command to see events.</div>
+      </div>
+    </section>
+
+    <!-- Voice -->
+    <section class="tab-panel" id="tab-voice">
+      <div class="voice-layout">
+
+        <!-- Orb + controls -->
+        <div class="voice-orb-panel">
+          <div id="voice-orb" data-state="OFFLINE">
+            <div class="orb-icon">🐙</div>
+          </div>
+          <span class="voice-state-label" id="voice-state-label">Offline</span>
+
+          <div class="voice-controls">
+            <button class="btn-voice" id="voice-mic-btn">🎙 Start Voice</button>
+            <button class="btn-voice" id="voice-mute-btn">🔈 Mute</button>
+          </div>
+
+          <div class="voice-text-row">
+            <input class="voice-text-input" id="voice-text-input" type="text"
+                   placeholder="Or type a command and press Enter…"/>
+            <button class="btn-send" id="voice-send-btn">Send</button>
+          </div>
+
+          <div class="voice-info">
+            <span class="voice-badge">Gemini Live</span>
+            <span class="voice-badge">14 Agents</span>
+            <span class="voice-badge">23 MCP Tools</span>
+            <span class="voice-badge">5-Layer Memory</span>
+          </div>
+        </div>
+
+        <!-- Transcript + setup -->
+        <div style="display:flex;flex-direction:column;gap:16px;overflow:hidden;">
+          <div class="voice-log-panel">
+            <div class="voice-log-header">
+              Conversation
+              <button class="btn-sm" onclick="document.getElementById('voice-log').innerHTML=''">Clear</button>
+            </div>
+            <div id="voice-log"></div>
+          </div>
+
+          <div class="voice-setup">
+            <h4>⚡ Quick Setup</h4>
+            <ul>
+              <li>Get a free Gemini API key at <code>aistudio.google.com</code></li>
+              <li>Add it to <code>config/api_keys.json</code> as <code>gemini_api_key</code></li>
+              <li>Install deps: <code>pip install google-genai aiohttp websockets</code></li>
+              <li>Start voice service: <code>python python/services/voice_service.py</code></li>
+              <li>Click <strong>Start Voice</strong> and allow microphone access</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/voice.js"></script>
 </body>
 </html>

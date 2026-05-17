@@ -1280,6 +1280,8 @@ class MainWindow(QMainWindow):
         lay.addLayout(self._build_input_row())
 
         self._mute_btn = QPushButton("🎙  MICROPHONE ACTIVE")
+        self._mute_btn.setAccessibleName("Toggle Microphone Mute")
+        self._mute_btn.setToolTip("Toggle Microphone Mute (F4)")
         self._mute_btn.setFixedHeight(30)
         self._mute_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
         self._mute_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1288,6 +1290,8 @@ class MainWindow(QMainWindow):
         lay.addWidget(self._mute_btn)
 
         fs_btn = QPushButton("⛶  FULLSCREEN  [F11]")
+        fs_btn.setAccessibleName("Toggle Fullscreen")
+        fs_btn.setToolTip("Toggle Fullscreen (F11)")
         fs_btn.setFixedHeight(26)
         fs_btn.setFont(QFont("Courier New", 7))
         fs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1309,6 +1313,8 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout(); row.setSpacing(5)
         self._input = QLineEdit()
         self._input.setPlaceholderText("Type a command or question…")
+        self._input.setAccessibleName("Command Input Field")
+        self._input.setToolTip("Enter your text command here and press Enter")
         self._input.setFont(QFont("Courier New", 9))
         self._input.setFixedHeight(30)
         self._input.setStyleSheet(f"""
@@ -1322,6 +1328,8 @@ class MainWindow(QMainWindow):
         row.addWidget(self._input)
 
         send = QPushButton("▸")
+        send.setAccessibleName("Send Command")
+        send.setToolTip("Send Command")
         send.setFixedSize(30, 30)
         send.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
         send.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1385,20 +1393,23 @@ class MainWindow(QMainWindow):
     def _style_mute_btn(self):
         if self._muted:
             self._mute_btn.setText("🔇  MICROPHONE MUTED")
+            self._mute_btn.setToolTip("Microphone is off. Click to activate (F4)")
             self._mute_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: #140006; color: {C.MUTED_C};
                     border: 1px solid {C.MUTED_C}; border-radius: 3px;
                 }}
+                QPushButton:hover {{ border: 1px solid #ff4466; }}
             """)
         else:
             self._mute_btn.setText("🎙  MICROPHONE ACTIVE")
+            self._mute_btn.setToolTip("Microphone is active. Click to mute (F4)")
             self._mute_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: #00140a; color: {C.GREEN};
                     border: 1px solid {C.GREEN}; border-radius: 3px;
                 }}
-                QPushButton:hover {{ background: #001f10; }}
+                QPushButton:hover {{ background: #001f10; border: 1px solid #33ff99; }}
             """)
 
     def _send(self):
